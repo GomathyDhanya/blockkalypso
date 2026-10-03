@@ -1,0 +1,5 @@
+LABEL_ID: nda-1
+SHORT_DESCRIPTION: Explicit identification
+
+HYPOTHESIS:
+All Confidential Information shall be expressly identified by the Disclosing Party.

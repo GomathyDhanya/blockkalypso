@@ -1,0 +1,78 @@
+TITLE:
+Anti-glomerular Basement Membrane Glomerulonephritis During the First Trimester of Pregnancy.
+
+ABSTRACT:
+A 28-year-old woman was admitted during the eighth week of her pregnancy because her clinical course was consistent with rapid progressive glomerulonephritis (RPGN). Anti-glomerular basement membrane antibody (anti-GBM Ab) and myeloperoxidase anti-neutrophil cytoplasmic antibody (MPO-ANCA) were positive, and the anti-GBM Ab titer being extremely high. She was treated with hemodialysis, plasma exchange and prednisolone. She survived the illness; however, neither the fetus nor her kidney function could be rescued. She had human leukocyte antigen (HLA)-DRB1*1502:01, which differs from the DRB1*1501 associated with anti-GBM GN. When patients have particular symptoms, we should check the urine and serum creatinine to exclude RPGN, even in cases of pregnancy.
+
+TEXT:
+Introduction
+
+Anti-glomerular basement membrane glomerulonephritis (anti-GBM GN), also called Goodpasture's syndrome, is an autoimmune-mediated disorder, and patients with anti-GBM antibody disease develop rapidly progressive glomerulonephritis (RPGN), leading to severe kidney deterioration. Despite various aggressive treatments, the prognosis of anti-GBM GN is very poor, often leading to renal failure and/or death (1). Once anti-GBM GN patients begin dialysis, they usually remain dialysis-dependent (2). Anti-GBM GN is well known to occur in young and elderly patients (3) and is a rare cause of renal insufficiency in young patients, especially in association with pregnancy.
+
+We herein report a case of anti-GBM GN disease requiring dialysis that presented in early pregnancy.
+
+Case Report
+
+A 28-year-old woman was introduced to our hospital because of generalized edema associated with a reduced urine output in the eighth week of pregnancy. She had no abnormality recorded in her previous medical examinations. This was her first pregnancy, and she had had no miscarriages. At a medical examination one year earlier, her serum creatinine level had been 0.64 mg/dL, and urine protein and urine occult blood were negative. There was no familial history of renal disease. She had had gross hematuria, a fever, nausea and diarrhea for about three weeks. She visited a local obstetrics clinic and was treated with amoxicillin for a suspected urinary tract infection. Treatment with antibiotics did not improve her symptoms, and she was referred urgently to our hospital because of severe kidney dysfunction.
+
+On a clinical examination, she had bilateral pitting pedal edema, abdominal fullness, due to ascites fluid, and anemia. Her blood pressure was 134/81 mmHg, her pulse rate was 89/minute and her body temperature was 37.7℃. She had no hemosputum or hypoxemia, and the remainder of her systemic examination findings, including those for her chest, were within normal limits.
+
+The laboratory findings on admission are shown in Table 1. She had severe renal dysfunction with urinary abnormality, severe inflammation, anemia, hypoproteinemia, hyperkalemia, hyperphosphatemia and hyperuricemia. Anti-GBM Ab and myeloperoxidase anti-neutrophil cytoplasmic antibody (MPO-ANCA) were positive, with the anti-GBM Ab titer (>680 U/mL) being extremely high, unlike the MPO-ANCA titer (16.1 U/mL). Both anti-nuclear Ab (ANA) and PR3-ANCA were negative. There was no reduction in the complement value and no monoclonal protein. Ultrasound imaging of the abdomen showed her right kidney to be 10.5 cm ×4.0 cm and left kidney to be 10.6 cm ×4.3 cm, with bilateral increased echogenicity. Chest X-ray showed no interstitial pneumonia or alveolar hemorrhaging, which are typically seen in Goodpasture's syndrome. The values of Krebs von den Lungen-6 (KL-6), Surfactant Protein A (SP-A) Surfactant Protein D (SP-D) were within normal limits.
+
+Table 1. Laboratory Findings on Admission.
+
+Peripheral blood tests		Na		123	mEq/L		KL-6		115	U/mL	
+WBC		13,000	/μL		K		6.6	mEq/L		SP-A		8.3	ng/mL	
+Neu		87.1	%		Cl		88	mEq/L		SP-D		17.2	ng/mL	
+Ly		5.2	%		Ca		7.9	mg/dL						
+Mo		6.7	%		IP		7.6	mg/dL		Urinalysis				
+Eo		0.8	%		CRP		15.5	mg/dL		Protein		2+		
+RBC		339×104	/μL		Blood sugar		99	mg/dL				0.17	g/day	
+Hb		9.4	g/dL		HbAlc (NGSP)		5.4	%		Occult blood		3+		
+Ht		27.5	%		IgG		1,020	mg/dL		Sugar sediment		-		
+Platelet		53.7×104	/μL		IgA		108	mg/dL		RBC		>100	HPF	
+Blood chemistry tests		IgM		141	mg/dL		WBC		0	HPF	
+TP		5.9	g/dL		MPO-ANCA		16.1	U/mL		hyaline cast		1-4	HPF	
+Alb		2.5	g/dL		PR3-ANCA		<1.0	U/mL		granular cast		1-4	HPF	
+T-Bil		0.3	mg/dL		Anti-GBM Ab		>680	U/mL		Urine chemistry				
+AST		16	U/L		ANA		<40	times		NAG		15.3	U/L	
+ALT		15	U/L		Anti-DNA Ab		<2	times		β2MG		57,815	ng/mL	
+LDH		179	U/L		Anti-cardiolipin-beta2
+glycoprotein 1 complex Ab		negative						
+CPK		97	U/L							
+UA		8.2	mg/dL							
+BUN		62.5	mg/dL		antiphospholipid Ab		negative							
+Cr		12.52	mg/dL									
+Ab: antibody, Alb: albumin, ALT: alanine aminotransferase, ANA: antinuclear antibody, ANCA: antineutrophil cytoplasmic antibody, AST: aspartate aminotransferase, β2MG: beta-2 microglobulin, BUN: blood urea nitrogen, Ca: calcium, CPK: creatine phosphokinase, Cr: creatinine, CRP: C-reactive protein, DNA: deoxyribonucleic acid, Eo: eosinophils, Hb: hemoglobin, Ht: hematocrit, Ig: immunoglobulin, IP: Inorganic phosphorus, K: potassium, KL-6: Krebs von den Lungen-6, LDH: lactate dehydrogenase, Ly: lymphocytes, Mo: monocytes, MPO: myeloperoxidase, Na: sodium, NAG: N-acetyl-beta-D-glucosaminidase, Neu: neutrophils, NGSP: National Glycohemoglobin Standardization Program, PR3: proteinase3, RBC: red blood cells, SP-A: Surfactant Protein A, SP-D: Surfactant Protein D, T-Bil: total-bilirubin, TP: total protein, UA: uric acid, WBC: white blood cells
+
+Her clinical course suggested RPGN with severe renal dysfunction due to anti-GBM GN. In an effort to rescue her fetus and her kidney function, she was treated with hemodialysis and plasma exchange (PE) and started on 30 mg/day of prednisolone. Her clinical course is shown in Fig. 1. On admission, obstetric ultrasound findings showed five weeks of gestation, which differed from the estimated 8 weeks of gestation from her last menstruation, and miscarriage was strongly suspected. After reconfirmation, a fetal heartbeat could not be detected, so dilatation and curettage were performed on the 15th day of admission. All of our efforts were then directed to saving her kidneys and life.
+
+Figure 1. Clinical course of the patient.
+
+She was examined by a renal biopsy on the 24th day of admission. The biopsy revealed 27 glomeruli, of which 1 had segmental necrosis with nuclear debris and hyaline thrombi within glomerular capillaries. There were fibrocellular crescents in 26 glomeruli. The underlying tufts did not show significant endocapillary proliferation. Lymphocyte infiltration around the tubulointerstitium was found near the glomerulus (Fig. 2A) and mainly formed fibrocellular crescents (Fig. 2B). Immunofluorescence staining revealed linear IgG (Fig. 2C) and C3 staining along glomerular capillary loops. IgA, IgM and C1q were negative, and fibrinogen was weakly positive. A diagnosis of crescentic glomerulonephritis was made, which was consistent with anti-GBM GN disease with diffuse global glomerulosclerosis. Based on the kidney biopsy result, we suspected a low probability of improving her renal function. Although plasma exchange was performed 14 times and immunosuppressive therapy continued, anuria persisted, and her kidney function did not improve; she could not discontinue hemodialysis despite a reduction in the anti-GBM Ab titer (42.3 U/mL) and C-reactive protein (CRP) on the 71st hospital day. On that day, her serum blood urea nitrogen (BUN) was 55.1 mg/dL and creatinine 11.6 mg/dL (Fig. 1). The high titer level of anti-GBM Ab persisted, and no improvement in the kidney function could be expected, but fortunately, there were no signs of respiratory symptoms or the development of lung lesions, which was important in deciding to withdraw treatment. Her life was saved; however, give the loss of her renal function, renal transplantation in the near future is desirable.
+
+Figure 2. Histological findings in the kidney. (A) Fibrocellular crescents in the glomeruli and lymphocyte infiltration around the tubulointerstitium, near the glomerulus [Periodic Acid-Methenamine Silver (PAM) staining ×100]. (B) The fibrocellular crescents, indicated by an arrow [Periodic Acid Schiff (PAS) staining ×400]. (C) Immunofluorescence staining revealed linear staining along the glomerular capillary loops (IgG staining ×400).
+
+Discussion
+
+There are only a few case reports of anti-GBM GN disease during pregnancy in the literature, especially in the early phase of pregnancy (4). We summarized the reports of anti-GBM GN in pregnancy in Table 2 (5-13). There have been some reports of a severe renal outcome and prognosis in pregnancy (5-7,9). For example, Qin et al. reported both maternal and fetal death in a case of Goodpasture's syndrome during pregnancy (5).
+
+Table 2. Maternal and Fetal Outocomes and Treatments in Anti-GBM GN in Pregnancy.
+
+	Maternal	Fetal outcomes	Treatments	
+Reference numbers	Age	Onset week of pregnancy, weeks	Kidney outocomes	Respiratory symptoms	Livebirth	Weeks gestation	Small for gestational age	PE	Medicine	
+5	17	13	Maternal death	Hemoptysis	Maternal death			(-)	corticosteroid	
+6	21	12	HD, RTx	Normal	(+)	35	NR	(+)	corticosteroid, CY	
+7	19	19	HD, RTx	Normal	(-); SB	28	SB	(+)	corticosteroid, CY	
+8	23	13	Full recovery	Dyspnea	(-); TA	15	TA	(+)	corticosteroid, CY	
+9	30	28	HD	Dyspnea	(+)	34	(+)	(+)	corticosteroid	
+10	34	18	Partial recovery	Hemoptysis	(+)	27	(+)	(+)	corticosteroid, AZA	
+11	28	Prepregnancy	Normal	Hemoptysis, Dyspnea	(+)	37	(-)	(+)	corticosteroid, CY	
+12	30	13	Normal	Hemoptysis	(+)	38	(+)	(+)	corticosteroid, CY, RT	
+13	17	6	Full recovery	Normal	(-); SA	8	SA	(+)	corticosteroid,CY	
+This case	28	8	HD	Normal	(-); SA	8	SA	(+)	corticosteroid	
+AZA: azathioprine, CY: cyclophosphamide, HD: hemodialysis, PE: plasma exchange, RT: rituximab, RTx: renal transplantation, SA: spontaneous abortion, SB: stillbirth, TA: therapeutic abortion, NR: not reported
+
+However, there have been some reports in which the kidney function was rescued by aggressive treatment with corticosteroid, immunosuppressive agents and PE (8,10-13). Vasiliou et al. described a 34-year-old woman who presented with RPGN with anti-GBM GN at 18 weeks of pregnancy, and her baby was born alive after 27 weeks of gestation (10). She was treated with acute dialysis for renal failure and received intensive treatment with PE, corticosteroid and azathioprine, resulting in the partial recovery of her kidney function. A renal biopsy showed 80% crescentic GN with linear immune fluorescence. Yankowitz et al. reported the case of a 28-year-old woman with anti-GBM GN 3 months before pregnancy who was treated with intensive hemodialysis along with corticosteroid and delivered at 37 weeks of gestation (11). Anti-GBM Ab, which had been negative during pregnancy, was detected again after delivery. Sprenger-Mähr et al. described the case of a 30-year-old woman with anti-GBM GN and who was treated with PE, corticosteroid, cyclophosphamide and rituximab and delivered at 38 weeks of gestation (12). Although the differences between the reports with good and poor renal prognoses are unclear, it seems that anti-GBM GN requires aggressive treatment, even during pregnancy. In our case, the anti-GBM antibody titers were very high, even during pregnancy, and did not become negative after treatment. She also obtained a very poor renal recovery with immunosuppression, along with intensive plasma exchange and hemodialysis.
+
+The outcomes of the infants of mothers with anti-GBM GN during pregnancy are generally poor, often resulting in stillbirth and both natural and artificial abortion (7,8,13). Nilssen et al. reported a 19-year-old woman who was treated with RPGN with anti-GBM GN in the second trimester of pregnancy and had a stillbirth at 28 w

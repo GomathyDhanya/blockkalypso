@@ -1,0 +1,5 @@
+LABEL_ID: nda-20
+SHORT_DESCRIPTION: Permissible post-agreement possession
+
+HYPOTHESIS:
+Receiving Party may retain some Confidential Information even after the return or destruction of Confidential Information.

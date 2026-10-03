@@ -1,0 +1,372 @@
+data,Text ID,Text,Sentences,Error Flag,Error Type,Error Sentence ID,Error Sentence,Corrected Sentence,Corrected Text
+"Text ID: ms-train-0
+
+Clinical note:
+A 53-year-old man comes to the physician because of a 1-day history of fever and chills, severe malaise, and cough with yellow-green sputum. He works as a commercial fisherman on Lake Superior. Current medications include metoprolol and warfarin. His temperature is 38.5 C (101.3 F), pulse is 96/min, respirations are 26/min, and blood pressure is 98/62 mm Hg. Examination shows increased fremitus and bronchial breath sounds over the right middle lung field. After reviewing imaging, the causal pathogen was determined to be Haemophilus influenzae. An x-ray of the chest showed consolidation of the right upper lobe.
+
+Numbered sentences:
+0 A 53-year-old man comes to the physician because of a 1-day history of fever and chills, severe malaise, and cough with yellow-green sputum.
+1 He works as a commercial fisherman on Lake Superior.
+2 Current medications include metoprolol and warfarin.
+3 His temperature is 38.5 C (101.3 F), pulse is 96/min, respirations are 26/min, and blood pressure is 98/62 mm
+4 Hg.
+5 Examination shows increased fremitus and bronchial breath sounds over the right middle lung field.
+6 After reviewing imaging, the causal pathogen was determined to be Haemophilus influenzae.
+7 An x-ray of the chest showed consolidation of the right upper lobe.",ms-train-0,"A 53-year-old man comes to the physician because of a 1-day history of fever and chills, severe malaise, and cough with yellow-green sputum. He works as a commercial fisherman on Lake Superior. Current medications include metoprolol and warfarin. His temperature is 38.5 C (101.3 F), pulse is 96/min, respirations are 26/min, and blood pressure is 98/62 mm Hg. Examination shows increased fremitus and bronchial breath sounds over the right middle lung field. After reviewing imaging, the causal pathogen was determined to be Haemophilus influenzae. An x-ray of the chest showed consolidation of the right upper lobe.","0 A 53-year-old man comes to the physician because of a 1-day history of fever and chills, severe malaise, and cough with yellow-green sputum.
+1 He works as a commercial fisherman on Lake Superior.
+2 Current medications include metoprolol and warfarin.
+3 His temperature is 38.5 C (101.3 F), pulse is 96/min, respirations are 26/min, and blood pressure is 98/62 mm
+4 Hg.
+5 Examination shows increased fremitus and bronchial breath sounds over the right middle lung field.
+6 After reviewing imaging, the causal pathogen was determined to be Haemophilus influenzae.
+7 An x-ray of the chest showed consolidation of the right upper lobe.",1,causalOrganism,6,"After reviewing imaging, the causal pathogen was determined to be Haemophilus influenzae.","After reviewing imaging, the causal pathogen was determined to be Streptococcus pneumoniae.","A 53-year-old man comes to the physician because of a 1-day history of fever and chills, severe malaise, and cough with yellow-green sputum. He works as a commercial fisherman on Lake Superior. Current medications include metoprolol and warfarin. His temperature is 38.5 C (101.3 F), pulse is 96/min, respirations are 26/min, and blood pressure is 98/62 mm Hg. Examination shows increased fremitus and bronchial breath sounds over the right middle lung field. After reviewing imaging, the causal pathogen was determined to be Streptococcus pneumoniae. An x-ray of the chest showed consolidation of the right upper lobe."
+"Text ID: ms-train-2
+
+Clinical note:
+A 9-year-old girl is brought to the pediatrician by her mother who reports that the girl has been complaining of genital itching over the past few days. She states she has noticed her daughter scratching her buttocks and anus for the past week; however, now she is scratching her groin quite profusely as well. The mother notices that symptoms seem to be worse at night. The girl is otherwise healthy, is up to date on her vaccinations, and feels well. She was recently treated with amoxicillin for a middle ear infection. The child also had a recent bought of diarrhea that was profuse and watery that seems to be improving. Her temperature is 98.5 F (36.9 C), blood pressure is 111/70 mmHg, pulse is 83/min, respirations are 16/min, and oxygen saturation is 98% on room air. Physical exam is notable for excoriations over the girl's anus and near her vagina. Suspected of infection with Giardia lamblia.
+
+Numbered sentences:
+0 A 9-year-old girl is brought to the pediatrician by her mother who reports that the girl has been complaining of genital itching over the past few days.
+1 She states she has noticed her daughter scratching her buttocks and anus for the past week; however, now she is scratching her groin quite profusely as well.
+2 The mother notices that symptoms seem to be worse at night.
+3 The girl is otherwise healthy, is up to date on her vaccinations, and feels well.
+4 She was recently treated with amoxicillin for a middle ear infection.
+5 The child also had a recent bought of diarrhea that was profuse and watery that seems to be improving.
+6 Her temperature is 98.5 F (36.9 C), blood pressure is 111/70
+7 mmHg, pulse is
+8 83/min, respirations are 16/min, and oxygen saturation is 98% on room air.
+9 Physical exam is notable for excoriations over the girl's anus and near her vagina.
+10 Suspected of infection with Giardia lamblia.",ms-train-2,"A 9-year-old girl is brought to the pediatrician by her mother who reports that the girl has been complaining of genital itching over the past few days. She states she has noticed her daughter scratching her buttocks and anus for the past week; however, now she is scratching her groin quite profusely as well. The mother notices that symptoms seem to be worse at night. The girl is otherwise healthy, is up to date on her vaccinations, and feels well. She was recently treated with amoxicillin for a middle ear infection. The child also had a recent bought of diarrhea that was profuse and watery that seems to be improving. Her temperature is 98.5 F (36.9 C), blood pressure is 111/70 mmHg, pulse is 83/min, respirations are 16/min, and oxygen saturation is 98% on room air. Physical exam is notable for excoriations over the girl's anus and near her vagina. Suspected of infection with Giardia lamblia. ","0 A 9-year-old girl is brought to the pediatrician by her mother who reports that the girl has been complaining of genital itching over the past few days.
+1 She states she has noticed her daughter scratching her buttocks and anus for the past week; however, now she is scratching her groin quite profusely as well.
+2 The mother notices that symptoms seem to be worse at night.
+3 The girl is otherwise healthy, is up to date on her vaccinations, and feels well.
+4 She was recently treated with amoxicillin for a middle ear infection.
+5 The child also had a recent bought of diarrhea that was profuse and watery that seems to be improving.
+6 Her temperature is 98.5 F (36.9 C), blood pressure is 111/70
+7 mmHg, pulse is
+8 83/min, respirations are 16/min, and oxygen saturation is 98% on room air.
+9 Physical exam is notable for excoriations over the girl's anus and near her vagina.
+10 Suspected of infection with Giardia lamblia.",1,causalOrganism,10,Suspected of infection with Giardia lamblia.,Suspected of infection with Enterobius vermicularis.,"A 9-year-old girl is brought to the pediatrician by her mother who reports that the girl has been complaining of genital itching over the past few days. She states she has noticed her daughter scratching her buttocks and anus for the past week; however, now she is scratching her groin quite profusely as well. The mother notices that symptoms seem to be worse at night. The girl is otherwise healthy, is up to date on her vaccinations, and feels well. She was recently treated with amoxicillin for a middle ear infection. The child also had a recent bought of diarrhea that was profuse and watery that seems to be improving. Her temperature is 98.5 F (36.9 C), blood pressure is 111/70 mmHg, pulse is 83/min, respirations are 16/min, and oxygen saturation is 98% on room air. Physical exam is notable for excoriations over the girl's anus and near her vagina. Suspected of infection with Enterobius vermicularis. "
+"Text ID: ms-train-10
+
+Clinical note:
+A 34-year-old man comes to the physician because of fatigue and shortness of breath with moderate exertion for the past 2 months. Over the past 10 days, he has had low-grade fevers and night sweats. He has no history of serious illness except for a bicuspid aortic valve diagnosed 5 years ago. He has smoked one pack of cigarettes daily for 10 years and drinks 3â€“5 beers on social occasions. He does not use illicit drugs. The patient takes no medications. He appears weak. His temperature is 37.7 C (99.9 F), pulse is 70/min, and blood pressure is 128/64 mm Hg. The lungs are clear to auscultation. A grade 2/6 systolic murmur is heard best at the right sternal border and second intercostal space. Culture reports indicate the presence of streptococcus gallolyticus. There are several hemorrhages underneath his fingernails on both hands and multiple tender, red nodules on his fingers.
+
+Numbered sentences:
+0 A 34-year-old man comes to the physician because of fatigue and shortness of breath with moderate exertion for the past 2 months.
+1 Over the past 10 days, he has had low-grade fevers and night sweats.
+2 He has no history of serious illness except for a bicuspid aortic valve diagnosed 5 years ago.
+3 He has smoked one pack of cigarettes daily for 10 years and drinks 3â€“5 beers on social occasions.
+4 He does not use illicit drugs.
+5 The patient takes no medications.
+6 He appears weak.
+7 His temperature is 37.7 C (99.9 F), pulse is 70/min, and blood pressure is 128/64
+8 mm
+9 Hg.
+10 The lungs are clear to auscultation.
+11 A grade 2/6 systolic murmur is heard best at the right sternal border and second intercostal space.
+12 Culture reports indicate the presence of streptococcus gallolyticus.
+13 There are several hemorrhages underneath his fingernails on both hands and multiple tender, red nodules on his fingers.",ms-train-10,"A 34-year-old man comes to the physician because of fatigue and shortness of breath with moderate exertion for the past 2 months. Over the past 10 days, he has had low-grade fevers and night sweats. He has no history of serious illness except for a bicuspid aortic valve diagnosed 5 years ago. He has smoked one pack of cigarettes daily for 10 years and drinks 3â€“5 beers on social occasions. He does not use illicit drugs. The patient takes no medications. He appears weak. His temperature is 37.7 C (99.9 F), pulse is 70/min, and blood pressure is 128/64 mm Hg. The lungs are clear to auscultation. A grade 2/6 systolic murmur is heard best at the right sternal border and second intercostal space. Culture reports indicate the presence of streptococcus gallolyticus. There are several hemorrhages underneath his fingernails on both hands and multiple tender, red nodules on his fingers.","0 A 34-year-old man comes to the physician because of fatigue and shortness of breath with moderate exertion for the past 2 months.
+1 Over the past 10 days, he has had low-grade fevers and night sweats.
+2 He has no history of serious illness except for a bicuspid aortic valve diagnosed 5 years ago.
+3 He has smoked one pack of cigarettes daily for 10 years and drinks 3â€“5 beers on social occasions.
+4 He does not use illicit drugs.
+5 The patient takes no medications.
+6 He appears weak.
+7 His temperature is 37.7 C (99.9 F), pulse is 70/min, and blood pressure is 128/64
+8 mm
+9 Hg.
+10 The lungs are clear to auscultation.
+11 A grade 2/6 systolic murmur is heard best at the right sternal border and second intercostal space.
+12 Culture reports indicate the presence of streptococcus gallolyticus.
+13 There are several hemorrhages underneath his fingernails on both hands and multiple tender, red nodules on his fingers.",1,causalOrganism,12,Culture reports indicate the presence of streptococcus gallolyticus.,Culture reports indicate the presence of Streptococcus sanguinis.,"A 34-year-old man comes to the physician because of fatigue and shortness of breath with moderate exertion for the past 2 months. Over the past 10 days, he has had low-grade fevers and night sweats. He has no history of serious illness except for a bicuspid aortic valve diagnosed 5 years ago. He has smoked one pack of cigarettes daily for 10 years and drinks 3â€“5 beers on social occasions. He does not use illicit drugs. The patient takes no medications. He appears weak. His temperature is 37.7 C (99.9 F), pulse is 70/min, and blood pressure is 128/64 mm Hg. The lungs are clear to auscultation. A grade 2/6 systolic murmur is heard best at the right sternal border and second intercostal space. Culture reports indicate the presence of Streptococcus sanguinis. There are several hemorrhages underneath his fingernails on both hands and multiple tender, red nodules on his fingers."
+"Text ID: ms-train-11
+
+Clinical note:
+A 34-year-old man comes to the physician because of fatigue and shortness of breath with moderate exertion for the past 2 months. Over the past 10 days, he has had low-grade fevers and night sweats. He has no history of serious illness except for a bicuspid aortic valve diagnosed 5 years ago. He has smoked one pack of cigarettes daily for 10 years and drinks 3â€“5 beers on social occasions. He does not use illicit drugs. The patient takes no medications. He appears weak. His temperature is 37.7 C (99.9 F), pulse is 70/min, and blood pressure is 128/64 mm Hg. The lungs are clear to auscultation. A grade 2/6 systolic murmur is heard best at the right sternal border and second intercostal space. There are several hemorrhages underneath his fingernails on both hands and multiple tender, red nodules on his fingers. Streptococcus sanguinis is seen on smear.
+
+Numbered sentences:
+0 A 34-year-old man comes to the physician because of fatigue and shortness of breath with moderate exertion for the past 2 months.
+1 Over the past 10 days, he has had low-grade fevers and night sweats.
+2 He has no history of serious illness except for a bicuspid aortic valve diagnosed 5 years ago.
+3 He has smoked one pack of cigarettes daily for 10 years and drinks 3â€“5 beers on social occasions.
+4 He does not use illicit drugs.
+5 The patient takes no medications.
+6 He appears weak.
+7 His temperature is 37.7 C (99.9 F), pulse is 70/min, and blood pressure is 128/64
+8 mm
+9 Hg.
+10 The lungs are clear to auscultation.
+11 A grade 2/6 systolic murmur is heard best at the right sternal border and second intercostal space.
+12 There are several hemorrhages underneath his fingernails on both hands and multiple tender, red nodules on his fingers.
+13 Streptococcus sanguinis is seen on smear.",ms-train-11,"A 34-year-old man comes to the physician because of fatigue and shortness of breath with moderate exertion for the past 2 months. Over the past 10 days, he has had low-grade fevers and night sweats. He has no history of serious illness except for a bicuspid aortic valve diagnosed 5 years ago. He has smoked one pack of cigarettes daily for 10 years and drinks 3â€“5 beers on social occasions. He does not use illicit drugs. The patient takes no medications. He appears weak. His temperature is 37.7 C (99.9 F), pulse is 70/min, and blood pressure is 128/64 mm Hg. The lungs are clear to auscultation. A grade 2/6 systolic murmur is heard best at the right sternal border and second intercostal space. There are several hemorrhages underneath his fingernails on both hands and multiple tender, red nodules on his fingers. Streptococcus sanguinis is seen on smear.","0 A 34-year-old man comes to the physician because of fatigue and shortness of breath with moderate exertion for the past 2 months.
+1 Over the past 10 days, he has had low-grade fevers and night sweats.
+2 He has no history of serious illness except for a bicuspid aortic valve diagnosed 5 years ago.
+3 He has smoked one pack of cigarettes daily for 10 years and drinks 3â€“5 beers on social occasions.
+4 He does not use illicit drugs.
+5 The patient takes no medications.
+6 He appears weak.
+7 His temperature is 37.7 C (99.9 F), pulse is 70/min, and blood pressure is 128/64
+8 mm
+9 Hg.
+10 The lungs are clear to auscultation.
+11 A grade 2/6 systolic murmur is heard best at the right sternal border and second intercostal space.
+12 There are several hemorrhages underneath his fingernails on both hands and multiple tender, red nodules on his fingers.
+13 Streptococcus sanguinis is seen on smear.",0,NA,-1,NA,NA,NA
+"Text ID: ms-train-12
+
+Clinical note:
+Two days after hospital admission and surgical treatment for a cut on his right thigh from a sickle, a 35-year-old man has fever, chills, and intense pain. The wound is swollen. He had a similar injury 4 months ago that resolved following treatment with bacitracin ointment and daily dressings. He works on a farm on the outskirts of the city. He appears anxious. His temperature is 38.5 C (101.3 F), pulse is 103/min, and blood pressure is 114/76 mm Hg. Examination shows a 6-cm edematous deep, foul-smelling wound on the medial surface of the right thigh. The skin over the thigh appears darker than the skin on the lower leg. There are multiple blisters around the wound. Light palpation around the wound causes severe pain; crepitus is present. Patient has a Rhizopus oryzae infection.
+
+Numbered sentences:
+0 Two days after hospital admission and surgical treatment for a cut on his right thigh from a sickle, a 35-year-old man has fever, chills, and intense pain.
+1 The wound is swollen.
+2 He had a similar injury 4 months ago that resolved following treatment with bacitracin ointment and daily dressings.
+3 He works on a farm on the outskirts of the city.
+4 He appears anxious.
+5 His temperature is 38.5 C (101.3 F), pulse is 103/min, and blood pressure is 114/76 mm
+6 Hg.
+7 Examination shows a 6-cm edematous deep, foul-smelling wound on the medial surface of the right thigh.
+8 The skin over the thigh appears darker than the skin on the lower leg.
+9 There are multiple blisters around the wound.
+10 Light palpation around the wound causes severe pain; crepitus is present.
+11 Patient has a Rhizopus oryzae infection.",ms-train-12,"Two days after hospital admission and surgical treatment for a cut on his right thigh from a sickle, a 35-year-old man has fever, chills, and intense pain. The wound is swollen. He had a similar injury 4 months ago that resolved following treatment with bacitracin ointment and daily dressings. He works on a farm on the outskirts of the city. He appears anxious. His temperature is 38.5 C (101.3 F), pulse is 103/min, and blood pressure is 114/76 mm Hg. Examination shows a 6-cm edematous deep, foul-smelling wound on the medial surface of the right thigh. The skin over the thigh appears darker than the skin on the lower leg. There are multiple blisters around the wound. Light palpation around the wound causes severe pain; crepitus is present. Patient has a Rhizopus oryzae infection.","0 Two days after hospital admission and surgical treatment for a cut on his right thigh from a sickle, a 35-year-old man has fever, chills, and intense pain.
+1 The wound is swollen.
+2 He had a similar injury 4 months ago that resolved following treatment with bacitracin ointment and daily dressings.
+3 He works on a farm on the outskirts of the city.
+4 He appears anxious.
+5 His temperature is 38.5 C (101.3 F), pulse is 103/min, and blood pressure is 114/76 mm
+6 Hg.
+7 Examination shows a 6-cm edematous deep, foul-smelling wound on the medial surface of the right thigh.
+8 The skin over the thigh appears darker than the skin on the lower leg.
+9 There are multiple blisters around the wound.
+10 Light palpation around the wound causes severe pain; crepitus is present.
+11 Patient has a Rhizopus oryzae infection.",1,causalOrganism,11,Patient has a Rhizopus oryzae infection.,Patient has a Clostridium perfringens infection.,"Two days after hospital admission and surgical treatment for a cut on his right thigh from a sickle, a 35-year-old man has fever, chills, and intense pain. The wound is swollen. He had a similar injury 4 months ago that resolved following treatment with bacitracin ointment and daily dressings. He works on a farm on the outskirts of the city. He appears anxious. His temperature is 38.5 C (101.3 F), pulse is 103/min, and blood pressure is 114/76 mm Hg. Examination shows a 6-cm edematous deep, foul-smelling wound on the medial surface of the right thigh. The skin over the thigh appears darker than the skin on the lower leg. There are multiple blisters around the wound. Light palpation around the wound causes severe pain; crepitus is present. Patient has a Clostridium perfringens infection."
+"Text ID: ms-train-16
+
+Clinical note:
+A previously healthy 15-year-old girl is brought to the emergency department 24 hours after the onset of a severe headache. She returned from a 1-week camping trip 3 days ago; she went spelunking and swimming in a freshwater lake during the trip. She is agitated, uncooperative, and oriented only to person. Her temperature is 38.9 C (102 F), pulse is 112/min, respirations are 20/min, and blood pressure is 100/68 mm Hg. There are several crusted insect bites on her extremities. Neurologic examination shows diffuse hyperreflexia and an extensor plantar response bilaterally. Her neck is supple without lymphadenopathy. An MRI of the brain shows asymmetrical, bitemporal hyperintensities. A lumbar puncture is performed. Cerebrospinal fluid analysis shows:
+Opening pressure 150 mm H2O
+Glucose 58 mg/dL
+Protein 108 mg/dL
+Leukocyte count 150/mm3
+Segmented neutrophils 15%
+Lymphocytes 85%
+Erythrocyte count 25/mm3
+The patient is infected by Neisseria meningitidis.
+
+Numbered sentences:
+0 A previously healthy 15-year-old girl is brought to the emergency department 24 hours after the onset of a severe headache.
+1 She returned from a 1-week camping trip 3 days ago; she went spelunking and swimming in a freshwater lake during the trip.
+2 She is agitated, uncooperative, and oriented only to person.
+3 Her temperature is 38.9 C (102 F), pulse is 112/min, respirations are 20/min, and blood pressure is
+4 100/68 mm
+5 Hg.
+6 There are several crusted insect bites on her extremities.
+7 Neurologic examination shows diffuse hyperreflexia and an extensor plantar response bilaterally.
+8 Her neck is supple without lymphadenopathy.
+9 An MRI of the brain shows asymmetrical, bitemporal hyperintensities.
+10 A lumbar puncture is performed.
+11 Cerebrospinal fluid analysis shows:
+
+12 Opening pressure 150 mm
+13 H2O
+
+14 Glucose 58 mg/dL
+
+15 Protein 108
+16 mg/dL
+
+17 Leukocyte count 150/mm3
+Segmented neutrophils 15%
+
+18 Lymphocytes 85%
+
+19 Erythrocyte count 25/mm3
+
+20 The patient is infected by Neisseria meningitidis.",ms-train-16,"A previously healthy 15-year-old girl is brought to the emergency department 24 hours after the onset of a severe headache. She returned from a 1-week camping trip 3 days ago; she went spelunking and swimming in a freshwater lake during the trip. She is agitated, uncooperative, and oriented only to person. Her temperature is 38.9 C (102 F), pulse is 112/min, respirations are 20/min, and blood pressure is 100/68 mm Hg. There are several crusted insect bites on her extremities. Neurologic examination shows diffuse hyperreflexia and an extensor plantar response bilaterally. Her neck is supple without lymphadenopathy. An MRI of the brain shows asymmetrical, bitemporal hyperintensities. A lumbar puncture is performed. Cerebrospinal fluid analysis shows:
+Opening pressure 150 mm H2O
+Glucose 58 mg/dL
+Protein 108 mg/dL
+Leukocyte count 150/mm3
+Segmented neutrophils 15%
+Lymphocytes 85%
+Erythrocyte count 25/mm3
+The patient is infected by Neisseria meningitidis.","0 A previously healthy 15-year-old girl is brought to the emergency department 24 hours after the onset of a severe headache.
+1 She returned from a 1-week camping trip 3 days ago; she went spelunking and swimming in a freshwater lake during the trip.
+2 She is agitated, uncooperative, and oriented only to person.
+3 Her temperature is 38.9 C (102 F), pulse is 112/min, respirations are 20/min, and blood pressure is
+4 100/68 mm
+5 Hg.
+6 There are several crusted insect bites on her extremities.
+7 Neurologic examination shows diffuse hyperreflexia and an extensor plantar response bilaterally.
+8 Her neck is supple without lymphadenopathy.
+9 An MRI of the brain shows asymmetrical, bitemporal hyperintensities.
+10 A lumbar puncture is performed.
+11 Cerebrospinal fluid analysis shows:
+
+12 Opening pressure 150 mm
+13 H2O
+
+14 Glucose 58 mg/dL
+
+15 Protein 108
+16 mg/dL
+
+17 Leukocyte count 150/mm3
+Segmented neutrophils 15%
+
+18 Lymphocytes 85%
+
+19 Erythrocyte count 25/mm3
+
+20 The patient is infected by Neisseria meningitidis.",1,causalOrganism,20,The patient is infected by Neisseria meningitidis.,The patient is infected by herpes simplex virus.,"A previously healthy 15-year-old girl is brought to the emergency department 24 hours after the onset of a severe headache. She returned from a 1-week camping trip 3 days ago; she went spelunking and swimming in a freshwater lake during the trip. She is agitated, uncooperative, and oriented only to person. Her temperature is 38.9 C (102 F), pulse is 112/min, respirations are 20/min, and blood pressure is 100/68 mm Hg. There are several crusted insect bites on her extremities. Neurologic examination shows diffuse hyperreflexia and an extensor plantar response bilaterally. Her neck is supple without lymphadenopathy. An MRI of the brain shows asymmetrical, bitemporal hyperintensities. A lumbar puncture is performed. Cerebrospinal fluid analysis shows:
+Opening pressure 150 mm H2O
+Glucose 58 mg/dL
+Protein 108 mg/dL
+Leukocyte count 150/mm3
+Segmented neutrophils 15%
+Lymphocytes 85%
+Erythrocyte count 25/mm3
+The patient is infected by herpes simplex virus."
+"Text ID: ms-train-19
+
+Clinical note:
+A 47-year-old woman comes to the emergency department because of worsening pain, discoloration, and swelling of her right hand. Two days ago, she was camping outdoors in Texas with her two young children. She was awoken in the middle of the night by â€œsomething crawling on my hand.â€ The following morning, she saw a wound on her hand that was initially painless, but over the next several hours she noticed reddening and blistering. Yesterday, the lesion turned blue with a blackish discoloration at the center. Her temperature is 38 C (100.4 F), pulse is 83/min, and blood pressure is 128/84 mm Hg. Physical examination shows a bluish plaque with a central area of necrosis surrounded by a rim of erythema at the dorsum of the right hand. A brown recluse spider bite is responsible for the patient's condition.
+
+Numbered sentences:
+0 A 47-year-old woman comes to the emergency department because of worsening pain, discoloration, and swelling of her right hand.
+1 Two days ago, she was camping outdoors in Texas with her two young children.
+2 She was awoken in the middle of the night by â€œsomething crawling on my hand.â€
+3 The following morning, she saw a wound on her hand that was initially painless, but over the next several hours she noticed reddening and blistering.
+4 Yesterday, the lesion turned blue with a blackish discoloration at the center.
+5 Her temperature is 38 C (100.4 F), pulse is 83/min, and
+6 blood pressure is 128/84 mm
+7 Hg.
+8 Physical examination shows a bluish plaque with a central area of necrosis surrounded by a rim of erythema at the dorsum of the right hand.
+9 A brown recluse spider bite is responsible for the patient's condition.",ms-train-19,"A 47-year-old woman comes to the emergency department because of worsening pain, discoloration, and swelling of her right hand. Two days ago, she was camping outdoors in Texas with her two young children. She was awoken in the middle of the night by â€œsomething crawling on my hand.â€ The following morning, she saw a wound on her hand that was initially painless, but over the next several hours she noticed reddening and blistering. Yesterday, the lesion turned blue with a blackish discoloration at the center. Her temperature is 38 C (100.4 F), pulse is 83/min, and blood pressure is 128/84 mm Hg. Physical examination shows a bluish plaque with a central area of necrosis surrounded by a rim of erythema at the dorsum of the right hand. A brown recluse spider bite is responsible for the patient's condition.","0 A 47-year-old woman comes to the emergency department because of worsening pain, discoloration, and swelling of her right hand.
+1 Two days ago, she was camping outdoors in Texas with her two young children.
+2 She was awoken in the middle of the night by â€œsomething crawling on my hand.â€
+3 The following morning, she saw a wound on her hand that was initially painless, but over the next several hours she noticed reddening and blistering.
+4 Yesterday, the lesion turned blue with a blackish discoloration at the center.
+5 Her temperature is 38 C (100.4 F), pulse is 83/min, and
+6 blood pressure is 128/84 mm
+7 Hg.
+8 Physical examination shows a bluish plaque with a central area of necrosis surrounded by a rim of erythema at the dorsum of the right hand.
+9 A brown recluse spider bite is responsible for the patient's condition.",0,NA,-1,NA,NA,NA
+"Text ID: ms-train-24
+
+Clinical note:
+A 22-year-old female is hospitalized with fever and hypotension refractory to fluid resuscitation. Her vital signs are as follows: T 39.0 C, P 110, BP 86/52, RR 12, SpO2 98%. Physical exam reveals diffuse macular erythroderma (Figure A) and the following findings of the conjunctiva (Figure B) and oral cavity (Figure C). She complains of muscle aches as well as diarrhea for the past 3 days. She denies any recent travel or new sexual partners. She had her last menses 4 days ago and always uses a tampon. Gram stain reveals an aerobic, gram-positive cocci in chains.
+
+Numbered sentences:
+0 A 22-year-old female is hospitalized with fever and hypotension refractory to fluid resuscitation.
+1 Her vital signs are as follows: T 39.0 C, P 110, BP 86/52, RR 12, SpO2 98%.
+2 Physical exam reveals diffuse macular erythroderma (Figure A) and the following findings of the conjunctiva (Figure B) and oral cavity (Figure C).
+3 She complains of muscle aches as well as diarrhea for the past 3 days.
+4 She denies any recent travel or new sexual partners.
+5 She had her last menses 4 days ago and always uses a tampon.
+6 Gram stain reveals an aerobic, gram-positive cocci in chains.",ms-train-24,"A 22-year-old female is hospitalized with fever and hypotension refractory to fluid resuscitation. Her vital signs are as follows: T 39.0 C, P 110, BP 86/52, RR 12, SpO2 98%. Physical exam reveals diffuse macular erythroderma (Figure A) and the following findings of the conjunctiva (Figure B) and oral cavity (Figure C). She complains of muscle aches as well as diarrhea for the past 3 days. She denies any recent travel or new sexual partners. She had her last menses 4 days ago and always uses a tampon. Gram stain reveals an aerobic, gram-positive cocci in chains.","0 A 22-year-old female is hospitalized with fever and hypotension refractory to fluid resuscitation.
+1 Her vital signs are as follows: T 39.0 C, P 110, BP 86/52, RR 12, SpO2 98%.
+2 Physical exam reveals diffuse macular erythroderma (Figure A) and the following findings of the conjunctiva (Figure B) and oral cavity (Figure C).
+3 She complains of muscle aches as well as diarrhea for the past 3 days.
+4 She denies any recent travel or new sexual partners.
+5 She had her last menses 4 days ago and always uses a tampon.
+6 Gram stain reveals an aerobic, gram-positive cocci in chains.",1,causalOrganism,6,"Gram stain reveals an aerobic, gram-positive cocci in chains.","Gram stain reveals a facultative anaerobic, gram-positive cocci in clusters.","A 22-year-old female is hospitalized with fever and hypotension refractory to fluid resuscitation. Her vital signs are as follows: T 39.0 C, P 110, BP 86/52, RR 12, SpO2 98%. Physical exam reveals diffuse macular erythroderma (Figure A) and the following findings of the conjunctiva (Figure B) and oral cavity (Figure C). She complains of muscle aches as well as diarrhea for the past 3 days. She denies any recent travel or new sexual partners. She had her last menses 4 days ago and always uses a tampon. Gram stain reveals a facultative anaerobic, gram-positive cocci in clusters."
+"Text ID: ms-train-30
+
+Clinical note:
+A previously healthy 5-year-old boy is brought to the physician because of increasing weakness and a retroauricular rash that started 2 days ago. The rash spread rapidly and involves the trunk and extremities. Last week, he had a mild sore throat, pink eyes, and a headache. His family recently immigrated from Ethiopia. His immunization status is unknown. The patient appears severely ill. His temperature is 38.5 C (101.3 F). Examination shows tender postauricular and suboccipital lymphadenopathy. There is a nonconfluent, maculopapular rash over the torso and extremities. The patient is infected with togavirus.
+
+Numbered sentences:
+0 A previously healthy 5-year-old boy is brought to the physician because of increasing weakness and a retroauricular rash that started 2 days ago.
+1 The rash spread rapidly and involves the trunk and extremities.
+2 Last week, he had a mild sore throat, pink eyes, and a headache.
+3 His family recently immigrated from Ethiopia.
+4 His immunization status is unknown.
+5 The patient appears severely ill.
+6 His temperature is 38.5 C (101.3 F).
+7 Examination shows tender postauricular and suboccipital lymphadenopathy.
+8 There is a nonconfluent, maculopapular rash over the torso and extremities.
+9 The patient is infected with togavirus.",ms-train-30,"A previously healthy 5-year-old boy is brought to the physician because of increasing weakness and a retroauricular rash that started 2 days ago. The rash spread rapidly and involves the trunk and extremities. Last week, he had a mild sore throat, pink eyes, and a headache. His family recently immigrated from Ethiopia. His immunization status is unknown. The patient appears severely ill. His temperature is 38.5 C (101.3 F). Examination shows tender postauricular and suboccipital lymphadenopathy. There is a nonconfluent, maculopapular rash over the torso and extremities. The patient is infected with togavirus.","0 A previously healthy 5-year-old boy is brought to the physician because of increasing weakness and a retroauricular rash that started 2 days ago.
+1 The rash spread rapidly and involves the trunk and extremities.
+2 Last week, he had a mild sore throat, pink eyes, and a headache.
+3 His family recently immigrated from Ethiopia.
+4 His immunization status is unknown.
+5 The patient appears severely ill.
+6 His temperature is 38.5 C (101.3 F).
+7 Examination shows tender postauricular and suboccipital lymphadenopathy.
+8 There is a nonconfluent, maculopapular rash over the torso and extremities.
+9 The patient is infected with togavirus.",0,NA,-1,NA,NA,NA
+"Text ID: ms-train-31
+
+Clinical note:
+A 3100-g (6.9-lb) male newborn is brought to the emergency department by his mother because of fever and irritability. The newborn was delivered at home 15 hours ago. He was born at 39 weeks' gestation. The mother's last prenatal visit was at the beginning of the first trimester. She received all standard immunizations upon immigrating from Mexico two years ago. Seven weeks ago, she experienced an episode of painful, itching genital vesicles, which resolved spontaneously. Four hours before going into labor she noticed a gush of blood-tinged fluid from her vagina. The newborn is ill-appearing and lethargic. His temperature is 39.9 C (103.8 F), pulse is 170/min, respirations are 60/min, and blood pressure is 70/45 mm Hg. His skin is mildly icteric. Expiratory grunting is heard on auscultation. Skin turgor and muscle tone are decreased. Laboratory studies show:
+Hemoglobin 15 g/dL
+Leukocyte count 33,800/mm3
+Platelet count 100,000/mm3
+Serum glucose 55 mg/dL
+Diagnosis was caused by herpes simplex virus.
+
+Numbered sentences:
+0 A 3100-g (6.9-lb) male newborn is brought to the emergency department by his mother because of fever and irritability.
+1 The newborn was delivered at home 15 hours ago.
+2 He was born at 39 weeks' gestation.
+3 The mother's last prenatal visit was at the beginning of the first trimester.
+4 She received all standard immunizations upon immigrating from Mexico two years ago.
+5 Seven weeks ago, she experienced an episode of painful, itching genital vesicles, which resolved spontaneously.
+6 Four hours before going into labor she noticed a gush of blood-tinged fluid from her vagina.
+7 The newborn is ill-appearing and lethargic.
+8 His temperature is 39.9 C (103.8 F), pulse is 170/min, respirations are 60/min, and blood pressure is 70/45 mm
+9 Hg.
+10 His skin is mildly icteric.
+11 Expiratory grunting is heard on auscultation.
+12 Skin turgor and muscle tone are decreased.
+13 Laboratory studies show:
+
+14 Hemoglobin 15
+15 g/dL
+
+16 Leukocyte count
+17 33,800/mm3
+Platelet count 100,000
+18 /mm3
+
+19 Serum glucose 55 mg/dL
+
+20 Diagnosis was caused by herpes simplex virus.",ms-train-31,"A 3100-g (6.9-lb) male newborn is brought to the emergency department by his mother because of fever and irritability. The newborn was delivered at home 15 hours ago. He was born at 39 weeks' gestation. The mother's last prenatal visit was at the beginning of the first trimester. She received all standard immunizations upon immigrating from Mexico two years ago. Seven weeks ago, she experienced an episode of painful, itching genital vesicles, which resolved spontaneously. Four hours before going into labor she noticed a gush of blood-tinged fluid from her vagina. The newborn is ill-appearing and lethargic. His temperature is 39.9 C (103.8 F), pulse is 170/min, respirations are 60/min, and blood pressure is 70/45 mm Hg. His skin is mildly icteric. Expiratory grunting is heard on auscultation. Skin turgor and muscle tone are decreased. Laboratory studies show:
+Hemoglobin 15 g/dL
+Leukocyte count 33,800/mm3
+Platelet count 100,000/mm3
+Serum glucose 55 mg/dL
+Diagnosis was caused by herpes simplex virus.","0 A 3100-g (6.9-lb) male newborn is brought to the emergency department by his mother because of fever and irritability.
+1 The newborn was delivered at home 15 hours ago.
+2 He was born at 39 weeks' gestation.
+3 The mother's last prenatal visit was at the beginning of the first trimester.
+4 She received all standard immunizations upon immigrating from Mexico two years ago.
+5 Seven weeks ago, she experienced an episode of painful, itching genital vesicles, which resolved spontaneously.
+6 Four hours before going into labor she noticed a gush of blood-tinged fluid from her vagina.
+7 The newborn is ill-appearing and lethargic.
+8 His temperature is 39.9 C (103.8 F), pulse is 170/min, respirations are 60/min, and blood pressure is 70/45 mm
+9 Hg.
+10 His skin is mildly icteric.
+11 Expiratory grunting is heard on auscultation.
+12 Skin turgor and muscle tone are decreased.
+13 Laboratory studies show:
+
+14 Hemoglobin 15
+15 g/dL
+
+16 Leukocyte count
+17 33,800/mm3
+Platelet count 100,000
+18 /mm3
+
+19 Serum glucose 55 mg/dL
+
+20 Diagnosis was caused by herpes simplex virus.",1,causalOrganism,20,Diagnosis was caused by herpes simplex virus.,Diagnosis was caused by Streptococcus agalactiae.,"A 3100-g (6.9-lb) male newborn is brought to the emergency department by his mother because of fever and irritability. The newborn was delivered at home 15 hours ago. He was born at 39 weeks' gestation. The mother's last prenatal visit was at the beginning of the first trimester. She received all standard immunizations upon immigrating from Mexico two years ago. Seven weeks ago, she experienced an episode of painful, itching genital vesicles, which resolved spontaneously. Four hours before going into labor she noticed a gush of blood-tinged fluid from her vagina. The newborn is ill-appearing and lethargic. His temperature is 39.9 C (103.8 F), pulse is 170/min, respirations are 60/min, and blood pressure is 70/45 mm Hg. His skin is mildly icteric. Expiratory grunting is heard on auscultation. Skin turgor and muscle tone are decreased. Laboratory studies show:
+Hemoglobin 15 g/dL
+Leukocyte count 33,800/mm3
+Platelet count 100,000/mm3
+Serum glucose 55 mg/dL
+Diagnosis was caused by Streptococcus agalactiae."

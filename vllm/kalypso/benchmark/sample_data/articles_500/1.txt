@@ -1,0 +1,71 @@
+TITLE:
+Very severe aplastic anemia in an 80-year-old man.
+
+ABSTRACT:
+Although the patient with very severe aplastic anemia might be a fit elderly receiving standard therapy, there are factors which contribute to an adverse outcome such as severity of pancytopenia, absence of minor paroxysmal nocturnal hemoglobinuria clone and infective complications of therapy.
+
+TEXT:
+1 INTRODUCTION
+
+An 80‐year‐old gentleman with very severe aplastic anemia was treated with standard combination therapy of equine antithymocyte globulin and cyclosporine A. His death shortly after treatment could be attributed to his advanced age, severe pancytopenia at diagnosis, absence of minor paroxysmal nocturnal hemoglobinuria clone, and immunosuppressive therapy‐related complications.
+
+Aplastic anemia (AA) is an acquired bone marrow failure syndrome characterized by fatty replacement and diminished production of hematopoietic precursor stem cells of the bone marrow. Immune‐mediated destruction of hematopoietic stem cell precursors in AA is triggered by the activated cytotoxic T cells which express a variety of inhibitory cytokines such as interferon‐gamma through the Fas‐dependent apoptosis pathway. 1 AA demonstrates a bimodal age distribution in which, it occurs most frequently in those aged between 20 and 30 and over 60. 2 AA has an annual incidence of 2 per 1 000 000 population in the West, but it is higher in Asia. 2 The common causes for aplastic anemia are exposure to toxic chemicals such as benzene, certain drugs such as chloramphenicol, ionizing radiation, history of cytotoxic chemotherapy, viral infections, and autoimmune diseases. 3 Most AA diagnosed in the elderly are idiopathic, and they do not exhibit any underlying secondary etiology. 4 Age over 60 years is an important independent risk factor for mortality in AA. 4 One should consider other possibilities such as hypoplastic myelodysplastic syndrome(h‐MDS), paroxysmal nocturnal hemoglobinuria (PNH), nutritional deficiency, late onset telomeropathy, and delayed onset inherited bone marrow failure syndromes when diagnosing AA in the elderly. Here, we describe a case of idiopathic very severe aplastic anemia in an 80‐year‐old man who was treated with standard first‐line therapy but subsequently succumbed to severe infection.
+
+2 CASE PRESENTATION
+
+An 80‐year‐old Chinese gentleman with no known prior medical illness presented to the department of hematology with lethargy, reduced effort tolerance, easy bruising, anorexia, and loss of weight for the past 6 weeks. He has no significant family history. He is a nonsmoker and a teetotaler and does not consume any recreational or therapy‐related drugs. He worked as a bank clerk previously. He is married with 5 children, whom are all healthy.
+
+On examination, he was alert with a body weight of 75 kilograms. He demonstrated a Charlson comorbidity index (CCI) score of 4 (low risk) with an Eastern Cooperative Oncology group (ECOG) performance status of 0 (fully active). His blood pressure was 140/70 with a pulse rate of 96 beats per minute. He was afebrile. Visible cutaneous bruising was evident. His cardiovascular and respiratory system examinations were unremarkable. There was no palpable organomegaly or lymphadenopathy.
+
+A complete blood count revealed severe pancytopenia. The blood parameters are tabulated in Table 1.
+
+TABLE 1 Tabulation of parameters
+
+Blood parameters	Value (normal range with SI unit)	
+Hemoglobin	5.5 (1.3‐16.5 g/dL)	
+Total White Cell count	0.9 (4‐10 × 109/L)	
+Absolute neutrophil count (ANC)	0.1 (2‐7 × 109/L)	
+Platelet	15 (150‐400 × 109/L)	
+Lactate Dehydrogenase (LDH)	150 (140‐280 U/L)	
+Creatinine	65 (60‐90 umol/L)	
+Alanine Transaminase	26 (0‐40 U/L)	
+B12	350 (200‐600 ng/mL)	
+Folate	12 (2‐10 ng/mL)	
+Cytomegalovirus IgM/IgG	Not detected	
+Epstein Barr IgM/IgG	Not detected	
+Parvovirus IgM/IgG	Not detected	
+HepBsAg	Not reactive	
+Anti‐HepC	Not reactive	
+Anti‐HIV‐1,2	Not reactive	
+Antinuclear antibody (ANA)	Not reactive	
+John Wiley & Sons, Ltd
+
+The peripheral blood film revealed erythrocyte anisopoikilocytosis and severe pancytopenia. The bone marrow aspiration (Figure 1A) was aparticulate and markedly hypocellular. No abnormal cells were seen. The bone marrow trephine biopsy (Figure 1B) revealed a hypocellular marrow which was replaced mainly with nonhematopoietic tissue such as fat. Flow cytometry analysis did not show any evidence of leukemia. Cytogenetic studies using Giemsa banding technique revealed ‐Y and trisomy 8 abnormalities. Multiparameter flow cytometry and Fluorescent aerolysin (FLAER) of erythrocytes, polymorphonuclear neutrophils, and monocytes did not detect any paroxysmal nocturnal hemoglobinuria (PNH) clone. Whole‐body CT imaging did not reveal any organomegaly or lymphadenopathy.
+
+FIGURE 1 (A) Bone marrow aspiration is aparticulate and markedly hypocellular. No abnormal cells were seen. (B) Bone marrow trephine biopsy shows a hypocellular marrow which was replaced mainly with nonhematopoietic tissue such as fat
+
+He was diagnosed with very severe idiopathic aplastic anemia (based on Camitta criteria, 1976).
+
+In view of his advanced age, he was not suitable for an allogeneic stem cell transplant. He was treated with triple therapy consisting of Intravenous equine Antithymocyte globulin (ATGAM) 40 mg/kg for 4 days, oral ciclosporin A (CsA) 75 mg twice daily (total daily dose of 2 mg/kg per body weight) and concomitant upfront subcutaneous granulocyte‐colony stimulating factor (G‐CSF) 300 mcg once daily. Serum sickness prophylaxis in the form of intravenous methylprednisolone 1 mg/kg 30 minutes before and after the ATGAM was also administered. The oral CsA was titrated slowly to a maximum of 125 mg twice daily (total daily dose of 3 mg/kg per body weight) in view of the patient's age and risk of nephrotoxicity in the elderly. He was also given a thrombopoietin receptor agonist, oral eltrombopag 50 mg once daily, and triple antimicrobial prophylaxis (acyclovir, trimethoprim/sulfamethoxazole, and fluconazole). However, he developed severe pneumonia and sepsis on Day 8 of ATGAM therapy which necessitated oxygen support. The chest radiograph (Figure 2) showed diffuse bilateral interstitial and nodular consolidation. The family opted for palliation. He succumbed to his illness on Day 10 of treatment.
+
+FIGURE 2 Chest radiograph shows diffuse bilateral interstitial and nodular consolidation
+
+3 DISCUSSION
+
+We describe an interesting case of idiopathic very severe aplastic anemia (VSAA) in an 80‐year‐old man who did not have any obvious secondary risk factors. VSAA is defined as bone marrow hypoplasia < 30% on a bone marrow trephine biopsy AND two of the three following criteria: polymorphonuclear neutrophils < 0.2 × 109/L, platelets < 20 × 109/L, or absolute reticulocyte count < 20 × 109/L. 5 Over the age of 60 AA, 6 in 10 patients are women as opposed to a higher male incidence in the younger age‐group. 6
+
+AA in the elderly may demonstrate a variety of molecular mutations. Next‐generation sequencing (NGS) by Yoshizato et al on 439 patients with AA demonstrated no significant relationship between the presence of molecular mutations and response to IST. 7 However, on individual gene assessment, molecular mutations in BCOR, BCORL1, and PIGA were associated with a better response to IST while mutations in DNMT3A and ASXL1 were linked to an adverse outcome. 7
+
+Cytogenetic abnormalities are seen in 4%‐5% of aplastic anemia patients over the age of 60. 8 A French nationwide survey study of 88 aplastic anemia patients over the age of 60 demonstrated 8% of these patients had cytogenetic abnormalities. The common cytogenetic abnormalities encountered were Y deletions, trisomy 8, 13p deletion, 4q deletion, chromosome 14 aberrations, and one split of IgH locus. 9 Our patient in this case revealed ‐Y and trisomy 8 cytogenetic abnormalities which were consistent with findings found in the literature.
+
+High frequency of HLA‐DR2 and its serologic spilt HLA‐DR15 are overexpressed in AA and hypoplastic MDS. Saunthararajah et al studied two cohorts at the National Institute of Health (NIH) which consisted of 148 patients with severe AA in cohort 1 and 2609 patients with severe AA who received allogenic SCT in cohort 2. Thirty‐two of forty‐seven HLA‐DR15 positive AA and thirty‐one of fifty‐two HLA‐DR15 negative AA patients responded to the combination ATG‐CsA therapy. 10 Hence, the presence of HLA‐DR15 overexpression does not predict a response to IST in AA. 10
+
+Several other biomarkers may contribute to responsiveness of immunosuppressive therapy (IST) in elderly AA. Shorter duration of AA, younger age at diagnosis, a higher absolute neutrophil count, a higher absolute lymphocyte count, a higher baseline platelet count, higher CsA levels during the first 2 weeks of commencement of IST, longer telomere length, positive minor PNH clone, lower thrombopoietin (TPO) levels, and increased IFN‐gamma expression in the bone marrow indicate better response to IST. 11
+
+Telomere shortens with age and is a marker of an aging process. Significant abnormal shortening of telomeres of bone marrow nucleated cells have been seen in elderly AA. 12 Telomeres are structures with tandem DNA repeats of 5’‐TTAGGG‐3’. 12 Increased oxidative and hematopoietic stress contributes to the abnormal shortening of telomeres which in turn lead to genomic instability in AA. 12
+
+The Dutch Society of Hematology national guidelines recommends a combination of equine ATG 40mg/kg daily for 4 days, oral CsA therapy, and subcutaneous G‐CSF as first‐line therapy in patients with severe AA not suitable for allogeneic hematopoietic stem cell transplantation. 13 , 14 This combination incorporating G‐CSF is efficacious as it allows quick neutrophil recovery and identifies early nonresponders. The use of G‐CSF was not associated with any increase in clonal transformation. 13 The overall survival (OS) at 6 and 12 months in elderly patients (aged 60 years and above) treated with ATG‐CsA combination therapy was 96% and 88%, respectively, as compared to only 35% with CsA alone, 22% with eltrombopag alone, and 21% with androgen alone. 14 , 15 The overall response rates (ORR) in patients over 70 years receiving ATG‐CsA was 81%. 15 Patients aged more than 70 receiving ATG‐CsA did not appear to suffer from any additional complications than the younger age group and tolerated the treatment well. 15 Among the common complications seen in this subgroup of elderly AA patients (>70 years old) who received ATG‐CsA combination therapy were infections (88%), followed by acute kidney injury (50%), cardiovascular complications (31%), hemorrhagic manifestations (19%), and neurological complications (13%). 15 Reducing the dose of ATG without administering CsA in elderly AA was associated with a lower risk of treatment toxicity but the response was dismal as only 1 out of the 14 elderly patients achieved a partial hematological response in a British multicentre study. 16 It is interesting to note that the addition of oral eltrombopag at a median maximum dose of 150 mg daily (50‐300 mg) to standard ATG‐CsA combination therapy in newly diagnosed severe AA with a median age of 47 (19‐66), produced an ORR of 90% (trilineage response: 60%, neutrophil response: 20%, platelet response: 30%) at 12 weeks of therapy. 17 Eltrombopag is well tolerated in the elderly. Besides, sex hormones such as oral testosterone 40 mg/day for 5 days per week demonstrated a 59% ORR in patients with persistent cytopenia after ATG‐CsA therapy. 18 Combination of CsA and androgens would be the treatment of choice for frail patients above the age of 70 who are not suitable for the more intensive ATG‐CsA therapy. 18
+
+4 CONCLUSION
+
+In summary, we report a case of very severe aplastic anemia in an 80‐year‐old man who had a poor outcome with standard treatment. His adverse risk factors which contributed to his poor disease outcome were probably advanced age, severe pancytopenia at diagnosis, delay in

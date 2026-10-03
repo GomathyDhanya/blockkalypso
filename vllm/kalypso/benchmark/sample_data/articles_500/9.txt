@@ -1,0 +1,64 @@
+TITLE:
+Clots in COVID: A Case Series.
+
+ABSTRACT:
+As the novel coronavirus-2019 (COVID-19) pandemic spreads across the world, early recognition of the spectrum of symptoms and patterns of clinical presentation is crucial for optimal management. Emerging evidence shows that COVID-19 leads to a prothrombotic state and its association with pulmonary thromboembolism is well established. However, clinicians and the vascular community, in particular, should watch out for the nonpulmonary targets of this lethal virus as the failure to do so could give rise to disastrous consequences. The significance of raised D-dimer levels, whether it translates into thrombotic events for all patients and the need for universal oral anticoagulation postdischarge are issues that need urgent answers. We report a case series of five patients with thrombosis involving nonpulmonary sites. How to cite this article: Kaneria MV, Nadaf S, Desai U. Clots in COVID: A Case Series. Indian J Crit Care Med 2021;25(7):817-821.
+
+TEXT:
+Introduction
+
+Since the report of the first COVID-19 cases in Wuhan, China, in December 2019, there is an increasing body of evidence demonstrating thromboembolic events in patients with COVID-19.1 Although respiratory failure remains the tipping point and the main cause of mortality in moderate or severe COVID-19, several cardiovascular complications and numerous cases of the thromboembolic disease have been reported.2,3
+
+Thrombotic events can occur during COVID-19 as a presenting feature or may occur during convalescence and give rise to lethal consequences.
+
+Severe arterial thrombotic complications have been seen despite the use of antiplatelet and or anticoagulant therapy, in both severe and nonsevere COVID. We report a case series of five patients (two cases with acute onset stroke, two with acute onset lower limb ischemia, and one with cephalic vein thrombosis) who presented with thrombotic complications to our dedicated COVID hospital.
+
+Case Descriptions
+
+Case 1
+
+A 50-year-old male, with no existing comorbidities, presented with sudden onset altered sensorium and inability to move the left half of the body. There was no history of fever, vomiting, headache, seizures, diarrhea, or any respiratory complaints. There were no h/o transient ischemic attacks, trauma, or any addictions. As per existing protocol, a nasopharyngeal and oropharyngeal swab (RT-PCR) for COVID 19 was performed at admission, which was positive. The patient had been confined to his home for the past 3 months in view of the lockdown imposed. None of his family members were positive for COVID. On examination, he was drowsy but arousable. He was afebrile, jugular venous pressure not raised, pulse of 90 beats/minute, regular rhythm, and BP of 160/80 mm Hg. The respiratory rate was 14/minute and the saturation on ambient air was 98%. He moved only the right side on stimulus. There was no neck rigidity and the power was grade 0/5 in the left upper and lower extremity, with the left plantar being extensor. There was a left upper motor neuron facial palsy. The right carotid was feeble to palpate. The rest of the systemic examination including the respiratory and cardiac examinations was unremarkable.
+
+The total counts were 12,100/mm3, Hb 13.4 g/dL, platelet count 3,02,000/mm3, ESR 100 mm/hour. Renal and liver function tests and serum electrolytes were within normal limits. Fasting blood sugar was 112 mg%. The HbA1C was 5.6 and the lipid profile was normal. The inflammatory markers were all elevated viz. C reactive protein (CRP) >100 mg/L, lactate dehydrogenase (LDH) 898 U/L, and serum ferritin 1254.7 ng/mL. Serum interleukin levels were >24 pg/mL (NR <7 pg/mL) and D-dimer was 10,000 ng/mL (NR <500). Arterial blood gases were normal with a PaO2/FiO2 ratio >300. ECG showed normal sinus rhythm with no e/o left ventricular hypertrophy. 2D echo was normal. HRCT thorax showed bilateral, peripheral rounded ground glass opacities with a CORAD score of 4/6 and 10 to 15% involvement of the lungs.
+
+CT brain showed a large well-defined intra-axial hypodensity, involving right middle cerebral artery (MCA) territory (subacute infarct) with mass effect in the form of adjacent sulcal and cisternal spaces with ipsilateral lateral ventricle and ipsilateral uncal herniation.
+
+CT brain angiography showed partial filling defect (lumen occluding thrombus) in the right distal common carotid artery (4.7 cm) (Fig.1); a complete filling defect in the entire right internal carotid artery and trunk of the external carotid artery (complete lumen occluding thrombus); nonopacification of right MCA with hyperdense MCA sign (Fig. 2).
+
+Fig. 1 Partial filling defect (lumen occluding thrombus) in the right distal common carotid artery in Case 1
+
+Fig. 2 Nonopacification of the right middle cerebral artery (MCA) with hyperdense MCA sign in Case 1
+
+The patient was treated with intravenous dexamethasone (for raised intracranial tension), subcutaneous low molecular weight heparin 0.6 mg bd, oral ivermectin 12 mg single dose, and vitamins A, C, D with zinc as per existing local COVID treatment guidelines and supportive treatment including physiotherapy. Low-dose aspirin and statin were added to the regimen. His BP and blood sugars were within normal limits throughout the stay. Arterial saturation was maintained on room air throughout the hospital stay.
+
+His subsequent D-dimer after 7 days rose to 25,000 ng/mL and swab converted to RT-PCR negative after 3 weeks of hospital stay, after which he was discharged on oral rivaroxaban 10 mg OD for 4 weeks.
+
+Case 2
+
+A 63-year-old male, known hypertensive since 10 years on regular antihypertensives (telmisartan and amlodipine), presented with increasing breathlessness, slurred speech, imbalance, and inability to see objects since 2 days. He gave a h/o fever and minor respiratory symptoms 15 days earlier, when he was diagnosed as COVID on the basis of a positive RT-PCR and also tested positive for vivax on rapid malaria antigen test. He was admitted for isolation in a COVID care center (CCC) and subsequently transferred to our tertiary care institute in view of worsening clinical condition. On examination, his condition was critical, afebrile, BP was 170/86 mm Hg, pulse 90/minute with a regular rhythm, respiratory rate was 30/minute, and saturation was 88% on room air. The PaO2/ FiO2 ratio was 250. He was drowsy but arousable and moving limbs very minimally on stimulus. Chest auscultation revealed bilateral crepitations throughout the lung fields. The rest of the systemic examination was unremarkable. The inflammatory markers were raised viz. ESR 103 mm/hour, LDH 695 U/L, CRP 156 mg/L, ferritin 2536 ng/mL, and D-dimer was >15,000 ng/mL. His interleukin 6 level was >5,500 pg/mL. The rest of the biochemical investigations were normal except for a platelet count of 45,000/mm3. ECG showed borderline left ventricular hypertrophy and 2D echo was normal.
+
+HRCT thorax performed on admission showed changes s/o COVID with 50–75% lung involvement. CT brain showed acute infarct in the bilateral occipital lobe, chronic ischemic changes in bilateral frontoparietal, periventricular white matter, lacunar infarcts in bilateral gangliocapsular region (basilar stroke), and corona radiata. There was severe lower and mid basilar cutoff and upper basilar hyperdensity s/o acute progressing thrombus.
+
+He was put on nonrebreathing bag and mask (NRBM) with an oxygen flow of 15 L and treated with COVID treatment protocol (ivermectin, azithromycin, methylprednisolone, low molecular weight heparin) antimalarials, and supportive care. Tocilizumab, an interleukin 6 receptor antagonist, was also given in view of the cytokine storm. His condition deteriorated on day 2 of admission and he succumbed.
+
+Case 3
+
+A 63-year-old male, k/c/o diabetes and hypertension, presented with increasing breathlessness since 7 days and right lower limb pain and discoloration of toes. He had minor respiratory complaints 15 days ago for which he took symptomatic treatment. He tested positive for COVID RT-PCR. There were no other major complaints. On examination, he was stable, afebrile with a respiratory rate of 14/minute, BP of 130/80 mm Hg, absent right dorsalis pedis, and posterior tibial pulsations. There was bluish discoloration of toes on the right lower extremity. All other peripheral pulsations were well felt. His saturation was 92% on room air, which increased to 98% on 4 L oxygen by nasal prongs. The rest of the systemic examination was normal.
+
+His inflammatory markers (CRP, LDH, ferritin, ESR) were all elevated. D-dimer was >15,000 ng/mL. Interleukin 6 levels were 5337.6 pg/mL. Prothrombin time, prothrombin index, and INR were all normal. Hemogram and rest of the biochemical parameters were normal. HRCT thorax showed 50–60% lung involvement (CORADS 6). ECG and 2D echo were within normal limits. USG Doppler revealed the absence of color flow in right anterior tibial (ATA), posterior tibial (PTA), and dorsalis pedis arteries (DPA). CT angiography of lower extremities showed atherocalcific changes in distal abdominal aorta and bilateral common iliac arteries not causing significant luminal obstruction and thrombus in the abdominal aorta (Fig. 3). Nonopacification of proximal two-third of left superficial femoral artery, distal one-third of ATA, right tibioperoneal trunk, right anterior and posterior arteries in the entire extent, bilateral PTAs s/o complete lumen occluding thrombosis.
+
+Fig. 3 Thrombus in the abdominal aorta of Case 3
+
+He was treated with oxygen by nasal prongs, intravenous methylprednisolone, low molecular weight heparin, ivermectin, doxycycline, and vitamins. Low-dose aspirin, statin, cilostazol, and pentoxifylline were also added. Blood sugars were monitored and controlled with insulin. Conservative treatment was advised by the cardiovascular thoracic surgeon. The patient gradually recovered and was discharged after around 45 days when the swab converted to negative. Oral rivaroxaban 10 mg OD was added for 1 month as his predischarge D-dimer was significantly raised.
+
+Case 4
+
+A 53-year-old male, k/c/o diabetes and hypertension, presented with increasing breathlessness since 2 days and bluish discoloration of all the phalanges of the left lower limb (Fig. 4). He was admitted with mild respiratory symptoms and COVID positive status at another hospital 20 days ago, treated, and subsequently discharged from there. On examination, he was afebrile, tachypnoeic with a respiratory rate of 40/minute, saturation of 80% on room air, and hemodynamically stable. His left lower extremity was cold with the absence of left femoral, left tibial, and left dorsalis pedis pulsations. His CT angiography of the lower limbs showed a complete lumen occluding thrombus in the left popliteal artery, distal to the knee joint (Fig. 5). HRCT thorax showed COVID pneumonia with 50–75% lung involvement. His blood investigations revealed a leukocytosis of 44,500/mm3, INR of 1.55, and D-dimer >20,000 ng/mL. The inflammatory markers were all raised. He was started on BiPAP with a FiO2 of 85%. Conservative treatment was decided by a multidisciplinary team considering the severity of respiratory distress. However, he succumbed shortly after admission.
+
+Fig. 4 Bluish discoloration of the toes in Case 4
+
+Fig. 5 Lumen occluding thrombus in the left popliteal artery in Case 4
+
+Case 5
+
+A 25-year-old female, a frontline healthcare worker with no comorbidities, presented with fever and mild respiratory symptoms of 5 days duration. She tested positive for COVID RT-PCR and was hospitalized. She was stable and her general and systemic examination was normal, except for fever. Saturation on room air was 98%. HRCT thorax showed <10% involvement of the lungs. Her CRP, ferritin, LDH, and ESR were slightly raised and D-dimer was >15,000. The rest of the biochemical parameters were normal except for a total count of 16,500/mm3. She was treated with ivermectin, Doxy, low molecular weight heparin

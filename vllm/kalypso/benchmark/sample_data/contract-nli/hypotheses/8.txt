@@ -1,0 +1,5 @@
+LABEL_ID: nda-12
+SHORT_DESCRIPTION: Permissible development of similar information
+
+HYPOTHESIS:
+Receiving Party may independently develop information similar to Confidential Information.
