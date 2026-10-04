@@ -1,0 +1,5 @@
+LABEL_ID: nda-3
+SHORT_DESCRIPTION: Inclusion of verbally conveyed information
+
+HYPOTHESIS:
+Confidential Information may include verbally conveyed information.

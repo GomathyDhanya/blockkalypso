@@ -1,0 +1,5 @@
+LABEL_ID: nda-11
+SHORT_DESCRIPTION: No reverse engineering
+
+HYPOTHESIS:
+Receiving Party shall not reverse engineer any objects which embody Disclosing Party's Confidential Information.

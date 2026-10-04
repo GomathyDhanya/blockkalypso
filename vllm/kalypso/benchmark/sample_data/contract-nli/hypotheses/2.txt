@@ -1,0 +1,5 @@
+LABEL_ID: nda-16
+SHORT_DESCRIPTION: Return of confidential information
+
+HYPOTHESIS:
+Receiving Party shall destroy or return some Confidential Information upon the termination of Agreement.

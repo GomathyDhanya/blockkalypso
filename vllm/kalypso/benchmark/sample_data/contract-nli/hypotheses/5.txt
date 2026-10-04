@@ -1,0 +1,5 @@
+LABEL_ID: nda-2
+SHORT_DESCRIPTION: None-inclusion of non-technical information
+
+HYPOTHESIS:
+Confidential Information shall only include technical information.

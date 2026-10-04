@@ -1,0 +1,70 @@
+Mutual Non-Disclosure Agreement
+THIS MUTUAL NON-DISCLOSURE AGREEMENT is made on (insert date) 2012
+Between
+(A) Wollaston School whose address for notifications under this Agreement is at Irchester Road, Wollaston, Wellingborough, Northamptonshire, NN29 7PH and
+(B) [ insert company name ] a company incorporated in [ ] (registered no. [ ]), and whose registered office is at [ ] and whose address for notifications under this Agreement is [ ] (“ “).
+Whereas
+Wollaston School and [ ] are respectively the owners of Confidential Information which they have agreed to disclose to each other for the Purpose on the terms and conditions set out in this Agreement.
+The parties agree as follows:
+1 Interpretation
+In this Agreement:
+Affiliate means any other entity that directly or indirectly controls, is controlled by or is under common control with either party;
+Confidential Information means any information disclosed (whether before or after the date of this Agreement, in writing, verbally or otherwise and whether directly or indirectly) by or on behalf of the Disclosing Party or an Affiliate of the Disclosing Party to the Receiving Party in connection with the Purpose;
+Disclosing Party means the party to this Agreement disclosing the Confidential Information;
+Purpose means discussions and negotiations between the parties in relation to the supply of IT infrastructure and services and the associated tender exercise; and
+Receiving Party means the party to this Agreement to whom the Confidential Information is disclosed.
+A reference to a person includes a reference to a body corporate, association or partnership and includes that person's successors.
+2 Undertakings
+Each party undertakes to keep the other party's Confidential Information confidential including, without limitation, taking the measures set out in Clause 3. In addition, each party undertakes not to use the other party's Confidential Information except for the Purpose, not to disclose, copy, reproduce or distribute the other party's Confidential Information to a third person and to use all reasonable efforts to prevent any such disclosure except as permitted under Clause 4 but in no event less than reasonable security measures and reasonable care.
+3 Maintaining confidentiality
+Each party shall, in relation to the Confidential Information of the other party, exercise in relation to the Confidential Information no lesser security measures and degree of care than those which it applies to its own confidential information.
+4 Disclosure of information
+4.1 Each party may disclose the Confidential Information of the other party in the following circumstances:
+(a) with the prior written consent of the other party;
+(b) to its employees, professional advisors, affiliates, consultants, shareholders, financiers and authorised representatives but only to the extent that disclosure is necessary for the purpose; or
+(c) where disclosure is required by law, by a court of competent jurisdiction, by the rules of any stock exchange or by another appropriate regulatory body, provided that all reasonable steps to prevent such disclosure shall be taken, the disclosure shall be of the minimum amount required, and the Receiving Party consults the Disclosing Party first on the proposed form, timing, nature and purpose of the disclosure with as much prior notice as is practicable in the circumstances.
+4.2 The Receiving Party shall inform the Recipient of the terms of this Agreement and shall ensure that the Recipient complies with the terms of this Agreement as if the Recipient were a party to this Agreement.
+4.3 The Receiving Party shall at the request of the Disclosing Party and at its own expense take such reasonable steps as the Disclosing Party may require to enforce the obligations of the Recipient under Clause 4.2 including (where necessary) the institution of legal proceedings.
+4.4 For the purposes of Clause 4 Recipient means a person to whom any Confidential Information is disclosed pursuant to Clause 4.1(a) or 4.1(b).
+5 Exceptions
+5.1 This Agreement does not apply to Confidential Information:
+(a) to the extent it is or becomes generally available to the public other than through a breach of this Agreement;
+(b) which the Receiving Party can show by its written or other records was in its lawful possession prior to receipt from the Disclosing Party and which had not previously been obtained from the Disclosing Party or another person under an obligation of confidence;
+(c) which subsequently comes into the possession of the Receiving Party from a third party who does not owe the Disclosing Party an obligation of confidence in relation to it; or
+(d) which has been independently developed by the Receiving Party without reference to the Disclosing Party’s Confidential Information.
+6 No grant of rights
+6.1 No right or licence is granted to either party in relation to the other party's Confidential Information except as expressly set out in this Agreement and the Disclosing Party shall retain all rights, title and interest to its Confidential Information.
+6.2 Neither party accepts responsibility for or makes a representation or warranty, express or implied, with respect to the truth, accuracy, completeness or reasonableness of the Confidential Information (including the non-infringement of any patent, copyright or other right of a third party). Neither party is liable to the other party or another person in respect of the Confidential Information or its use. This Clause will not exclude any liability for, or remedy in respect of, fraudulent misrepresentation.
+6.3 Save as expressly set out in this Agreement, neither party shall owe any duty of care to the other party nor any other person.
+7 Duration of obligations
+The obligations and responsibilities of the parties shall survive the termination of this Agreement.
+8 Return or destruction of confidential information
+8.1 Each party undertakes within three business days of the receipt of a written request of the other party or on termination of this Agreement, at the option of the other party:
+(a) to return to the other party all of the other party's Confidential Information and that part of all documents and other material in its possession, custody or control that bear or incorporate any part of the other party's Confidential Information; or
+(b) to destroy by shredding or incineration all of the other party's Confidential Information and that part of all documents and other material in its possession, custody or control which bear or incorporate any part of the other party's Confidential Information and take reasonable steps to expunge all Confidential Information (and any copy that may have been made) from any computer, word processor or other device containing the Confidential Information. Any destruction of Confidential Information will be certified in writing to the other party by an authorised officer supervising it.
+9 Announcements
+Neither party shall disclose the Purpose or the existence of this Agreement or reveal that discussions are taking place between the parties to another person without the prior written consent of the other party except to the extent that such disclosure is required by law, by a court of competent jurisdiction, by the rules of any stock exchange or by another appropriate regulatory body.
+10 General
+10.1 A variation of this Agreement is valid only if it is in writing and signed by or on behalf of each of the parties.
+10.2 Any failure or delay in exercising a right or remedy provided by this Agreement or by law does not constitute a waiver of that or of other rights or remedies. No single or partial exercise of a right or remedy provided by this Agreement or by law prevents a further exercise of the right or remedy or the exercise of another right or remedy.
+10.3 The rights and remedies contained in this Agreement are cumulative and not exclusive of rights or remedies provided by law.
+10.4 It is acknowledged that damages would not be an adequate remedy for a breach of this Agreement and each party is entitled to the remedy of injunction, specific performance and other equitable relief for a threatened or actual breach of this Agreement. Any claim for losses under this Agreement shall be restricted to direct loss only and shall not extend to indirect or consequential loss.
+10.5 If any provision of this Agreement is held to be invalid or unenforceable, that provision shall (so far as it is invalid or unenforceable) be given no effect and shall be deemed not to be included in this Agreement, but without invalidating any of the remaining provisions.
+10.6 Each party is acting in this matter as principal and not as an agent or broker for any other person or entity.
+10.7 This Agreement shall supersede all other confidentiality agreements between the parties relating to the same subject matter.
+11 Notices
+11.1 A notice or other communication under or in connection with this Agreement shall be in writing, in English and shall be delivered personally or sent by fax, to the party due to receive the notice or communication at its address set out in this Agreement or another address as specified by that party by written notice to the other.
+11.2 In the absence of evidence of earlier receipt, any notice or other communication shall be deemed to have been duly given, if delivered personally, when left at the address referred to in Clause 0 and if sent by fax, on completion of its transmission.
+12 Governing law and jurisdiction
+The construction, validity and performance of this Agreement shall be governed by the laws of England and Wales and the parties hereby submit to the non-exclusive jurisdiction of the courts of England and Wales.
+13 Third Party Rights
+A person who is not a party to this Agreement shall have no right under the Contracts (Rights of Third Parties) Act 1999 to enforce any of its terms.
+14 Counterparts
+This Agreement may be executed in any number of counterparts each of which when executed and delivered is an original, but all the counterparts together constitute the same document.
+Executed by the parties on the date first above written
+SIGNED
+by
+for and on behalf of WOLLASTON SCHOOL
+SIGNED
+by
+for and on behalf of

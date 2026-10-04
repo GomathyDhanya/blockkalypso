@@ -1,0 +1,118 @@
+TITLE:
+Cyclophosphamide-associated enteritis presenting with severe protein-losing enteropathy in granulomatosis with polyangiitis: A case report.
+
+ABSTRACT:
+BACKGROUND
+Although cyclophosphamide (CPA) is the key drug for the treatment of autoimmune diseases including vasculitides, it has some well-known adverse effects, such as myelosuppression, hemorrhagic cystitis, infertility, and infection. However, CPA-associated severe enteritis is a rare adverse effect, and only one case with a lethal clinical course has been reported. Therefore, the appropriate management of patients with CPA-associated severe enteritis is unclear.
+
+
+METHODS
+We present the case of a 61-year-old woman diagnosed with granulomatosis with polyangiitis based on the presence of symptoms in ear, lung, and, kidney with positive myeloperoxidase-antineutrophil cytoplasmic antibody. She received pulsed methylprednisolone followed by prednisolone 55 mg/d and intravenous CPA at a dose of 500 mg/mo. Ten days after the second course of intravenous CPA, she developed nausea, vomiting, and diarrhea, and was admitted to the hospital. Laboratory testing revealed hypoalbuminemia, suggesting protein-losing enteropathy. Computed tomography revealed wall thickening of the stomach, small intestine, and colon with contrast enhancement on the lumen side. Antibiotics and immunosuppressive therapy were not effective, and the patient's enteritis did not improve for > 4 mo. Because her condition became seriously exhausted, corticosteroids were tapered and supportive therapies including intravenous hyperalimentation, replenishment of albumin and gamma globulin, plasma exchange, and infection control were continued. These supportive therapies improved her condition, and her enteritis gradually regressed. She was finally discharged 7 mo later.
+
+
+CONCLUSIONS
+Immediate discontinuation of CPA and intensive supportive therapy are crucial for the survival of patients with CPA-associated severe enteritis.
+
+TEXT:
+Core Tip: Cyclophosphamide-associated enteritis is rare, but a fatal complication of the treatment for the vasculitides. This is the first successful report of the treatment for the severe cyclophosphamide-associated enteritis, and indicates the importance of immediate discontinuation of cyclophosphamide and intensive supportive therapy.
+
+INTRODUCTION
+
+Cyclophosphamide (CPA) is an alkylating agent that is frequently used in vasculitides as an induction therapy. Particularly in antineutrophil cytoplasmic antibody (ANCA)-associated vasculitis, the addition of immunosuppressants is recommended for patients with a higher five-factor score[1]. CPA is metabolized into the active form in the liver and covalently binds to the nucleus[2]. Thereafter, it manifests antiproliferative effects by inhibiting deoxyribonucleic acid replication[2]. Although CPA has an established therapeutic effect in vasculitides, it sometimes results in adverse effects including myelosuppression, hemorrhagic cystitis, increased susceptibility to infection, and infertility[3]. However, the development of enteritis due to CPA use in patients with autoimmune diseases is rare, with only one case report in which Yang et al[4] presented a lethal case of CPA-associated enteritis in a patient with microscopic polyangiitis. Here, we report a severe case of CPA-associated enteritis in a patient who presented with prominent protein-losing enteropathy, who was successfully treated with supportive therapy including plasma exchange (PE).
+
+CASE PRESENTATION
+
+Chief complaints
+
+A 61-year-old Japanese woman developed nausea, vomiting, and diarrhea.
+
+History of present illness
+
+Three months before the first admission, she experienced nasal congestion, aural fullness, and auditory disturbance, and was diagnosed with otitis media. Also, two months before presentation, she experienced cough worsening, and chest radiography revealed a pulmonary infiltrative shadow. Two months before presentation, she was referred to our hospital for the evaluation of pulmonary consolidation with positive myeloperoxidase-ANCA (MPO-ANCA). She was admitted to the previous hospital. She had a body temperature of 38 °C and elevated C-reactive protein level (7.7 mg/dL). Although she was treated with antibiotics, her symptoms, inflammatory markers, and chest infiltrates did not improve. Laboratory examination showed a high titer of MPO-ANCA (Table 1), and she was referred to our hospital. After admission, her creatinine level increased with proteinuria, glomerular hematuria, and granular casts, indicating the presence of rapidly progressive glomerulonephritis (RPGN). Granulomatosis with polyangiitis (GPA) was diagnosed on the basis of the presence of otitis media, sinusitis, pulmonary nodule, RPGN, and positive MPO-ANCA. She received pulsed methylprednisolone followed by prednisolone (PSL) 55 mg/d in combination with intravenous CPA at a dose of 500 mg/mo. Her condition significantly improved, and she was discharged 9 d after the second course of intravenous CPA when the PSL dose was 45 mg/d. She developed nausea, vomiting, and diarrhea the day after discharge, and was admitted to our hospital.
+
+Table 1 Laboratory findings
+
+	First admission	Second admission	
+Urinalysis			
+Protein	1+	2+	
+Occult blood	1+	-	
+Red blood cell	10-29/HPF1	< 4/HPF	
+Casts	+2	+3	
+Spot protein-creatinine ratio (g/g Cr)	0.38	0.20	
+WBC (/µL)	14500	6100	
+Hb (g/dL)	10.9	14.9	
+Plt (104/µL)	43.4	35.1	
+T-Bil (mg/dL)	0.3	0.8	
+AST (U/L)	25	20	
+ALT (U/L)	30	18	
+γ-GTP (U/L)	24	18	
+ALP (U/L)	239	102	
+LDH (U/L)	207	200	
+CK (U/L)	58	37	
+TP (g/dL)	7.1	4.3	
+Alb (g/dL)	2.6	2.5	
+BUN (mg/dL)	11	35	
+Cr (mg/dL)	0.5	0.7	
+CRP (mg/dL)	14.2	0.2	
+MPO-ANCA (U/mL)	194.0	1.0	
+1 Deformed erythrocytes.
+
+2 Casts: waxy casts, leukocyte casts.
+
+3 Casts: granular casts.
+
+Alb: Albumin; ANCA: Antineutrophil cytoplasmic antibody; ALP: Alkaline phosphatase; ALT: Alanine aminotransferase; AST: Aspartate aminotransferase; BUN: Blood urea nitrogen; CK: Creatine kinase; Cr: Creatinine; CRP: C-reactive protein; Hb: Hemoglobin; HPF: High-power field; LDH: Lactate dehydrogenase; MPO: Myeloperoxidase; Plt: Platelets; T-Bil: Total bilirubin; TP: Total protein; WBC: White blood cells.
+
+History of past illness
+
+She had been diagnosed with Grave’s disease since the age of 40.
+
+Personal and family history
+
+The patient had no family history.
+
+Physical examination
+
+On admission, her consciousness was clear, body temperature was 36.3 °C, and body pressure was 106/75 mmHg. Her abdomen was soft and flat, with pain in the left lower quadrant without defense or rebound tenderness.
+
+Laboratory examinations
+
+Laboratory testing indicated hypoalbuminemia and hypogammaglobulinemia, suggesting protein-losing enteropathy that resulted in the leakage of proteins from the gastrointestinal tract (Table 1).
+
+Imaging examinations
+
+Abdominal radiography did not show niveau or free air. Computed tomography (CT) revealed wall thickening of the stomach, small intestine, and colon with contrast enhancement on the lumen side (Figure 1A). The contrast enhancement of the outer layer of the intestine was poor, indicating edematous change. Upper gastrointestinal endoscopy showed edematous thickening of the stomach and diffusely distributed erosion throughout the descending duodenum (Figure 1B). Colonoscopy showed generalized edema and depression with erythema, mainly at the end of the ileum. The depression had no ulcerated surface.
+
+Figure 1 Clinical images on admission. A and B: Computed tomography scans of the abdomen showing diffuse wall thickening of the stomach, small intestine, and colon; C and D: Upper gastrointestinal endoscopy images showing diffuse erosion throughout the descending duodenum; E and F: Colonoscopy images showing generalized edema and depression with erythema mainly at the end of the ileum.
+
+Further diagnostic work-up
+
+Biopsy showed the absence of malignancy and vasculitis, as well as neoplastic changes including hyperplasia. Mild inflammatory cellular infiltration and some granulation tissues and ulcers were present. Cytomegalovirus staining was negative. Because the differential diagnoses included infectious enteritis, GPA-associated gastroenteritis, and drug-induced enteritis, the patient was initially treated with antibiotics including meropenem. However, hypoalbuminemia progressed. Therefore, we replenished albumin and gamma globulin and performed PE. Her condition did not improve, and her serum albumin levels remained approximately 1.5 mg/dL for > 1 mo. This clinical course ruled out the presence of an infectious etiology. Therefore, we decided to augment immunosuppression, and increased the PSL dose to 60 mg/d and added tacrolimus. Nevertheless, the enteritis did not respond to these treatments, which was contradictory to the autoimmune phenomenon, including GPA-associated enteritis. At this point, infectious and vasculitic etiologies were unlikely.
+
+FINAL DIAGNOSIS
+
+The CPA-associated enteropathy was considered, as previously reported by Yang et al[4].
+
+TREATMENT
+
+Because her condition became seriously exhausted, we tapered the steroid dose and continued supportive therapy including intravenous hyperalimentation, albumin supplementation, PE, and infection control (Figure 2).
+
+Figure 2 Clinical course. Alb: Albumin; IV CPA: Intravenous cyclophosphamide; mPSL: Methylprednisolone; PE: Plasma exchange; PSL: Prednisolone; TAC: Tacrolimus.
+
+OUTCOME AND FOLLOW-UP
+
+The supportive therapies improved the patient’s condition, and her enteritis gradually regressed (Figure 3). She was finally discharged 7 mo after the second admission and underwent rehabilitation. At 2 years from discharge, she is now in complete remission and has returned to her previous work.
+
+Figure 3 Improvement of computed tomography findings. The computed tomography images were taken at different time points after the second hospitalization, as indicated.
+
+DISCUSSION
+
+The present case was complicated with severe enteritis, which was considered to be an adverse effect of CPA. Although the patient had severe protein-losing enteropathy, her condition was improved by aggressive supportive therapies with repeated administrations of albumin and globulin for several months.
+
+CPA is one of the frequently used immunosuppressant drugs for vasculitidis. Gastrointestinal involvement of GPA is one of the conditions requiring CPA[5]. However, CPA-associated enteritis is very rare, and there exists only one case describing a lethal course in a patient with GPA[4].
+
+When the present patient manifested abdominal symptoms, her vasculitis was in remission, which was supported by the absence of ear symptoms, normal urinalysis, normal inflammatory marker levels, and negative MPO-ANCA. In addition, there were no histologic signs of vasculitis, granulomatous colitis, or gastritis in biopsy tissues. Further, treatment with immunosuppressants did not improve her condition, which was similar to the previously described case[4,6-8]. In addition, the blood culture, fecal culture, Clostridium difficile toxin, and cytomegalovirus tests were all negative. Because it was possible that these test results were false negative, antibiotics were administered, which did not improve the enteritis.
+
+The mechanisms by which CPA causes enteritis are not well defined. In the field of oncology, CPA is likely to be associated with gastrointestinal involvement and mucositis, which may be related to the gut microbiota[9]. In a mouse model, Viaud et al[10] reported that CPA altered the microbiota composition in the small intestine and induced the translocation of selected species of gram-positive bacteria into secondary lymphoid organs.
+
+We compared the clinical characteristics between the present case and the previous case. In the present case, symptoms appeared 38 d after the first intravenous CPA (500 mg/mo), whereas the previous case showed symptoms 2 wk after the start of oral CPA (100 mg/d). Therefore, the cumulative dose of CPA at the onset of symptoms was 1 g

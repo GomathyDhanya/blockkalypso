@@ -1,0 +1,5 @@
+LABEL_ID: nda-19
+SHORT_DESCRIPTION: Survival of obligations
+
+HYPOTHESIS:
+Some obligations of Agreement may survive termination of Agreement.

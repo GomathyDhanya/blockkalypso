@@ -1,0 +1,5 @@
+LABEL_ID: nda-15
+SHORT_DESCRIPTION: No licensing
+
+HYPOTHESIS:
+Agreement shall not grant Receiving Party any right to Confidential Information.

@@ -1,0 +1,38 @@
+TITLE:
+A case report on azathioprine-induced euprolactinemic galactorrhea.
+
+ABSTRACT:
+Galactorrhea is characterized as an inappropriate discharge of milk-containing fluid from the breast. It has various causes including physiological and pathological. It may also be caused by many drugs. Although galactorrhea is usually associated with increased serum prolactin levels, it has been reported to occur in the absence of hyperprolactinemia. Cases of azathioprine-induced galactorrhea with normal prolactin level in a 22-year-old female patient with prurigo have been reported. It was noticed that the patient had no history of galactorrhea in the past.
+
+TEXT:
+Introduction
+
+Galactorrhea, also known as nonpuerperal lactation, refers to a nonpurulent milky discharge from the breast, occurring with manual expression or either spontaneously, in the absence of pregnancy or postpartum state. Galactorrhea is most common symptom of hyperprolactinemia, reported occurring in up to 90% of women with hyperprolactinemia. Hyperprolactinemia in turn may be drug induced (dopamine receptor antagonists, opioids, and verapamil); it could also associate with sellar and/pituitary adenomas. Hypothyroidism, renal insufficiency, pregnancy, and nipple stimulation are some of its minor causes. Although mostly associated with raised serum prolactin levels, euprolactinemic galactorrhea, or galactorrhea without hyperprolactinemia, has also been reported.
+
+Azathioprine is an immunosuppressive medication, used alone or in combination with corticosteroids in patients for the prevention of transplant rejection. It is also used in autoimmune disorders such as, rheumatoid arthritis, Crohn's disease, ulcerative colitis, and various dermatological complications. However, because of its adverse effect profile, use of azathioprine in dermatological conditions is limited to patients with severe disease. Myelosuppression, including leukopenia, anemia, and thrombocytopenia, is a well-established adverse effect of azathioprine; however, pancreatitis, hepatitis, and hepatic veno-occlusive disease are rare caused by azathioprine.[1] Literature search revealed only one case reported related to azathioprine-induced hyperprolactinemia but without galactorrhea.[2] To the extent of our knowledge, no case of galactorrhea induced by azathioprine has been reported so far. Hence, this is the first case of galactorrhea after treatment with azathioprine, with normal prolactin level.
+
+Case Report
+
+A 22-year-old female unmarried patient weighted 62 kg with the complaint of prurigo presented to the dermatology outpatient department of tertiary care institute in Central India. The patient was prescribed Myfez (deflazocort) 30 mg daily, Dazit (desloratidine) 5 mg daily, and Calcicare (elemental calcium 250 mg + calcitriol 0.25 mcg + elemental zinc 7.5 mg) one tablet twice daily. Three weeks later, tablet thiorine (azathioprine) 50 mg, BD, by oral route was added as patient complained of an increase in itching. After 15 days of starting azathioprine, the patient developed a milky white discharge from both breasts. She continued azathioprine for two more weeks, then discontinued the drug, and galactorrhea resolved 8 days later. She came for follow-up 2 weeks after resolution of galactorrhea. At this time, she also gave a history of amenorrhea for 2 months, with her last menstrual period being 1 month before starting azathioprine. Physical examination revealed no abnormality. Laboratory investigations showed normal level of prolactin (result: 13.27 ng/ml, reference range: 2.8–29.2 ng/ml), cortisol (result: 4.08 mcg/dl, reference range: 3.1–16.7 ng/ml), luteinizing hormone (result: 5.46 m IU/ml, reference range: 1.9–12.5 m IU [follicular phase], 8.7–76.3 m IU [mid cycle peak], 0.5–16.9 m IU [luteal phase], 23–116 m IU [postmenopausal phase], and follicle-stimulating hormone [result: 4.17 mU/ml, reference range: 2.5–10.2 mU [follicular phase], 3.4–33.4 mU [mid cycle peak], 1.5–9.1 mU [luteal phase], 15.9–54 mU [postmenopausal phase]). T3 and T4 were also normal, but the reports are not available. The patient was advised to stop azathioprine, however, the rest of medications are advised to continue. Using the World Health Organization causality assessment criteria, causality was determined as probable with azathioprine by the causality assessment committee of the concerned adverse drug reaction (ADR) Monitoring Centre. On the Naranjo ADR probability scale, the causality score was 6 which again indicates that the reaction is probable with azathioprine. The reaction has been reported to the Pharmacovigilance Programme of India through the in-house ADR Monitoring Centre, with a worldwide unique number at Uppsala Monitoring Center 2017-22689.
+
+Discussion
+
+Galactorrhea with normal prolactin levels has been reported with antidepressants, which may induce galactorrhea with or without hyperprolactinemia.[3] Euprolactinemic galactorrhea has been reported not only particularly with selective serotonin reuptake inhibitors such as escitalopram and paroxetine but also with tricyclic antidepressant nortriptyline. Domperidone too has been reported to cause galactorrhea with normal prolactin levels. Till date, none of any case of galactorrhea with azathioprine has been reported. There is one case of azathioprine-induced hyperprolactinemia, but the patient did not have galactorrhea.
+
+The mechanism of euprolactinemic galactorrhea is unclear. Hyperresponsive 5-hydroxytryptamine type 1A receptors, as well as increased tissue sensitivity to the metabolic and lactogenic actions of prolactin, have been postulated as possible explanations.[45] In the index case, the prolactin, as well as gonadotropin hormone levels, were found to be normal and there was no history of galactorrhea. Serum prolactin levels stayed in normal range with no hyperprolactinemia after the onset of galactorrhea. The patient was not taking any other medication known to cause hyperprolactinemia or galactorrhea. Moreover, galactorrhea resolved while other medications were continued. The patient also had no systemic illness associated with hyperprolactinemia or galactorrhea. Galactorrhea resolved after withdrawing azathioprine. We, therefore, postulate that her galactorrhea may have been caused by azathioprine.
+
+Declaration of patient consent
+
+The authors certify that they have obtained all appropriate patient consent forms. In the form the patient(s) has/have given his/her/their consent for his/her/their images and other clinical information to be reported in the journal. The patients understand that their names and initials will not be published and due efforts will be made to conceal their identity, but anonymity cannot be guaranteed.
+
+Financial support and sponsorship
+
+This study was financially supported by Pharmacovigilance program of India.
+
+Conflicts of interest
+
+There are no conflicts of interest.
+
+Acknowledgment
+
+We are grateful to Dr. Jayashree Patil, Department of Dermatology for her contribution by reporting this ADR.

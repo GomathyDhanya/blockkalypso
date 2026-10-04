@@ -1,0 +1,5 @@
+LABEL_ID: nda-10
+SHORT_DESCRIPTION: Confidentiality of Agreement
+
+HYPOTHESIS:
+Receiving Party shall not disclose the fact that Agreement was agreed or negotiated.
