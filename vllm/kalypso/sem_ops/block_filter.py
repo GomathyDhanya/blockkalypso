@@ -120,6 +120,9 @@ class BlockFilterResult:
 class BlockSemFilter(BaseOp):
     """Semantic filter that evaluates a whole block of rows per LLM call."""
 
+    # Tells Kalypso's Stage to schedule this operator one block per task.
+    supports_blocks = True
+
     def __init__(
         self,
         instruction: str,
