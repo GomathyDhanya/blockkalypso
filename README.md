@@ -30,6 +30,11 @@ of it.
 | `vllm/kalypso/benchmark/` | Workload clients from the Kalypso paper (ContractNLI, BioDEX, ...). |
 | `KALYPSO_README.md` | Upstream Kalypso README (serving and ICP service instructions). |
 
+## Milestone 1
+
+Block filter and block join, how to test and run them, and first results:
+[`docs/blockkalypso/milestone1.md`](./docs/blockkalypso/milestone1.md).
+
 ## Git workflow
 
 - `origin` is this repo. `upstream` is Kalypso:
