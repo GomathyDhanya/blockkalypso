@@ -10,6 +10,7 @@ from types import SimpleNamespace
 import pytest
 
 from vllm.kalypso.sem_ops.block_utils import (
+    BLOCK_SAMPLING,
     EMPTY_ITEM,
     call_llm,
     first_executor,
@@ -90,3 +91,22 @@ def test_call_llm_and_first_executor():
     assert first_executor([kalypso_row("r"), kalypso_row("l", executor=ex)])[0] is ex
     with pytest.raises(ValueError):
         first_executor([kalypso_row("r")])
+
+
+def test_call_llm_passes_block_sampling_only_when_supported():
+    seen = {}
+
+    class WithSampling:
+        async def execute(self, raw_request, prompt, max_tokens, pin=False, priority=0,
+                          sampling=None):
+            seen["sampling"] = sampling
+            return SimpleNamespace(text="ok", finish_reason="stop")
+
+    class Legacy:
+        async def execute(self, raw_request, prompt, max_tokens, pin=False, priority=0):
+            return SimpleNamespace(text="ok", finish_reason="stop")
+
+    asyncio.run(call_llm(WithSampling(), None, [], 4))
+    assert seen["sampling"] == BLOCK_SAMPLING
+    assert seen["sampling"]["repetition_penalty"] == 1.0
+    assert asyncio.run(call_llm(Legacy(), None, [], 4)) == ("ok", "stop")

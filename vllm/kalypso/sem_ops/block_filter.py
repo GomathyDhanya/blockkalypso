@@ -39,10 +39,11 @@ BLOCK_SYSTEM_PROMPT = (
     "Judge every numbered item independently of the others.\n"
 )
 
-# One answer line: "3: YES", "[3] no", "3 - TRUE", "**3**: False", "3. Yes" ...
-# Anchored to the start of a line so "1: NO 2: YES" on one line only counts 1.
+# One answer line: "3: YES", "[3] no", "3 - TRUE", "**3**: False", "3. Yes",
+# "<3: NO>", "<3> : NO" ... Anchored to the start of a line so "1: NO 2: YES"
+# on one line only counts item 1.
 _ANSWER_RE = re.compile(
-    r"^[\s*>#`-]*\[?\s*(\d+)\s*\]?[*\s]*[:.)=\]-]?[\s*]*(YES|NO|TRUE|FALSE)\b",
+    r"^[\s*>#`<-]*[\[<]?\s*(\d+)\s*[\]>]?[*\s]*[:.)=\]>-]?[\s*]*(YES|NO|TRUE|FALSE)\b",
     re.IGNORECASE | re.MULTILINE,
 )
 _TRUE_WORDS = {"yes", "true"}
@@ -122,6 +123,7 @@ class BlockSemFilter(BaseOp):
 
     # Tells Kalypso's Stage to schedule this operator one block per task.
     supports_blocks = True
+    LOG = False
 
     def __init__(
         self,
@@ -239,6 +241,9 @@ class BlockSemFilter(BaseOp):
         result = await self.evaluate_block(
             executor, raw_request, [row_text(c) for c in ctxs], priority
         )
+        if self.LOG:
+            print(f"[block-filter] position={self.position} rows={len(ctxs)} "
+                  f"stats={self.stats.as_dict()} raw={result.raw_outputs[:1]!r}")
         label = {True: "true", False: "false", None: "undecided"}
         passed = []
         for ctx, v in zip(ctxs, result.verdicts):

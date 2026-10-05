@@ -74,6 +74,9 @@ def test_parse_clean_lines():
     "- 1: YES\n- 2: NO",
     "```\n1: YES\n2: NO\n```",
     "Here are the answers:\n1: YES\n2: NO\nHope this helps.",
+    "<1: YES>\n<2: NO>",
+    "<1:yes>\n<2:no>",
+    "<1> : YES\n<2> : NO",
 ])
 def test_parse_tolerates_common_formats(text):
     assert parse_block_answers(text, 2) == {1: True, 2: False}

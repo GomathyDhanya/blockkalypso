@@ -84,6 +84,18 @@ def parse_single_answer(text: str | None) -> bool | None:
     return None if m is None else m.group(1).lower() in _TRUE_WORDS
 
 
+# Sampling for block operators. Kalypso's VLLMExecutor defaults to
+# frequency_penalty=0.5 and repetition_penalty=1.3; on a block answer, one
+# short line per row, those penalties push the model into prose and every row
+# then falls back to its own call. Deterministic and penalty-free instead.
+BLOCK_SAMPLING = {
+    "temperature": 0.0,
+    "top_p": 1.0,
+    "frequency_penalty": 0.0,
+    "repetition_penalty": 1.0,
+}
+
+
 def with_system(system_prompt: str | None, user: str) -> list[dict]:
     """Chat messages: optional system turn, then one user turn."""
     msgs = [{"role": "user", "content": user}]
@@ -92,16 +104,30 @@ def with_system(system_prompt: str | None, user: str) -> list[dict]:
     return msgs
 
 
-async def call_llm(executor, raw_request, messages, max_tokens, priority=0):
-    """Call Kalypso's ``LLMExecutor.execute``; return ``(text, finish_reason)``."""
-    out = await executor.execute(
-        raw_request=raw_request,
-        prompt=messages,
-        max_tokens=max_tokens,
-        pin=False,
-        priority=priority,
-    )
+async def call_llm(executor, raw_request, messages, max_tokens, priority=0,
+                   sampling=BLOCK_SAMPLING):
+    """Call Kalypso's ``LLMExecutor.execute``; return ``(text, finish_reason)``.
+
+    ``sampling`` is passed only to executors that accept it (Kalypso's
+    VLLMExecutor does); others are called with the original signature.
+    """
+    kwargs = dict(raw_request=raw_request, prompt=messages, max_tokens=max_tokens,
+                  pin=False, priority=priority)
+    if sampling is not None and _accepts_sampling(executor):
+        kwargs["sampling"] = sampling
+    out = await executor.execute(**kwargs)
     return (out.text or ""), getattr(out, "finish_reason", None)
+
+
+def _accepts_sampling(executor) -> bool:
+    import inspect
+
+    try:
+        params = inspect.signature(executor.execute).parameters
+    except (TypeError, ValueError):
+        return False
+    return "sampling" in params or any(
+        p.kind is inspect.Parameter.VAR_KEYWORD for p in params.values())
 
 
 def first_executor(ctxs):
