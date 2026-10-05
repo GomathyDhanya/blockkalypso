@@ -47,7 +47,8 @@ def row(text, idx=0, executor=None):
     return SimpleNamespace(
         input=SimpleNamespace(data=[{"role": "user", "type": "text", "content": content}],
                               right_data=[]),
-        state=SimpleNamespace(executor=executor, raw_request=None, idx=idx),
+        state=SimpleNamespace(executor=executor, raw_request=None, idx=idx,
+                              pin_req_id=None, stage_id=-1),
         output=[],
     )
 

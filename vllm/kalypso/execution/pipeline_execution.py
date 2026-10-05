@@ -359,8 +359,54 @@ class AsyncPipelineExecutor:
             stage.clear_tasks()
 
         if stages:
-            for ctx in ctxs:
-                stages[0].enqueue(Task(ctx=ctx, stage_index=0))
+            first = stages[0]
+            if first.block_size > 1:
+                # Block stage: one task per block, one reservation per block.
+                for start in range(0, len(ctxs), first.block_size):
+                    block = list(ctxs[start:start + first.block_size])
+                    first.enqueue(Task(ctx=block, stage_index=0))
+            else:
+                for ctx in ctxs:
+                    first.enqueue(Task(ctx=ctx, stage_index=0))
+
+        async def forward_block_result(stage, task, rows, budget):
+            """Hand a finished block task's surviving rows to the next stage.
+
+            Block boundaries are kept: if the next stage also takes blocks
+            (and there is no fanout in between) the rows stay one block task.
+            Otherwise every row, or every fanout child, becomes its own task.
+            """
+            next_stage_index = task.stage_index + 1
+            if stage.fanout_op is not None:
+                children = [c for row in rows for c in (stage.fanout_op(row) or [])]
+            else:
+                children = list(rows)
+            record_output(stage.stage_id, len(children))
+
+            if next_stage_index >= len(stages):
+                out.extend(children)
+            elif stage.fanout_op is None and stages[next_stage_index].block_size > 1:
+                stages[next_stage_index].enqueue(Task(
+                    ctx=children,
+                    stage_index=next_stage_index,
+                    trackers=task.trackers,
+                ))
+            else:
+                for child in children:
+                    stages[next_stage_index].enqueue(Task(
+                        ctx=child,
+                        stage_index=next_stage_index,
+                        trackers=task.trackers,
+                    ))
+            if next_stage_index >= len(stages) or not children:
+                await finalize_task(task)
+
+            await stage.release_budget(budget, self.manager)
+            log_running_tasks(
+                f"finish block task={task.task_id} stage={stage.stage_id} "
+                f"rows_in={task.num_rows} rows_out={len(children)}"
+            )
+            await rebalance_stage_capacity()
 
         while has_pending_work() or active:
             await rebalance_stage_capacity()
@@ -432,6 +478,10 @@ class AsyncPipelineExecutor:
                     )
                     await rebalance_stage_capacity()
                     await finalize_task(task)
+                    continue
+
+                if task.is_block:
+                    await forward_block_result(stage, task, result, budget)
                     continue
 
                 next_stage_index = task.stage_index + 1

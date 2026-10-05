@@ -86,9 +86,18 @@ class SemanticPlan:
                         estimated_ctxs,
                         self.ESTIMATED_CTX_SAMPLE_SIZE,
                     )
+                if stage.block_size > 1:
+                    # A block stage reserves memory per block, so its minimum
+                    # capacity must fit the largest sampled block.
+                    sample_units = [
+                        sampled_ctxs[i:i + stage.block_size]
+                        for i in range(0, len(sampled_ctxs), stage.block_size)
+                    ]
+                else:
+                    sample_units = sampled_ctxs
                 budgets = [
-                    stage.estimate_budget(Task(ctx=ctx, stage_index=0))
-                    for ctx in sampled_ctxs
+                    stage.estimate_budget(Task(ctx=unit, stage_index=0))
+                    for unit in sample_units
                 ]
                 if budgets:
                     stage_min_caps[stage.stage_id] = max(budgets)
