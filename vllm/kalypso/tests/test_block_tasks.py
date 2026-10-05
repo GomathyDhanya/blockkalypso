@@ -131,3 +131,20 @@ def test_per_row_semfilter_pipeline_is_unchanged(fake_kv_manager):
     out, stats = run_pipeline([stage], rows(["keep me", "drop me", "keep too"], ex), fake_kv_manager)
     assert sorted(r.state.idx for r in out) == [0, 2]
     assert stats[1]["input"] == 3 and ex.calls == 3
+
+
+def test_planner_builds_block_filter_from_block_size(fake_kv_manager):
+    from vllm.kalypso.controller.plan import SemanticPlan
+    from vllm.kalypso.sem_ops import ops
+
+    plan = SemanticPlan(executor=None)
+    physical = plan.parse_ops([
+        {"op": "sem_filter", "args": {"prompt": "a", "block_size": 8}},
+        {"op": "sem_filter", "args": {"prompt": "b"}},
+        {"op": "sem_filter", "args": {"prompt": "c", "block_size": 1}},
+    ])
+    assert isinstance(physical[0], ops.BlockSemFilter) and physical[0].block_size == 8
+    assert type(physical[1]) is ops.SemFilter
+    assert type(physical[2]) is ops.SemFilter
+    built = plan.build([], physical)
+    assert built[0][0].block_size == 8

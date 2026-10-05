@@ -289,6 +289,15 @@ class SemanticPlan:
                             position=idx,
                         )
                     )
+                elif int(args.get("block_size", 1)) > 1:
+                    physical.append(
+                        ops.BlockSemFilter(
+                            instruction=args["prompt"],
+                            block_size=int(args["block_size"]),
+                            negate=bool(args.get("negate", False)),
+                            position=idx,
+                        )
+                    )
                 else:
                     physical.append(
                         ops.SemFilter(
