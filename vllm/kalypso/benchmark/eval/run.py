@@ -1,8 +1,10 @@
 """Run arms over a workload and append one JSON line per trial.
 
-    python -m vllm.kalypso.benchmark.eval.run --workload biodex --n 10 \\
-        --arms kalypso_per_tuple,vllm_direct --warmup 1 --repeats 3 \\
-        --out vllm/kalypso/benchmark/eval/results/m1_baseline.jsonl
+    python -m vllm.kalypso.benchmark.eval.run --workload reviews \\
+        --arms kalypso_per_tuple,vllm_direct,kalypso_block:5,kalypso_block:10 \\
+        --warmup 1 --repeats 3 --out vllm/kalypso/benchmark/eval/results/reviews.jsonl
+
+``--arms`` defaults to every arm that fits the workload (see arms.DEFAULT_ARMS).
 
 The first line of the output is run metadata; every later line is a trial.
 Trials run arm by arm within each repeat (A, B, A, B, ...) so slow drift on
@@ -22,7 +24,7 @@ from pathlib import Path
 import httpx
 
 from . import metrics
-from .arms import ARMS
+from .arms import DEFAULT_ARMS, ArmError, check_arm, parse_arm, run_arm
 from .workloads import WORKLOADS
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
@@ -70,8 +72,13 @@ def run_metadata(args, model: str, workload, server_pid: int | None) -> dict:
         "model": model,
         "base_url": args.base_url,
         "workload": workload.name,
+        "kind": workload.kind,
         "rows": len(workload.rows),
+        "right_rows": len(workload.right_rows) if workload.right_rows else None,
         "data_path": str(workload.data_path),
+        "right_path": str(workload.right_path) if workload.right_path else None,
+        "positives": _jsonable(workload.positives),
+        "instruction": workload.instruction,
         "arms": args.arms,
         "warmup": args.warmup,
         "repeats": args.repeats,
@@ -96,35 +103,58 @@ async def resolve_model(client: httpx.AsyncClient, base_url: str, model: str | N
     return response.json()["data"][0]["id"]
 
 
-async def trial(client, args, arm_name, workload, model, server_pid) -> dict:
+def _jsonable(selected):
+    if selected is None:
+        return None
+    return sorted(list(x) if isinstance(x, tuple) else x for x in selected)
+
+
+async def trial(client, args, spec, workload, model, server_pid) -> dict:
     if not args.allow_warm_cache and not await reset_prefix_cache(client, args.base_url):
         raise SystemExit(
             "could not reset the prefix cache (POST /reset_prefix_cache failed). "
             "Restart the server with VLLM_SERVER_DEV_MODE=1, or pass "
             "--allow-warm-cache to measure with a warm cache on purpose.")
-    arm = ARMS[arm_name]
-    result, measured = await metrics.measure(
-        lambda: arm(client, args.base_url, workload, model),
-        client, args.base_url, server_pid)
-    missing = sorted({r.idx for r in workload.rows} - set(result.outputs))
-    return {
+    try:
+        result, measured = await metrics.measure(
+            lambda: run_arm(spec, client, args.base_url, workload, model),
+            client, args.base_url, server_pid)
+    except (ArmError, httpx.HTTPError) as exc:
+        # One failing arm (e.g. a block too large for the context window)
+        # is a result worth recording, not a reason to stop the run.
+        return {"type": "trial", "arm": spec.name, "error": f"{type(exc).__name__}: {exc}"}
+    rows_in = len(workload.rows) * len(workload.right_rows or [None])
+    record = {
         "type": "trial",
-        "arm": arm_name,
+        "arm": spec.name,
         **measured,
-        "rows_in": len(workload.rows),
+        "rows_in": rows_in,
         "rows_out": len(result.outputs),
-        "missing_rows": missing,
-        "rows_per_s": round(len(result.outputs) / measured["latency_s"], 3)
+        "rows_per_s": round(rows_in / measured["latency_s"], 3)
         if measured["latency_s"] else None,
-        "outputs": {str(k): v for k, v in sorted(result.outputs.items())},
+        "selected": _jsonable(result.selected),
+        "outputs": dict(sorted(result.outputs.items())),
     }
+    if workload.kind == "map":
+        record["missing_rows"] = sorted({str(r.idx) for r in workload.rows} - set(result.outputs))
+    return record
+
+
+def _summary(record: dict) -> str:
+    if "error" in record:
+        return f"FAILED {record['error'][:200]}"
+    return f"{record['latency_s']}s {record['llm_requests']} requests"
 
 
 async def run(args) -> None:
-    unknown = [a for a in args.arms if a not in ARMS]
-    if unknown:
-        raise SystemExit(f"unknown arms {unknown}; choose from {sorted(ARMS)}")
     workload = WORKLOADS[args.workload](args.n)
+    try:
+        specs = [parse_arm(a) for a in (args.arms or DEFAULT_ARMS[workload.kind])]
+        for spec in specs:
+            check_arm(spec, workload)
+    except ValueError as exc:
+        raise SystemExit(str(exc))
+    args.arms = [s.name for s in specs]
     server_pid = args.server_pid or find_server_pid()
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
@@ -136,19 +166,16 @@ async def run(args) -> None:
         with out.open("w", encoding="utf-8") as f:
             f.write(json.dumps(meta) + "\n")
             for w in range(args.warmup):
-                for arm in args.arms:
-                    record = await trial(client, args, arm, workload, model, server_pid)
-                    print(f"warmup {w + 1} {arm}: {record['latency_s']}s "
-                          f"{record['llm_requests']} requests", flush=True)
+                for spec in specs:
+                    record = await trial(client, args, spec, workload, model, server_pid)
+                    print(f"warmup {w + 1} {spec.name}: {_summary(record)}", flush=True)
             for repeat in range(1, args.repeats + 1):
-                for arm in args.arms:
-                    record = await trial(client, args, arm, workload, model, server_pid)
+                for spec in specs:
+                    record = await trial(client, args, spec, workload, model, server_pid)
                     record["repeat"] = repeat
                     f.write(json.dumps(record) + "\n")
                     f.flush()
-                    print(f"repeat {repeat} {arm}: {record['latency_s']}s "
-                          f"{record['llm_requests']} requests "
-                          f"{record['rows_out']}/{record['rows_in']} rows", flush=True)
+                    print(f"repeat {repeat} {spec.name}: {_summary(record)}", flush=True)
     print(f"wrote {out}")
 
 
@@ -159,7 +186,8 @@ def main() -> None:
     parser.add_argument("--model", default=None, help="defaults to the server's first model")
     parser.add_argument("--workload", choices=sorted(WORKLOADS), default="biodex")
     parser.add_argument("--n", type=int, default=None, help="rows to use; default all")
-    parser.add_argument("--arms", default=",".join(ARMS), type=lambda s: s.split(","))
+    parser.add_argument("--arms", default=None, type=lambda s: s.split(","),
+                        help="comma-separated; default: every arm that fits the workload")
     parser.add_argument("--warmup", type=int, default=1)
     parser.add_argument("--repeats", type=int, default=3)
     parser.add_argument("--server-pid", type=int, default=None,
