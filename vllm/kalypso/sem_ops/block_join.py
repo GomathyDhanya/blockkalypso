@@ -33,6 +33,7 @@ from .block_utils import (
     call_llm,
     first_executor,
     item_line,
+    make_blocks,
     make_join_blocks,
     parse_single_answer,
     row_text,
@@ -164,13 +165,10 @@ class BlockJoinResult:
 
 
 class BlockSemJoin(BaseOp):
-    """Semantic join that evaluates a k-by-j block of candidates per call.
-
-    Standalone in Milestone 1: call ``join(left_rows, right_rows)`` directly.
-    Wiring it into Kalypso's planner as a pipeline stage is Milestone 2.
-    """
+    """Semantic join that evaluates a k-by-j block of candidates per call."""
 
     supports_blocks = True
+    requires_block_task = True
 
     def __init__(
         self,
@@ -181,14 +179,17 @@ class BlockSemJoin(BaseOp):
         max_tokens_overhead: int = 16,
         pair_max_tokens: int = 4,
         system_prompt: str | None = None,
+        right_table: Sequence[Any] | None = None,
         position: int = -1,
     ):
-        super().__init__(behavior=OpBehavior.JOIN, position=position)
+        super().__init__(behavior=OpBehavior.TUPLE_INDEPENDENT, position=position)
         if left_block_size < 1 or right_block_size < 1:
             raise ValueError("block sizes must be >= 1")
         self.condition = condition
         self.left_block_size = left_block_size
         self.right_block_size = right_block_size
+        self.block_size = left_block_size
+        self.right_table = list(right_table or [])
         self.max_tokens_per_pair = max_tokens_per_pair
         self.max_tokens_overhead = max_tokens_overhead
         self.pair_max_tokens = pair_max_tokens
@@ -201,8 +202,18 @@ class BlockSemJoin(BaseOp):
         # Worst case every pair matches; NONE fits in the overhead.
         return self.max_tokens_overhead + self.max_tokens_per_pair * k * j
 
-    def estimate_tokens(self, left_ctxs, right_ctxs, token_length) -> int:
+    def estimate_tokens(self, left_ctxs, right_ctxs=None, token_length=None) -> int:
         """Prompt + output tokens for one block pair (``token_length``: str -> int)."""
+        if right_ctxs is None:
+            from vllm.kalypso.budget import KVMemoryManager
+
+            token_length = KVMemoryManager.get_instance().token_length
+            return max((
+                self.estimate_tokens(left_ctxs, block, token_length)
+                for block in make_blocks(self.right_table, self.right_block_size)
+            ), default=0)
+        if not left_ctxs or not right_ctxs:
+            return 0
         msgs = build_block_join_messages(
             self.condition,
             [row_text(c) for c in left_ctxs],
@@ -211,6 +222,37 @@ class BlockSemJoin(BaseOp):
         )
         text = "\n".join(m["content"] for m in msgs)
         return token_length(text) + self.block_max_tokens(len(left_ctxs), len(right_ctxs))
+
+    async def run_block(self, left_ctxs, priority: int = 0):
+        """Evaluate one incoming left block and emit Kalypso join contexts."""
+        if not left_ctxs or not self.right_table:
+            return []
+        from .joins import CartesianProduct
+
+        executor, raw_request = first_executor(left_ctxs)
+        left_texts = [row_text(ctx) for ctx in left_ctxs]
+        right_blocks = make_join_blocks(
+            left_texts, self.right_table,
+            len(left_ctxs), self.right_block_size,
+        )
+        # A pipeline task reserves room for its largest pair prompt. Run the
+        # right blocks one at a time so concurrent calls cannot exceed it.
+        results = [
+            await self.evaluate_block_pair(
+                executor, raw_request, left_texts,
+                [row_text(ctx) for ctx in right_block], priority,
+            )
+            for _, _, _, right_block in right_blocks
+        ]
+        joined = []
+        for (_, _, right_offset, _), result in zip(right_blocks, results):
+            for left_pos, right_pos in result.matches:
+                right_ctx = self.right_table[right_offset + right_pos]
+                left_ctx = left_ctxs[left_pos]
+                for pair in CartesianProduct([right_ctx])(left_ctx):
+                    pair.output = list(left_ctx.output)
+                    joined.append(pair)
+        return joined
 
     async def evaluate_block_pair(
         self,
@@ -254,14 +296,14 @@ class BlockSemJoin(BaseOp):
     async def _pairwise(self, executor, raw_request, left_texts, right_texts, priority):
         """Exhaustive one-call-per-pair fallback (the per-pair baseline)."""
         cells = [(a, b) for a in range(len(left_texts)) for b in range(len(right_texts))]
-        replies = await asyncio.gather(*(
-            call_llm(
+        replies = [
+            await call_llm(
                 executor, raw_request,
                 build_pair_messages(self.condition, left_texts[a], right_texts[b], self.system_prompt),
                 self.pair_max_tokens, priority,
             )
             for a, b in cells
-        ))
+        ]
         self.stats.fallback_calls += len(cells)
         matches = [cell for cell, (text, _) in zip(cells, replies) if parse_single_answer(text)]
         self.stats.matches += len(matches)

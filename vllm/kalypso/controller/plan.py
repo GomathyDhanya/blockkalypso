@@ -1,4 +1,5 @@
 import random
+from itertools import islice
 
 from vllm.kalypso.sem_ops import OpBehavior, OpName, ops
 from vllm.kalypso.query import Query
@@ -86,13 +87,10 @@ class SemanticPlan:
                         estimated_ctxs,
                         self.ESTIMATED_CTX_SAMPLE_SIZE,
                     )
-                if stage.block_size > 1:
+                if stage.block_tasks:
                     # A block stage reserves memory per block, so its minimum
                     # capacity must fit the largest sampled block.
-                    sample_units = [
-                        sampled_ctxs[i:i + stage.block_size]
-                        for i in range(0, len(sampled_ctxs), stage.block_size)
-                    ]
+                    sample_units = stage.make_blocks(sampled_ctxs)
                 else:
                     sample_units = sampled_ctxs
                 budgets = [
@@ -107,6 +105,16 @@ class SemanticPlan:
                         stage.fanout_op,
                         estimated_ctxs,
                     )
+                elif stage.operators and isinstance(stage.operators[0], ops.BlockSemJoin):
+                    # Estimate downstream stages using joined contexts, not
+                    # the unjoined left rows. The model may select any pair.
+                    join_op = stage.operators[0]
+                    estimated_ctxs = list(islice((
+                        pair
+                        for left in sampled_ctxs
+                        for right in join_op.right_table
+                        for pair in ops.CartesianProduct([right])(left)
+                    ), self.ESTIMATED_CTX_SAMPLE_SIZE))
 
             if num_stages == 1:
                 kv.register_stage(
@@ -158,6 +166,14 @@ class SemanticPlan:
             current_segment = []
 
         for op in operators:
+
+            if isinstance(op, ops.BlockSemJoin):
+                # A join expands rows and needs its own block budget. Keep it
+                # in this pipeline so downstream stages can start immediately.
+                emit_stage()
+                stage_ops_chain.append(op)
+                emit_stage()
+                continue
 
             if op.behavior == OpBehavior.TUPLE_INDEPENDENT:
                 stage_ops_chain.append(op)
@@ -251,6 +267,12 @@ class SemanticPlan:
                 next_op = ops_list[i + 1] if i + 1 < n else None
                 next_behavior = next_op.behavior if next_op else None
 
+                if isinstance(op, ops.BlockSemJoin):
+                    # Joined rows have new contexts, so a pin from the left
+                    # chain must not be carried across this boundary.
+                    finalize_chain(None)
+                    continue
+
                 if op.behavior == OpBehavior.TUPLE_INDEPENDENT:
                     chain.append(op)
 
@@ -294,6 +316,8 @@ class SemanticPlan:
                         ops.BlockSemFilter(
                             instruction=args["prompt"],
                             block_size=int(args["block_size"]),
+                            max_block_tokens=(int(args["max_block_tokens"])
+                                              if args.get("max_block_tokens") is not None else None),
                             negate=bool(args.get("negate", False)),
                             position=idx,
                         )
@@ -348,6 +372,18 @@ class SemanticPlan:
                     if args.get("right_table") is not None
                     else []
                 )
+
+                if int(args.get("left_block_size", args.get("block_size", 1))) > 1 or int(args.get("right_block_size", args.get("block_size", 1))) > 1:
+                    if icp or args.get("cascade") or args.get("llm_cascade"):
+                        raise ValueError("block join does not support ICP or cascade")
+                    physical.append(ops.BlockSemJoin(
+                        condition=args["instruction"],
+                        right_table=right_table,
+                        left_block_size=int(args.get("left_block_size", args.get("block_size", 1))),
+                        right_block_size=int(args.get("right_block_size", args.get("block_size", 1))),
+                        position=idx,
+                    ))
+                    continue
 
                 if icp is True:
                     physical.append(
