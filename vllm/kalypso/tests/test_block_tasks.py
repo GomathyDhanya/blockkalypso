@@ -33,6 +33,34 @@ def test_stage_takes_block_size_from_block_operator(fake_kv_manager):
     assert stage_builder([], 2).block_size == 1
 
 
+def test_token_budget_limits_group_size(fake_kv_manager):
+    op = BlockSemFilter("q", block_size=4)
+    ex = FakeExecutor([])
+    sample = rows(["short", "long " * 100, "short"], ex)
+    two = op.estimate_tokens(sample[:2])
+    three = op.estimate_tokens(sample)
+    op.max_block_tokens = (two + three) // 2
+    stage = stage_builder([op], 1)
+    assert [len(group) for group in stage.make_blocks(sample)] == [2, 1]
+
+
+def test_queue_signals_account_for_underfilled_blocks(fake_kv_manager):
+    stage = stage_builder([BlockSemFilter("q", block_size=4)], 1)
+    ex = FakeExecutor([])
+    stage.low_threshold = 1
+    stage.high_threshold = 1
+    for item in rows("ab", ex):
+        stage.enqueue(Task(ctx=[item], stage_index=0))
+    assert stage.ready_count() == 2
+    assert stage.ready_rows() == 2
+    assert stage.ready_work() == 0.5
+    assert stage.is_starving() and not stage.is_saturated()
+    for group in stage.make_blocks(rows("cdefghij", ex)):
+        stage.enqueue(Task(ctx=group, stage_index=0))
+    assert stage.ready_work() == 2.5
+    assert stage.is_saturated()
+
+
 def test_block_task_reserves_once_for_the_whole_block(fake_kv_manager):
     stage = stage_builder([BlockSemFilter("q", block_size=4)], 1)
     ex = FakeExecutor([])
@@ -96,6 +124,16 @@ def test_two_block_stages_keep_block_boundaries(fake_kv_manager):
     assert fake_kv_manager.stage_usage(1)[0] == fake_kv_manager.stage_usage(2)[0] == 0
 
 
+def test_downstream_stage_respects_smaller_block_limit(fake_kv_manager):
+    ex = FakeExecutor(["1: YES\n2: YES\n3: YES\n4: YES",
+                       "1: YES\n2: YES", "1: YES\n2: YES"])
+    s1 = stage_builder([BlockSemFilter("first", block_size=4)], 1)
+    s2 = stage_builder([BlockSemFilter("second", block_size=2)], 2)
+    out, stats = run_pipeline([s1, s2], rows("abcd", ex), fake_kv_manager)
+    assert len(out) == 4
+    assert stats[2]["input"] == 2
+
+
 def test_block_stage_feeds_per_row_stage(fake_kv_manager):
     ex = FakeExecutor(["1: YES\n2: NO\n3: YES"], truth={"a": True, "c": False})
     s1 = stage_builder([BlockSemFilter("first", block_size=3)], 1)
@@ -148,3 +186,13 @@ def test_planner_builds_block_filter_from_block_size(fake_kv_manager):
     assert type(physical[2]) is ops.SemFilter
     built = plan.build([], physical)
     assert built[0][0].block_size == 8
+
+
+def test_planner_passes_token_budget(fake_kv_manager):
+    from vllm.kalypso.controller.plan import SemanticPlan
+
+    op = SemanticPlan(executor=None).parse_ops([
+        {"op": "sem_filter", "args": {"prompt": "q", "block_size": 8,
+                                        "max_block_tokens": 256}},
+    ])[0]
+    assert op.max_block_tokens == 256

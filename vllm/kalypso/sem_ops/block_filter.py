@@ -136,6 +136,7 @@ class BlockSemFilter(BaseOp):
         system_prompt: str | None = None,
         position: int = -1,
         predicate: bool = True,
+        max_block_tokens: int | None = None,
     ):
         super().__init__(
             behavior=OpBehavior.TUPLE_INDEPENDENT,
@@ -144,8 +145,11 @@ class BlockSemFilter(BaseOp):
         )
         if block_size < 1:
             raise ValueError(f"block_size must be >= 1, got {block_size}")
+        if max_block_tokens is not None and max_block_tokens < 1:
+            raise ValueError("max_block_tokens must be positive")
         self.instruction = instruction
         self.block_size = block_size
+        self.max_block_tokens = max_block_tokens
         self.negate = negate
         self.max_tokens_per_row = max_tokens_per_row
         self.max_tokens_overhead = max_tokens_overhead

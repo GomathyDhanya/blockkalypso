@@ -103,6 +103,23 @@ class JoinTracker:
                 self.on_release(self.stage_id, self.reserved_budget)
 
 
+class CompletionTracker:
+    """Complete an upstream task once all of its downstream tasks finish."""
+
+    def __init__(self, parents, pending_children):
+        self.parents = parents
+        self.pending_children = pending_children
+        self.lock = asyncio.Lock()
+
+    async def child_finished(self):
+        async with self.lock:
+            self.pending_children -= 1
+            done = self.pending_children == 0
+        if done:
+            for parent in self.parents:
+                await parent.child_finished()
+
+
 class AsyncPipelineExecutor:
     LOG_SCHEDULER = True
     LOG_SCHEDULER_INTERVAL_SEC = 1.0
@@ -133,7 +150,41 @@ class AsyncPipelineExecutor:
             stage.stage_id: 0
             for stage in stages
         }
+        # A block join can receive rows from several upstream tasks. Gather
+        # them until its left-side block is full, then flush the final partial
+        # block once its upstream stage has drained.
+        pending_join_rows = {
+            index: [] for index, stage in enumerate(stages)
+            if stage.operators and isinstance(stage.operators[0], ops.BlockSemJoin)
+            and index > 0
+        }
         total_retries = 0
+
+        def enqueue_join_rows(index, rows, trackers=()):
+            stage = stages[index]
+            if trackers:
+                # A tracker belongs to an upstream fanout task. Preserve its
+                # completion accounting by not mixing it with other tasks.
+                for row in rows:
+                    stage.enqueue(Task(ctx=[row], stage_index=index,
+                                       trackers=trackers))
+                return
+            pending = pending_join_rows[index]
+            pending.extend(rows)
+            while len(pending) >= stage.block_size:
+                block = pending[:stage.block_size]
+                del pending[:stage.block_size]
+                stage.enqueue(Task(ctx=block, stage_index=index))
+
+        def flush_partial_join_blocks():
+            for index, pending in pending_join_rows.items():
+                if not pending:
+                    continue
+                upstream = stages[index - 1]
+                if upstream.has_waiting_tasks() or upstream.running_count():
+                    continue
+                stages[index].enqueue(Task(ctx=pending[:], stage_index=index))
+                pending.clear()
 
         def add_deferred_parent(stage_id: int, reserved_budget: int) -> None:
             deferred_parent_counts[stage_id] = (
@@ -202,7 +253,9 @@ class AsyncPipelineExecutor:
             stage_stat[stage_id]["output"] += count
 
         def has_pending_work():
-            return any(stage.has_waiting_tasks() for stage in stages)
+            return any(stage.has_waiting_tasks() for stage in stages) or any(
+                pending_join_rows.values()
+            )
 
         async def rebalance_stage_capacity():
             changed = False
@@ -360,10 +413,9 @@ class AsyncPipelineExecutor:
 
         if stages:
             first = stages[0]
-            if first.block_size > 1:
+            if first.block_tasks:
                 # Block stage: one task per block, one reservation per block.
-                for start in range(0, len(ctxs), first.block_size):
-                    block = list(ctxs[start:start + first.block_size])
+                for block in first.make_blocks(ctxs):
                     first.enqueue(Task(ctx=block, stage_index=0))
             else:
                 for ctx in ctxs:
@@ -383,20 +435,34 @@ class AsyncPipelineExecutor:
                 children = list(rows)
             record_output(stage.stage_id, len(children))
 
+            def downstream_trackers(count):
+                if task.trackers and count > 1:
+                    return (CompletionTracker(task.trackers, count),)
+                return task.trackers
+
             if next_stage_index >= len(stages):
                 out.extend(children)
-            elif stage.fanout_op is None and stages[next_stage_index].block_size > 1:
-                stages[next_stage_index].enqueue(Task(
-                    ctx=children,
-                    stage_index=next_stage_index,
-                    trackers=task.trackers,
-                ))
+            elif next_stage_index in pending_join_rows:
+                enqueue_join_rows(
+                    next_stage_index, children,
+                    downstream_trackers(len(children)),
+                )
+            elif stage.fanout_op is None and stages[next_stage_index].block_tasks:
+                groups = stages[next_stage_index].make_blocks(children)
+                trackers = downstream_trackers(len(groups))
+                for group in groups:
+                    stages[next_stage_index].enqueue(Task(
+                        ctx=group,
+                        stage_index=next_stage_index,
+                        trackers=trackers,
+                    ))
             else:
+                trackers = downstream_trackers(len(children))
                 for child in children:
                     stages[next_stage_index].enqueue(Task(
-                        ctx=child,
+                        ctx=([child] if stages[next_stage_index].block_tasks else child),
                         stage_index=next_stage_index,
-                        trackers=task.trackers,
+                        trackers=trackers,
                     ))
             if next_stage_index >= len(stages) or not children:
                 await finalize_task(task)
@@ -409,6 +475,7 @@ class AsyncPipelineExecutor:
             await rebalance_stage_capacity()
 
         while has_pending_work() or active:
+            flush_partial_join_blocks()
             await rebalance_stage_capacity()
             await launch_ready_tasks()
 
@@ -530,8 +597,12 @@ class AsyncPipelineExecutor:
                         deferred_release = True
 
                     for child_ctx in child_ctxs:
+                        if next_stage_index in pending_join_rows:
+                            enqueue_join_rows(next_stage_index, [child_ctx], trackers)
+                            continue
                         child_task = Task(
-                            ctx=child_ctx,
+                            ctx=([child_ctx] if next_stage_index < len(stages)
+                                 and stages[next_stage_index].block_tasks else child_ctx),
                             stage_index=next_stage_index,
                             trackers=trackers,
                         )
@@ -553,13 +624,16 @@ class AsyncPipelineExecutor:
 
                 record_output(stage.stage_id, 1)
                 next_task = Task(
-                    ctx=result,
+                    ctx=([result] if next_stage_index < len(stages)
+                         and stages[next_stage_index].block_tasks else result),
                     stage_index=next_stage_index,
                     trackers=task.trackers,
                 )
                 if next_stage_index >= len(stages):
                     out.append(result)
                     await finalize_task(next_task)
+                elif next_stage_index in pending_join_rows:
+                    enqueue_join_rows(next_stage_index, [result], task.trackers)
                 else:
                     stages[next_stage_index].enqueue(next_task)
 

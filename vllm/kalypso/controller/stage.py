@@ -73,6 +73,9 @@ class Stage:
         # Rows per task. >1 when the stage starts with a block operator; the
         # scheduler then enqueues blocks of this size instead of single rows.
         self.block_size = self._infer_block_size()
+        self.block_tasks = self.block_size > 1 or any(
+            getattr(op, "requires_block_task", False) for op in self.operators
+        )
 
     def _infer_block_size(self) -> int:
         for op in self.operators:
@@ -114,14 +117,45 @@ class Stage:
     def ready_count(self) -> int:
         return len(self.waiting_tasks)
 
+    def ready_rows(self) -> int:
+        """Number of queued rows, including rows inside block tasks."""
+        return sum(task.num_rows for task in self.waiting_tasks)
+
+    def ready_work(self) -> float:
+        """Queued work measured in full-block equivalents."""
+        return self.ready_rows() / self.block_size
+
     def running_count(self) -> int:
         return len(self.running_tasks)
 
     def is_starving(self) -> bool:
-        return self.ready_count() < self.low_threshold
+        return self.ready_work() < self.low_threshold
 
     def is_saturated(self) -> bool:
-        return self.ready_count() > self.high_threshold
+        return self.ready_work() > self.high_threshold
+
+    def make_blocks(self, rows) -> list[list]:
+        """Level 1 fixed-count blocks, optionally bounded by Level 2 tokens.
+
+        The token estimate includes the prompt and output allowance. An
+        oversized row is emitted by itself so grouping always progresses.
+        """
+        block_op = next((op for op in self.operators if supports_blocks(op)), None)
+        if block_op is None:
+            return [[row] for row in rows]
+        limit = getattr(block_op, "max_block_tokens", None)
+        blocks, current = [], []
+        for row in rows:
+            candidate = current + [row]
+            if current and (len(candidate) > self.block_size or
+                            (limit is not None and block_op.estimate_tokens(candidate) > limit)):
+                blocks.append(current)
+                current = [row]
+            else:
+                current = candidate
+        if current:
+            blocks.append(current)
+        return blocks
 
     def tune_thresholds(self):
         manager = KVMemoryManager.get_instance()

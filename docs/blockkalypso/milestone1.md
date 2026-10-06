@@ -14,7 +14,7 @@ this milestone; every check still reports agreement so it can be studied later.
 | Planner hook | `vllm/kalypso/controller/plan.py` | `sem_filter` with `"block_size" > 1` becomes a `BlockSemFilter` |
 | Sampling override | `vllm/kalypso/execution/vllm_executor.py` | Block calls turn off Kalypso's repetition penalties |
 | Join id fix | `vllm/kalypso/sem_ops/joins.py` | Join pairs keep the left row id and record the right row id |
-| Block join | `vllm/kalypso/sem_ops/block_join.py` | One call per k-by-j block, `L<i>, R<j>` lines, id validation, per-pair fallback. Standalone only |
+| Block join | `vllm/kalypso/sem_ops/block_join.py` | One call per k-by-j block, `L<i>, R<j>` lines, id validation, per-pair fallback; also callable as a pipeline stage with join block sizes |
 
 ## Run the unit tests
 
@@ -107,6 +107,4 @@ accuracy work later.
 ## Not done yet (Milestone 2)
 
 - Recursive sub-blocking repair for the filter, and candidate sub-blocking for the join.
-- Block join as a Kalypso pipeline stage.
-- Block-granularity starvation and saturation signals (Teammate 3).
 - KV pinning for block requests.
