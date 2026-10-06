@@ -42,9 +42,13 @@ class CartesianProduct(BaseOp):
                 state=ExecutionState(
                     raw_request=ctx.state.raw_request,
                     pin_req_id=None,
-                    executor=ctx.state.executor
+                    executor=ctx.state.executor,
+                    # Keep the left row's id; it was dropped (-1) before.
+                    idx=ctx.state.idx,
                 ),
                 )
+            # Which right row this pair came from, for join results.
+            new_ctx.state.right_idx = right.state.idx
             out.append(new_ctx)
         return out
 

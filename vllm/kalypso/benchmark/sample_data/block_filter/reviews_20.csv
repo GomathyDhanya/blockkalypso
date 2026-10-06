@@ -1,0 +1,21 @@
+id,data,label,hand_checked
+1,Kids menu is great and the staff were patient with us.,false,true
+2,"Quick lunch spot, the sandwiches are always fresh.",false,true
+3,"The chef came out to say hello, such a nice touch.",false,true
+4,They overcharged our card and refused to fix it.,true,true
+5,Great view of the harbour and tasty cocktails.,false,true
+6,The manager yelled at us for asking for tap water.,true,true
+7,"Lovely brunch, the pancakes were fluffy and warm.",false,true
+8,Best tiramisu in town and a very friendly owner.,false,false
+9,I found a hair in my salad and they still charged me.,true,true
+10,The waiter was rude and the food came out cold.,true,true
+11,"Fresh bread, generous portions, fair prices.",false,false
+12,"Cozy place with warm lighting, we will come back.",false,false
+13,The fish smelled off and I felt sick afterwards.,true,true
+14,Our table was sticky and the bathroom was filthy.,true,false
+15,Perfectly cooked steak and an excellent wine list.,false,false
+16,We waited an hour and nobody ever took our order.,true,false
+17,"Lovely staff, quick service and great pasta.",false,false
+18,Music was so loud we could not hear each other.,true,false
+19,"Overpriced, and the soup was far too salty to eat.",true,false
+20,They forgot my side dish and never apologised.,true,false

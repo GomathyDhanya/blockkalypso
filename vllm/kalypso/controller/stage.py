@@ -1,3 +1,4 @@
+import asyncio
 from dataclasses import dataclass, field
 import math
 from itertools import count
@@ -13,6 +14,13 @@ _TASK_IDS = count()
 
 @dataclass
 class Task:
+    """Unit of scheduling: one row, or a block of rows sharing one reservation.
+
+    ``ctx`` is a single ``SemContext`` (Kalypso's original per-tuple task) or
+    a list of them (a block task). A block task is admitted, budgeted and
+    released as a whole, so its rows share one KV memory reservation.
+    """
+
     ctx: Any
     stage_index: int
     trackers: tuple = ()
@@ -20,6 +28,27 @@ class Task:
     retry_priority: int | None = None
     reserved_budget: int = 0
     task_id: int = field(default_factory=lambda: next(_TASK_IDS))
+
+    @property
+    def is_block(self) -> bool:
+        return isinstance(self.ctx, list)
+
+    @property
+    def rows(self) -> list:
+        return list(self.ctx) if self.is_block else [self.ctx]
+
+    @property
+    def num_rows(self) -> int:
+        return len(self.ctx) if self.is_block else 1
+
+    @property
+    def row_ids(self) -> list:
+        return [getattr(getattr(r, "state", None), "idx", None) for r in self.rows]
+
+
+def supports_blocks(op) -> bool:
+    """True for operators that evaluate a whole block in one call."""
+    return bool(getattr(op, "supports_blocks", False))
 
 
 class Stage:
@@ -41,6 +70,15 @@ class Stage:
         self.bytes_per_token = KVMemoryManager.get_instance().bytes_per_token
         self.low_threshold = 1
         self.high_threshold = 5
+        # Rows per task. >1 when the stage starts with a block operator; the
+        # scheduler then enqueues blocks of this size instead of single rows.
+        self.block_size = self._infer_block_size()
+
+    def _infer_block_size(self) -> int:
+        for op in self.operators:
+            if supports_blocks(op):
+                return max(1, int(getattr(op, "block_size", 1)))
+        return 1
 
     def _infer_behavior(self) -> OpBehavior:
         return OpBehavior.TUPLE_INDEPENDENT
@@ -106,16 +144,27 @@ class Stage:
             return None
         return self.waiting_tasks.pop(0)
 
+    def estimate_tokens_for(self, op, task: Task) -> int:
+        """Tokens ``op`` can occupy while running ``task``.
+
+        A block operator sizes the whole block (one call). A per-row operator
+        inside a block task runs once per row concurrently, so its rows add up.
+        """
+        if not hasattr(op, "estimate_tokens"):
+            raise AttributeError(f"{op} must define `estimate_tokens`")
+        if not task.is_block:
+            return op.estimate_tokens(task.ctx)
+        if supports_blocks(op):
+            return op.estimate_tokens(task.rows)
+        return sum(op.estimate_tokens(row) for row in task.rows)
+
     def estimate_budget(self, task: Task) -> int:
+        """Bytes to reserve for ``task``: one reservation for all its rows."""
         max_boundary = -1
         for op in self.operators[task.op_index:]:
             if isinstance(op, ops.CartesianProduct):
                 break
-
-            if not hasattr(op, "estimate_tokens"):
-                raise AttributeError(f"{op} must define `estimate_tokens`")
-
-            estimated_tokens = op.estimate_tokens(task.ctx)
+            estimated_tokens = self.estimate_tokens_for(op, task)
             if estimated_tokens > max_boundary:
                 max_boundary = estimated_tokens
 
@@ -162,6 +211,9 @@ class Stage:
     #     await self.release_budget(budget, manager)
 
     async def run_task(self, task: Task):
+        if task.is_block:
+            return await self._run_block_task(task)
+
         task.ctx.state.stage_id = self.stage_id
 
         keep_going = True
@@ -187,6 +239,41 @@ class Stage:
                     return None
 
         return task.ctx
+
+
+    async def _run_block_task(self, task: Task):
+        """Run every operator of the stage over a block of rows.
+
+        Block operators get the whole block in one call. Per-row operators run
+        once per surviving row, concurrently; a per-row RETRY_TASK is retried
+        in place (as Kalypso's blocking executor does) instead of re-queueing
+        the whole block. Returns the surviving rows, or None if none survive.
+        """
+        rows = task.rows
+        for row in rows:
+            row.state.stage_id = self.stage_id
+
+        for idx in range(task.op_index, len(self.operators)):
+            if not rows:
+                break
+            op = self.operators[idx]
+            priority = -(self.priority_offset + idx)
+            if supports_blocks(op):
+                rows = await op.run_block(rows, priority=priority)
+            else:
+                keep = await asyncio.gather(
+                    *(self._run_row_op(op, row, priority) for row in rows)
+                )
+                rows = [row for row, k in zip(rows, keep) if k is not False]
+
+        return rows or None
+
+    @staticmethod
+    async def _run_row_op(op, ctx, priority):
+        while True:
+            out = await op(ctx, priority=priority)
+            if out is not RETRY_TASK:
+                return out
 
 
 def stage_builder(operators, stage_id, priority_offset: int = 0):
