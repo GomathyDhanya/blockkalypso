@@ -21,7 +21,7 @@ jobs:
       packages: write
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       # The vLLM base image needs ~20 GB unpacked; the runner starts with
       # ~14 GB free. Drop preinstalled toolchains this build never uses.
