@@ -75,12 +75,12 @@ runs. Full tables are in `vllm/kalypso/benchmark/eval/results/`.
 
 Block filter over 20 reviews (10 complaints):
 
-| Block size | LLM requests | Latency 0.5B | Latency 1.5B | F1 1.5B |
-|---|---|---|---|---|
-| 1 (Kalypso's SemFilter) | 20 | 10.4 s | 36.1 s | n/a |
-| 5 | 4 | 3.1 s | 9.8 s | 0.27 |
-| 10 | 2 | 3.1 s | 9.4 s | 0.11 |
-| 20 | 1 | 3.6 s | 11.1 s | 0.00 |
+| Block size | LLM requests | Prompt tokens | Latency 0.5B | Latency 1.5B | F1 1.5B |
+|---|---|---|---|---|---|
+| 1 (Kalypso's SemFilter) | 20 | 2,818 | 10.4 s | 36.1 s | n/a |
+| 5 | 4 | 582 | 3.1 s | 9.8 s | 0.27 |
+| 10 | 2 | 426 | 3.1 s | 9.4 s | 0.11 |
+| 20 | 1 | 352 | 3.6 s | 11.1 s | 0.00 |
 
 5x5 block join (5 expected matches):
 
