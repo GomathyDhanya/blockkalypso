@@ -722,6 +722,8 @@ async def semantic_query(
         results.append(
             {
                 "idx": getattr(ctx.state, "idx", None),
+                # Set on join outputs: which right-table row this pair used.
+                "right_idx": getattr(ctx.state, "right_idx", None),
                 "input_context": getattr(ctx.input, "data", None),
                 "right_input_context": getattr(ctx.input, "right_data", None),
                 "outputs": outputs,
