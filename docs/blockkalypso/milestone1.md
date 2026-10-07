@@ -67,29 +67,33 @@ Add `block_size` to a `sem_filter` op and post the query to
 }
 ```
 
-## Results on Qwen2.5-0.5B, Apple M4 CPU
+## Results on Apple M4 CPU
 
-Filter-then-filter query over 20 reviews through Kalypso's server. Requests
-are counted from vLLM's `request_success_total` metric.
+From the evaluation harness (`vllm/kalypso/benchmark/eval/`): same server and
+prompts for every arm, prefix cache cleared before each trial, median of 3
+runs. Full tables are in `vllm/kalypso/benchmark/eval/results/`.
 
-| Block size | LLM requests | Latency |
-|---|---|---|
-| 1 (Kalypso's SemFilter) | 39 | 28.0 s |
-| 5 | 4 | 3.5 s |
-| 10 | 2 | 2.9 s |
-| 20 | 1 | 2.8 s |
+Block filter over 20 reviews (10 complaints):
 
-5x5 block join check:
+| Block size | LLM requests | Latency 0.5B | Latency 1.5B | F1 1.5B |
+|---|---|---|---|---|
+| 1 (Kalypso's SemFilter) | 20 | 10.4 s | 36.1 s | n/a |
+| 5 | 4 | 3.1 s | 9.8 s | 0.27 |
+| 10 | 2 | 3.1 s | 9.4 s | 0.11 |
+| 20 | 1 | 3.6 s | 11.1 s | 0.00 |
 
-| Mode | LLM calls | Prompt tokens | Latency |
-|---|---|---|---|
-| One call per pair | 25 | 2,185 | 14.0 s |
-| One 5x5 block | 1 | 224 | 1.7 s |
+5x5 block join (5 expected matches):
 
-The small models answer blocks unreliably: the block join found 0 of 5
-expected matches on 0.5B and 3 of 5 on 1.5B, where the pairwise join found
-all 5. This is expected for Milestone 1 and is the starting point for the
-accuracy work later.
+| Mode | LLM calls | Prompt tokens | Latency 1.5B | F1 1.5B |
+|---|---|---|---|---|
+| One call per pair (Kalypso) | 25 | 4,310 | 66.5 s | 0.33 |
+| One 5x5 block | 1 | 224 | 6.4 s | 0.60 |
+
+Blocking is 3-4x faster for the filter and 10x for the join. On long rows
+(MEDEC clinical notes) it gives no speedup. Accuracy cannot be judged yet:
+at 0.5B and 1.5B even Kalypso's per-row operators fail (the 1.5B per-row
+filter says no to every review, the per-pair join says yes to every pair).
+Measuring the accuracy cost of blocking needs a larger model (Milestone 2).
 
 ## Edge cases handled
 
