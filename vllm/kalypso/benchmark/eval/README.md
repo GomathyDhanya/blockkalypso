@@ -39,8 +39,14 @@ Kalypso estimates a per-row limit.
 VLLM_SERVER_DEV_MODE=1 VLLM_ENABLE_V1_MULTIPROCESSING=0 VLLM_CPU_KVCACHE_SPACE=2 \
 python -m vllm.entrypoints.openai.api_server \
   --model Qwen/Qwen2.5-0.5B-Instruct --dtype float16 \
-  --max-model-len 8192 --enable-prefix-caching --port 8003
+  --max-model-len 8192 --enable-prefix-caching --block-size 16 --port 8003
 ```
+
+- `--block-size 16`: the CPU backend defaults to 128-token KV blocks, and
+  the prefix cache only reuses whole blocks. Kalypso's prompts share a
+  ~53-token prefix (chat template plus system prompt), so at 128 rows never
+  share cache and the per-tuple baseline is penalised compared with a GPU,
+  where blocks are 16 tokens.
 
 - `VLLM_SERVER_DEV_MODE=1` exposes `/reset_prefix_cache`. The harness resets
   the cache before every trial; arms send identical prompts, so without it
