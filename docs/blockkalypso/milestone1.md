@@ -82,11 +82,12 @@ Block filter over 20 reviews (10 complaints):
 | 10 | 2 | 426 | 3.1 s | 9.4 s | 0.11 |
 | 20 | 1 | 352 | 3.6 s | 11.1 s | 0.00 |
 
-5x5 block join (5 expected matches):
+Block join over 5 complaints x 5 categories (25 pairs, 5 expected matches):
 
 | Mode | LLM calls | Prompt tokens | Latency 1.5B | F1 1.5B |
 |---|---|---|---|---|
 | One call per pair (Kalypso) | 25 | 4,310 | 66.5 s | 0.33 |
+| 2x2 blocks | 9 | 1,219 | 19.4 s | 0.67 |
 | One 5x5 block | 1 | 224 | 6.4 s | 0.60 |
 
 Blocking is 3-4x faster for the filter and 10x for the join. On long rows
