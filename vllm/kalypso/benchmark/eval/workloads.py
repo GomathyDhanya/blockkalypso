@@ -67,6 +67,9 @@ class Workload:
     # PIPELINE only: how many rows the first filter should pass per the
     # labels, used to spot runs whose model answers changed the workload.
     gold_filter_pass: int | None = None
+    # Fraction of join candidate pairs that match per the labels: the σ
+    # Trummer's cost model needs (arms "kalypso_block:trummer").
+    join_selectivity: float | None = None
 
 
 def _txt_files(directory: Path) -> list[Path]:
@@ -433,6 +436,7 @@ def load_arxiv_join(n: int | None = None, right: int = 8, f: float = 1.0,
         rows=_arxiv_rows(left), right_rows=_arxiv_rows(right_papers),
         positives=_same_topic(left, right_papers),
         source_ids=tuple(p["id"] for p in left + right_papers),
+        join_selectivity=len(_same_topic(left, right_papers)) / (len(left) * len(right_papers)),
     )
 
 
@@ -469,6 +473,10 @@ def load_arxiv_pipeline(n: int | None = None, s: float = 0.5, f: float = 1.0,
         default_arms=("kalypso_per_tuple",) + tuple(
             f"kalypso_block:{k}/{k}x{k}/{k}" for k in (2, 4, 8, 16)),
         gold_filter_pass=sum(p["group"].startswith("robotics/") for p in left),
+        # σ among the pairs the join actually sees (left papers past F1).
+        join_selectivity=(len(joined) / (sum(p["group"].startswith("robotics/") for p in left)
+                                         * len(right_papers))
+                          if any(p["group"].startswith("robotics/") for p in left) else 0.0),
     )
 
 

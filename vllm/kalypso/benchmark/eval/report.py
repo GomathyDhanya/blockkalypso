@@ -302,6 +302,7 @@ def full_report(meta: dict, trials: list[dict], reference: str = "kalypso_per_tu
     parts = [to_markdown(meta, summary, agree, reference, failures(trials)),
              "", "Diagnostics:", "", diagnostics_table(meta, summary, agree),
              stage_table(meta, trials), operator_table(meta, trials),
+             sizing_table(meta, trials),
              drift_table(meta, trials, reference)]
     return "\n".join(part for part in parts if part is not None)
 
@@ -390,6 +391,29 @@ def operator_table(meta: dict, trials: list[dict]) -> str:
     header = "| Arm | Query op | Kalypso operator | Rows in | Rows out | Answers began with | Other answers (samples) |"
     return "\n".join(["", "Operators (first repeat):", "", header, "|---|---|---|---|---|---|---|",
                       *lines]) + "\n"
+
+
+def sizing_table(meta: dict, trials: list[dict]) -> str:
+    """Block sizes chosen by the cost model (Level 3), per arm; empty when
+    no arm used it."""
+    lines = []
+    for arm in meta["arms"]:
+        group = sorted(by_arm(trials).get(arm, []), key=lambda t: t.get("repeat", 0))
+        for stage in ((group[0].get("trace") or {}).get("stages") or {}).values() if group else ():
+            z = stage.get("sizing")
+            if not z:
+                continue
+            cf = ("n/a" if z.get("b1_closed_form") is None
+                  else f"{z['b1_closed_form']:.1f} x {z['b2_closed_form']:.1f}")
+            x = z.get("inputs", {})
+            lines.append(f"| `{arm}` | {z['b1']} x {z['b2']} | {cf} | {z['calls']} | "
+                         f"{z['tokens_per_call']:.0f} | p {x.get('p', 0):.0f}, s1 {x.get('s1', 0):.0f}, "
+                         f"s2 {x.get('s2', 0):.0f}, s3 {x.get('s3', 0):.0f}, sigma {x.get('sigma', 0):.3f} |")
+    if not lines:
+        return ""
+    return "\n".join(["", "Cost-model block sizes (Trummer, Level 3):", "",
+                      "| Arm | Chosen k x j | Closed form | Calls | Tokens per call | Inputs |",
+                      "|---|---|---|---|---|---|", *lines]) + "\n"
 
 
 def drift_table(meta: dict, trials: list[dict], reference: str,
