@@ -44,12 +44,13 @@ class QueryProcessor:
                 yield ctx
 
  
-    async def execute(self, raw_request, query: Query, trace=None, materialize=False):
+    async def execute(self, raw_request, query: Query, trace=None, materialize=False,
+                      coalesce=False):
         plan = SemanticPlan(self.executor, virtual_pinning=self.virtual_pinning)
         owner_key = str(id(raw_request))
         try:
             return await plan.execute(raw_request, query, trace=trace,
-                                      materialize=materialize)
+                                      materialize=materialize, coalesce=coalesce)
         finally:
             await self._cleanup_query_pins(raw_request, owner_key)
 

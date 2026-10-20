@@ -712,7 +712,8 @@ async def semantic_query(
     from vllm.kalypso.execution.trace import QueryTrace
     trace = QueryTrace()
     out_ctxs = await processor.execute(raw_request, _query, trace=trace,
-                                       materialize=sem_request.materialize)
+                                       materialize=sem_request.materialize,
+                                       coalesce=sem_request.coalesce)
 
     results = []
     for ctx in out_ctxs:

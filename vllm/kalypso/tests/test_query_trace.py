@@ -167,8 +167,8 @@ def test_materialized_runs_stages_one_after_another(fake_kv_manager, monkeypatch
 def test_materialized_flag_reaches_the_executor(fake_kv_manager, monkeypatch):
     seen = {}
 
-    async def fake_execute(self, ctxs, plan, trace=None, materialize=False):
-        seen["materialize"] = materialize
+    async def fake_execute(self, ctxs, plan, trace=None, materialize=False, coalesce=False):
+        seen.update(materialize=materialize, coalesce=coalesce)
         return [], []
 
     from vllm.kalypso.execution.pipeline_execution import PlanExecutor
@@ -179,7 +179,9 @@ def test_materialized_flag_reaches_the_executor(fake_kv_manager, monkeypatch):
     plan = SemanticPlan(executor=None)
     monkeypatch.setattr(plan, "build", lambda ctxs, ops: [])
     asyncio.run(plan.execute(None, Query([], "x"), materialize=True))
-    assert seen["materialize"] is True
+    assert seen == {"materialize": True, "coalesce": False}
+    asyncio.run(plan.execute(None, Query([], "x"), coalesce=True))
+    assert seen == {"materialize": False, "coalesce": True}
 
 
 @pytest.mark.parametrize("blocked", [True, False])
@@ -204,3 +206,28 @@ def test_trace_counts_each_operator_even_in_fused_stages(fake_kv_manager, monkey
             for k, v in o["answers"].items():
                 heads[k] = heads.get(k, 0) + v
         assert heads == {"true": 2, "false": 10}
+
+
+def test_coalesce_fills_filter2_blocks_across_join_tasks(fake_kv_manager, monkeypatch):
+    """Each 2x2 join task yields one match; F2 blocks of 2 are half full per
+    join task, and full once the join's output is coalesced."""
+    monkeypatch.setattr(AsyncPipelineExecutor, "LOG_SCHEDULER", False)
+    seen = {}
+    for coalesce in (False, True):
+        plan, built, left = _filter_join_filter(monkeypatch, blocked=True)
+        trace = tr.QueryTrace()
+        out, _ = asyncio.run(plan.plan_executor.execute(left, built, trace=trace,
+                                                        coalesce=coalesce))
+        stages = [trace.to_dict()["stages"][str(st.stage_id)] for st in built[0]]
+        seen[coalesce] = (sorted((c.state.idx, c.state.right_idx) for c in out), stages[2])
+    assert seen[False][0] == seen[True][0] == [(0, 101)]         # same answers
+    assert (seen[False][1]["tasks"], seen[False][1]["mean_occupancy"]) == (2, 0.5)
+    assert (seen[True][1]["tasks"], seen[True][1]["mean_occupancy"]) == (1, 1.0)
+
+
+def test_coalesce_with_materialize_still_matches(fake_kv_manager, monkeypatch):
+    monkeypatch.setattr(AsyncPipelineExecutor, "LOG_SCHEDULER", False)
+    plan, built, left = _filter_join_filter(monkeypatch, blocked=True)
+    out, _ = asyncio.run(plan.plan_executor.execute(left, built, materialize=True,
+                                                    coalesce=True))
+    assert sorted((c.state.idx, c.state.right_idx) for c in out) == [(0, 101)]

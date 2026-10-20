@@ -16,10 +16,12 @@ class PlanExecutor:
         self.pipeline_executor = AsyncPipelineExecutor()
         self.blocking_executor = BlockingExecutor()
 
-    async def execute(self, ctxs, plan, trace=None, materialize=False):
+    async def execute(self, ctxs, plan, trace=None, materialize=False, coalesce=False):
         """Run a built plan. ``materialize`` runs each pipeline segment one
         stage at a time: a stage processes all of its input before the next
         stage starts (no overlap), with the same operators and block sizes.
+        ``coalesce`` merges a block join's output from all of its tasks into
+        full blocks for the block stage after it (see execute_tasks).
         """
 
         stage_stat_list = []
@@ -43,6 +45,7 @@ class PlanExecutor:
                         [stage],
                         trace=trace,
                         emits_output=position == len(item) - 1,
+                        coalesce=coalesce,
                     )
                     stage_stat_list.append(stage_stat)
             else:
@@ -50,6 +53,7 @@ class PlanExecutor:
                     ctxs,
                     item,
                     trace=trace,
+                    coalesce=coalesce,
                 )
                 stage_stat_list.append(stage_stat)
 
@@ -144,13 +148,17 @@ class AsyncPipelineExecutor:
     def __init__(self):
         self.manager = KVMemoryManager.get_instance()
 
-    async def execute_tasks(self, ctxs, stages, trace=None, emits_output=True):
+    async def execute_tasks(self, ctxs, stages, trace=None, emits_output=True,
+                            coalesce=False):
         """
         ctxs: initial contexts
         stages: [stage1, stage2, ...]
         trace: optional QueryTrace that records task timing and stage output
         emits_output: False when the last of ``stages`` is not the query's
             last stage (materialized runs), so its rows are not query output
+        coalesce: also buffer rows for a block stage that follows a block
+            join, so the join's output from different tasks is merged into
+            full blocks instead of being cut per join task
         """
         trace = trace if trace is not None else tr.QueryTrace()
         emitted = trace.outputs_emitted if emits_output else (lambda count: None)
@@ -179,6 +187,16 @@ class AsyncPipelineExecutor:
             if stage.operators and isinstance(stage.operators[0], ops.BlockSemJoin)
             and index > 0
         }
+        if coalesce:
+            # Reforming: the block stage after a block join gets the same
+            # buffering, so its blocks are filled across join tasks.
+            for index in range(1, len(stages)):
+                prev = stages[index - 1]
+                if (stages[index].block_tasks and index not in pending_join_rows
+                        and prev.operators
+                        and isinstance(prev.operators[0], ops.BlockSemJoin)):
+                    pending_join_rows[index] = []
+            pending_join_rows = dict(sorted(pending_join_rows.items()))
         total_retries = 0
 
         def enqueue_join_rows(index, rows, trackers=()):
@@ -197,12 +215,18 @@ class AsyncPipelineExecutor:
                 del pending[:stage.block_size]
                 stage.enqueue(Task(ctx=block, stage_index=index))
 
+        def upstream_busy(index):
+            """True while any earlier stage can still produce rows for ``index``."""
+            return any(
+                stage.has_waiting_tasks() or stage.running_count()
+                or pending_join_rows.get(i)
+                for i, stage in enumerate(stages[:index]))
+
         def flush_partial_join_blocks():
             for index, pending in pending_join_rows.items():
                 if not pending:
                     continue
-                upstream = stages[index - 1]
-                if upstream.has_waiting_tasks() or upstream.running_count():
+                if upstream_busy(index):
                     continue
                 stages[index].enqueue(Task(ctx=pending[:], stage_index=index))
                 pending.clear()

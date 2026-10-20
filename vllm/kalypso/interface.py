@@ -20,3 +20,6 @@ class SemanticQueryRequest(BaseModel):
     # Run each pipeline stage to completion before the next starts, instead
     # of overlapping them (for comparing pipelined and materialized runs).
     materialize: bool = False
+    # Merge a block join's output across join tasks into full blocks for the
+    # block stage after it (block reforming).
+    coalesce: bool = False

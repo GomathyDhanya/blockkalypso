@@ -7,6 +7,7 @@ from vllm.kalypso.data import data
 from vllm.kalypso.budget import KVMemoryManager
 from vllm.kalypso.execution.pipeline_execution import PlanExecutor
 from vllm.kalypso.controller.map_estimator import MapRatioEstimator
+from vllm.kalypso.controller import cost_model
 from .stage import Stage, Task, stage_builder
 
 class SemanticPlan:
@@ -373,16 +374,27 @@ class SemanticPlan:
                     else []
                 )
 
+                sizing = None
+                if args.get("block_sizing") == "trummer":
+                    # Level 3: choose (k, j) with Trummer's cost model.
+                    sizing = self._trummer_sizing(args, right_table)
+                    args = {**args, "left_block_size": sizing["b1"],
+                            "right_block_size": sizing["b2"]}
+                elif args.get("block_sizing") not in (None, "fixed"):
+                    raise ValueError(f"unknown block_sizing {args['block_sizing']!r}")
+
                 if int(args.get("left_block_size", args.get("block_size", 1))) > 1 or int(args.get("right_block_size", args.get("block_size", 1))) > 1:
                     if icp or args.get("cascade") or args.get("llm_cascade"):
                         raise ValueError("block join does not support ICP or cascade")
-                    physical.append(ops.BlockSemJoin(
+                    join_op = ops.BlockSemJoin(
                         condition=args["instruction"],
                         right_table=right_table,
                         left_block_size=int(args.get("left_block_size", args.get("block_size", 1))),
                         right_block_size=int(args.get("right_block_size", args.get("block_size", 1))),
                         position=idx,
-                    ))
+                    )
+                    join_op.sizing = sizing
+                    physical.append(join_op)
                     continue
 
                 if icp is True:
@@ -537,6 +549,38 @@ class SemanticPlan:
 
 
     
+    def _trummer_sizing(self, args, right_table) -> dict:
+        """(k, j) for a block join from Trummer's cost model (cost_model.py).
+
+        Token sizes are measured with the server's tokenizer on this query's
+        rows and on the block join's own prompt. Query args: ``selectivity``
+        (σ, default 0.1), ``context_tokens`` (tokens per call, default 16384)
+        and ``output_weight`` (g, default 1).
+        """
+        from vllm.kalypso.sem_ops.block_join import build_block_join_messages
+        from vllm.kalypso.sem_ops.block_utils import item_line, row_text
+
+        manager = KVMemoryManager.get_instance()
+        left = list(getattr(self, "_input_ctxs", None) or right_table)
+        if not left or not right_table:
+            raise ValueError("Trummer sizing needs rows on both sides of the join")
+
+        def line_tokens(rows, tag):
+            return sum(manager.token_length(f"{tag}1. {item_line(row_text(r))}\n")
+                       for r in rows) / len(rows)
+
+        p = manager.token_length(manager.apply_chat_template(
+            build_block_join_messages(args["instruction"], [], [])))
+        inputs = cost_model.JoinCostInputs(
+            p=p, s1=line_tokens(left, "L"), s2=line_tokens(right_table, "R"),
+            s3=manager.token_length("L12, R34\n"),
+            sigma=float(args.get("selectivity", 0.1)),
+            t=int(args.get("context_tokens", 16384)) - p,
+            r1=len(left), r2=len(right_table),
+            g=float(args.get("output_weight", 1.0)))
+        choice = cost_model.optimal_block(inputs)
+        return {**choice.as_dict(), "inputs": {k: v for k, v in vars(inputs).items()}}
+
     async def warmup(self, ctxs, plan):
         if not ctxs:
             return []
@@ -545,10 +589,12 @@ class SemanticPlan:
 
         
 
-    async def execute(self, raw_request, query: Query, trace=None, materialize=False):
+    async def execute(self, raw_request, query: Query, trace=None, materialize=False,
+                      coalesce=False):
         
         ctxs = list(data._data_source(raw_request, query.data_path, self.executor))
         MapRatioEstimator.instance()
+        self._input_ctxs = ctxs          # for cost-model sizing in parse_ops
         physical_ops = self.parse_ops(query.ops)
         plan = self.build(ctxs, physical_ops)
         self.print_plan(plan)
@@ -556,7 +602,8 @@ class SemanticPlan:
         ops.ICPFilter.reset_stats()
         ops.CascadeOperator.reset_stats()
         out, _ = await self.plan_executor.execute(ctxs, plan, trace=trace,
-                                                  materialize=materialize)
+                                                  materialize=materialize,
+                                                  coalesce=coalesce)
         MapRatioEstimator.instance().reset()
         icp_stats = ops.ICPFilter.get_stats()
         if icp_stats["called"] > 0:
