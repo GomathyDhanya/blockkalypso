@@ -14,9 +14,13 @@ import json
 import statistics
 from pathlib import Path
 
+# Main table: the Kalypso paper's metrics (query completion time, speedup over
+# the request-centric baseline, LLM calls with extra calls in brackets) plus
+# the proposal's accuracy and peak memory. Everything else is a diagnostic.
 SYSTEM_COLUMNS = (
     ("latency_s", "Latency (s)"),
     ("llm_requests", "LLM requests"),
+    ("extra_calls", "Retries + fallbacks"),
     ("prompt_tokens", "Prompt tokens"),
     ("generation_tokens", "Gen tokens"),
     ("prefix_cache_hit_rate", "Prefix hit rate"),
@@ -132,7 +136,7 @@ def summarize(meta: dict, trials: list[dict]) -> dict:
     columns = [key for key, _ in SYSTEM_COLUMNS + QUALITY_COLUMNS]
     summary = {}
     for arm, group in by_arm(trials).items():
-        rows = [{**t, **quality(meta, t)} for t in group]
+        rows = [{**t, **quality(meta, t), "extra_calls": _extra_calls(t)} for t in group]
         summary[arm] = {}
         for key in columns:
             values = [r[key] for r in rows if r.get(key) is not None]
@@ -142,6 +146,13 @@ def summarize(meta: dict, trials: list[dict]) -> dict:
                 {"median": statistics.median(values), "min": min(values), "max": max(values)}
                 if values else None)
     return summary
+
+
+def _extra_calls(trial: dict) -> int | None:
+    """Calls beyond the plan: Kalypso retries plus block fallbacks."""
+    if trial.get("retries") is None and trial.get("fallback_calls") is None:
+        return None
+    return (trial.get("retries") or 0) + (trial.get("fallback_calls") or 0)
 
 
 def _decisions(meta: dict, trial: dict) -> dict:
@@ -193,8 +204,12 @@ def _pct(value) -> str:
     return "n/a" if value is None else f"{value:.0%}"
 
 
-def to_markdown(meta: dict, summary: dict, agree: dict, reference: str,
-                failed: dict | None = None) -> str:
+def _median(summary, arm, key):
+    stat = summary.get(arm, {}).get(key)
+    return stat["median"] if stat else None
+
+
+def _header(meta: dict) -> list[str]:
     server = meta.get("server") or {}
     items = len(universe(meta))
     size = (f"{meta['rows']} x {meta['right_rows']} = {items} pairs"
@@ -211,12 +226,21 @@ def to_markdown(meta: dict, summary: dict, agree: dict, reference: str,
     ]
     if server.get("command"):
         lines.append(f"Server: `{server['command']}` (started {server.get('started')}).")
-    lines.append("")
-    columns = SYSTEM_COLUMNS + (QUALITY_COLUMNS if labeled else ())
-    header = (["Arm"] + [label for _, label in columns]
-              + [f"Agrees w/ {reference}", "Self-agreement"])
-    lines.append("| " + " | ".join(header) + " |")
-    lines.append("|" + "---|" * len(header))
+    return lines
+
+
+def to_markdown(meta: dict, summary: dict, agree: dict, reference: str,
+                failed: dict | None = None) -> str:
+    """Main table: query completion time, speedup over ``reference``, LLM
+    calls [retries + fallbacks], accuracy (agreement with ``reference``, plus
+    F1 against labels when the workload has them) and peak KV-cache use."""
+    labeled = meta.get("positives") is not None
+    header = (["Arm", "Completion time (s)", f"Speedup vs {reference}",
+               "LLM calls [retries + fallbacks]", f"Agrees w/ {reference}"]
+              + (["F1 vs labels"] if labeled else []) + ["Peak KV %"])
+    lines = _header(meta) + ["", "| " + " | ".join(header) + " |",
+                             "|" + "---|" * len(header)]
+    ref_latency = _median(summary, reference, "latency_s")
     failed = failed or {}
     for arm in meta["arms"]:
         if arm not in summary:
@@ -224,14 +248,61 @@ def to_markdown(meta: dict, summary: dict, agree: dict, reference: str,
                 lines.append(f"| `{arm}` | failed in all {len(failed[arm])} trials |"
                              + " |" * (len(header) - 2))
             continue
-        cells = [f"`{arm}`"] + [_cell(summary[arm][key], key) for key, _ in columns]
-        cells += [_pct(agree[arm]["vs_reference"]), _pct(agree[arm]["self"])]
+        latency = _median(summary, arm, "latency_s")
+        speedup = (f"{ref_latency / latency:.2f}x" if ref_latency and latency else "n/a")
+        calls = _median(summary, arm, "llm_requests")
+        extra = _median(summary, arm, "extra_calls")
+        calls_cell = ("n/a" if calls is None else
+                      f"{calls:.0f}" + ("" if extra is None else f" [{extra:.0f}]"))
+        cells = [f"`{arm}`", _cell(summary[arm]["latency_s"], "latency_s"), speedup,
+                 calls_cell, _pct(agree[arm]["vs_reference"])]
+        if labeled:
+            cells.append(_cell(summary[arm]["f1"], "f1"))
+        cells.append(_cell(summary[arm]["peak_kv_cache_pct"], "peak_kv_cache_pct"))
         lines.append("| " + " | ".join(cells) + " |")
     if failed:
         lines.append("")
         for arm, errors in failed.items():
             lines.append(f"- `{arm}` failed {len(errors)} trial(s): {errors[0][:300]}")
     return "\n".join(lines) + "\n"
+
+
+DIAGNOSTIC_COLUMNS = (
+    ("prompt_tokens", "Prompt tokens"),
+    ("generation_tokens", "Gen tokens"),
+    ("prefix_cache_hit_rate", "Prefix hit rate"),
+    ("peak_server_rss_kb", "Peak RSS (MiB)"),
+    ("rows_per_s", "Items/s"),
+    ("first_output_s", "First output (s)"),
+    ("truncated", "Truncated"),
+)
+
+
+def diagnostics_table(meta: dict, summary: dict, agree: dict) -> str:
+    """Measurements outside the paper's metrics, kept for diagnosis."""
+    labeled = meta.get("positives") is not None
+    columns = DIAGNOSTIC_COLUMNS + (tuple(c for c in QUALITY_COLUMNS if c[0] != "f1")
+                                    if labeled else ())
+    header = ["Arm"] + [label for _, label in columns] + ["Self-agreement"]
+    lines = ["| " + " | ".join(header) + " |", "|" + "---|" * len(header)]
+    for arm in meta["arms"]:
+        if arm not in summary:
+            continue
+        cells = [f"`{arm}`"] + [_cell(summary[arm][key], key) for key, _ in columns]
+        cells.append(_pct(agree[arm]["self"]))
+        lines.append("| " + " | ".join(cells) + " |")
+    return "\n".join(lines) + "\n"
+
+
+def full_report(meta: dict, trials: list[dict], reference: str = "kalypso_per_tuple") -> str:
+    """Main table, then a Diagnostics section (other measurements, stages,
+    and for pipelines the drift check)."""
+    summary = summarize(meta, trials)
+    agree = agreement(meta, trials, reference)
+    parts = [to_markdown(meta, summary, agree, reference, failures(trials)),
+             "", "Diagnostics:", "", diagnostics_table(meta, summary, agree),
+             stage_table(meta, trials), drift_table(meta, trials, reference)]
+    return "\n".join(part for part in parts if part is not None)
 
 
 def _stat(values):
@@ -332,10 +403,7 @@ def main() -> None:
     meta, trials = load(args.results)
     if not trials:
         raise SystemExit(f"{args.results} has no trials")
-    print(to_markdown(meta, summarize(meta, trials), agreement(meta, trials, args.reference),
-                      args.reference, failures(trials)), end="")
-    print(stage_table(meta, trials), end="")
-    print(drift_table(meta, trials, args.reference), end="")
+    print(full_report(meta, trials, args.reference), end="")
 
 
 if __name__ == "__main__":

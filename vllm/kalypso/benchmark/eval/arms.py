@@ -7,6 +7,8 @@ Arm names:
   kalypso_per_tuple     Kalypso's original one-row (one-pair) operators
   vllm_direct           the same per-row prompts sent straight to vLLM
   kalypso_block:N       BlockSemFilter with block_size N (filter workloads)
+  kalypso_block:N@T     the same, also capped at T estimated tokens per block
+                        (max_block_tokens; Kalypso's Level 2 sizing)
   kalypso_block:KxJ     BlockSemJoin with K left x J right rows (join workloads)
   kalypso_block:N/KxJ   pipelines: one size per filter or join stage, in order,
                         separated by "/" (1 or 1x1 keeps that stage per-tuple);
@@ -58,6 +60,8 @@ class ArmSpec:
     kind: str                          # "kalypso_per_tuple", "vllm_direct", "kalypso_block"
     # One size per blockable stage: (N,) for a filter, (K, J) for a join.
     groups: tuple[tuple[int, ...], ...] | None = None
+    # Per stage, the filter's token budget (N@T), or None.
+    budgets: tuple[int | None, ...] | None = None
 
     @property
     def block(self) -> tuple[int, ...] | None:
@@ -65,12 +69,23 @@ class ArmSpec:
         return self.groups[0] if self.groups else None
 
 
-def _size(text: str) -> tuple[int, ...]:
+def _size(text: str) -> tuple[tuple[int, ...], int | None]:
+    """``"16@4096"`` -> ``((16,), 4096)``; ``"2x8"`` -> ``((2, 8), None)``.
+
+    Returns ``((), None)`` when the text is not a valid size. A token budget
+    only applies to a filter block of more than one row.
+    """
+    size_text, sep, budget_text = text.partition("@")
     try:
-        size = tuple(int(part) for part in text.lower().split("x"))
+        size = tuple(int(part) for part in size_text.lower().split("x"))
+        budget = int(budget_text) if sep else None
     except ValueError:
-        return ()
-    return size if len(size) in (1, 2) and all(b >= 1 for b in size) else ()
+        return (), None
+    if len(size) not in (1, 2) or any(b < 1 for b in size):
+        return (), None
+    if budget is not None and (budget < 1 or len(size) != 1 or size[0] < 2):
+        return (), None
+    return size, budget
 
 
 def parse_arm(name: str) -> ArmSpec:
@@ -78,12 +93,13 @@ def parse_arm(name: str) -> ArmSpec:
     if kind in ("kalypso_per_tuple", "vllm_direct") and not sizes:
         return ArmSpec(name, kind)
     if kind == "kalypso_block" and sizes:
-        groups = tuple(_size(part) for part in sizes.split("/"))
-        if all(groups):
-            return ArmSpec(name, kind, groups)
+        parsed = [_size(part) for part in sizes.split("/")]
+        if all(size for size, _ in parsed):
+            return ArmSpec(name, kind, tuple(size for size, _ in parsed),
+                           tuple(budget for _, budget in parsed))
     raise ValueError(
         f"bad arm {name!r}; use kalypso_per_tuple, vllm_direct, "
-        "kalypso_block:N (filter), kalypso_block:KxJ (join) or "
+        "kalypso_block:N or N@T (filter), kalypso_block:KxJ (join) or "
         "kalypso_block:N/KxJ (pipeline)")
 
 
@@ -118,20 +134,27 @@ def check_arm(spec: ArmSpec, workload: Workload) -> None:
         raise ValueError(f"{spec.name}: join blocks take KxJ, e.g. kalypso_block:5x5")
 
 
-def pipeline_ops(workload: Workload, groups=None) -> list[dict]:
+def _filter_args(prompt: str, size, budget) -> dict:
+    args = {"prompt": prompt}
+    if size and size[0] > 1:
+        args["block_size"] = size[0]
+        if budget is not None:
+            args["max_block_tokens"] = budget
+    return args
+
+
+def pipeline_ops(workload: Workload, groups=None, budgets=None) -> list[dict]:
     """Ops for a pipeline; ``groups`` gives each filter/join stage's size."""
-    sizes = iter(groups or ())
+    sizes = iter(zip(groups or (), budgets or (None,) * len(groups or ())))
     ops = []
     for stage in workload.stages:
         if stage["op"] == "sem_map":
             ops.append({"op": OpName.SEM_MAP, "args": {"prompt": stage["prompt"]}})
             continue
-        size = next(sizes, None)
+        size, budget = next(sizes, (None, None))
         if stage["op"] == "sem_filter":
-            args = {"prompt": stage["prompt"]}
-            if size and size[0] > 1:
-                args["block_size"] = size[0]
-            ops.append({"op": OpName.SEM_FILTER, "args": args})
+            ops.append({"op": OpName.SEM_FILTER,
+                        "args": _filter_args(stage["prompt"], size, budget)})
         else:
             args = {"instruction": stage["instruction"],
                     "right_table": str(workload.right_path)}
@@ -141,15 +164,14 @@ def pipeline_ops(workload: Workload, groups=None) -> list[dict]:
     return ops
 
 
-def kalypso_ops(workload: Workload, block: tuple[int, ...] | None = None) -> list[dict]:
+def kalypso_ops(workload: Workload, block: tuple[int, ...] | None = None,
+                budget: int | None = None) -> list[dict]:
     """The /v1/semantic/query ops for a one-operator workload."""
     if workload.kind == MAP:
         return [{"op": OpName.SEM_MAP, "args": {"prompt": workload.instruction}}]
     if workload.kind == FILTER:
-        args = {"prompt": workload.instruction}
-        if block:
-            args["block_size"] = block[0]
-        return [{"op": OpName.SEM_FILTER, "args": args}]
+        return [{"op": OpName.SEM_FILTER,
+                 "args": _filter_args(workload.instruction, block, budget)}]
     args = {"instruction": workload.instruction, "right_table": str(workload.right_path)}
     if block:
         args["left_block_size"], args["right_block_size"] = block
@@ -179,10 +201,12 @@ def parse_query_response(workload: Workload, body: dict) -> ArmOutput:
 async def run_kalypso(client: httpx.AsyncClient, base_url: str, workload: Workload,
                       model: str, spec: ArmSpec | None = None) -> ArmOutput:
     groups = spec.groups if spec else None
+    budgets = spec.budgets if spec else None
     payload = {
         "data_path": str(workload.data_path),
-        "ops": (pipeline_ops(workload, groups) if workload.kind == PIPELINE
-                else kalypso_ops(workload, groups[0] if groups else None)),
+        "ops": (pipeline_ops(workload, groups, budgets) if workload.kind == PIPELINE
+                else kalypso_ops(workload, groups[0] if groups else None,
+                                 budgets[0] if budgets else None)),
         "model_name": model,
     }
     response = await client.post(f"{base_url}/v1/semantic/query", json=payload)

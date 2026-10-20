@@ -19,13 +19,15 @@ def summarize_trace(trace: dict | None) -> dict:
     stage finished (0 when it started only afterwards).
     """
     if not trace:
-        return {"first_output_s": None, "fallback_calls": None, "stages": []}
+        return {"first_output_s": None, "fallback_calls": None, "retries": None,
+                "stages": []}
     stages = []
-    fallbacks = 0
+    fallbacks = retries = 0
     for stage_id in sorted(trace.get("stages", {}), key=int):
         s = trace["stages"][stage_id]
         stats = s.get("operator_stats") or {}
         fallbacks += sum(v.get("fallback_calls", 0) for v in stats.values())
+        retries += s.get("retries") or 0
         stages.append({
             "stage_id": int(stage_id),
             "operators": s.get("operators", []),
@@ -49,6 +51,8 @@ def summarize_trace(trace: dict | None) -> dict:
     return {
         "first_output_s": trace.get("first_output_s"),
         "fallback_calls": fallbacks,
+        # Kalypso's own task retries (e.g. a map re-run with more tokens).
+        "retries": retries,
         "stages": stages,
     }
 

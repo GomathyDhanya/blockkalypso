@@ -6,7 +6,7 @@ import json
 
 import pytest
 
-from vllm.kalypso.benchmark.eval import fetch_data, metrics, report
+from vllm.kalypso.benchmark.eval import experiments, fetch_data, metrics, report
 from vllm.kalypso.benchmark.eval import run as run_mod
 from vllm.kalypso.benchmark.eval.stages import filter_pass, summarize_trace
 from vllm.kalypso.benchmark.eval.arms import (ArmError, check_arm, direct_requests,
@@ -20,6 +20,7 @@ from vllm.kalypso.benchmark.eval.workloads import (ARXIV, BIODEX_ARTICLES, FILTE
                                                    load_contractnli_pipeline,
                                                    load_join5x5, load_medec,
                                                    load_medec_full, load_reviews)
+from vllm.kalypso.benchmark.eval.workloads import WORKLOADS
 from vllm.kalypso.controller.plan import SemanticPlan
 from vllm.kalypso.data import data
 from vllm.kalypso.sem_ops.filters import SemFilter
@@ -121,9 +122,13 @@ def test_report_map_summary_and_agreement(tmp_path):
     table = report.to_markdown(loaded_meta, report.summarize(loaded_meta, loaded),
                                report.agreement(loaded_meta, loaded, "kalypso_per_tuple"),
                                "kalypso_per_tuple")
-    assert "| `vllm_direct` | 2.50 [2.00-3.00] |" in table
-    assert "Accuracy" not in table
-    assert table.rstrip().endswith("| 75% | 50% |")
+    # Paper metrics: completion time, speedup, LLM calls, agreement, peak KV.
+    assert "| `vllm_direct` | 2.50 [2.00-3.00] | 2.00x | 2 | 75% | 5.0 |" in table
+    assert "| `kalypso_per_tuple` | 5.00 [4.00-6.00] | 1.00x |" in table
+    assert "F1 vs labels" not in table and "Prompt tokens" not in table
+    full = report.full_report(loaded_meta, loaded, "kalypso_per_tuple")
+    assert full.index("Diagnostics:") > full.index("Speedup")
+    assert "| `vllm_direct` | 10 | 4 | n/a | 2 | 1.00 | n/a | 0 | 50% |" in full
 
 
 def test_report_filter_quality_against_labels():
@@ -142,7 +147,12 @@ def test_report_filter_quality_against_labels():
     table = report.to_markdown(meta, report.summarize(meta, trials), agree,
                                "kalypso_per_tuple")
     assert "4 rows, 2 positive" in table
-    assert "| 1.00 | 1.00 | 1.00 | 1.00 | 100% |" in table
+    assert "| `kalypso_per_tuple` | 4.00 | 1.00x | 2 | 100% | 1.00 | 5.0 |" in table
+    assert "| `kalypso_block:2` | 1.00 | 4.00x | 2 | 50% | 0.50 | 5.0 |" in table
+    trials[1]["retries"], trials[1]["fallback_calls"] = 1, 2
+    table = report.to_markdown(meta, report.summarize(meta, trials), agree,
+                               "kalypso_per_tuple")
+    assert "| `kalypso_block:2` | 1.00 | 4.00x | 2 [3] |" in table
 
 
 def test_report_join_quality_counts_every_pair():
@@ -260,7 +270,7 @@ def test_summarize_trace_orders_stages_and_measures_overlap():
     assert join["selectivity"] == 1.5            # fanout
     assert join["overlap_s"] == 1.0              # started at 2.0, F1 ended at 3.0
     assert summarize_trace(None) == {"first_output_s": None, "fallback_calls": None,
-                                     "stages": []}
+                                     "retries": None, "stages": []}
 
 
 def test_stage_table_reports_medians_per_stage():
@@ -500,3 +510,79 @@ def test_arxiv_pipeline_hits_target_selectivity_and_fanout(fake_kv_manager):
     ctxs = list(data._data_source(None, str(filt.data_path), None))
     for ctx, (_, messages, _) in zip(ctxs, direct_requests(filt)):
         assert SemFilter(filt.instruction)._build_prompts(ctx)[1] == messages
+
+
+def test_token_budget_arms():
+    spec = parse_arm("kalypso_block:16@4096")
+    assert spec.groups == ((16,),) and spec.budgets == (4096,)
+    assert parse_arm("kalypso_block:4/2x8/8@2048").budgets == (None, None, 2048)
+    for bad in ("kalypso_block:1@4096", "kalypso_block:2x8@4096", "kalypso_block:16@0",
+                "kalypso_block:16@x"):
+        with pytest.raises(ValueError):
+            parse_arm(bad)
+    w = load_reviews()
+    assert kalypso_ops(w, (16,), 4096)[0]["args"] == {
+        "prompt": w.instruction, "block_size": 16, "max_block_tokens": 4096}
+    assert "max_block_tokens" not in kalypso_ops(w, (16,))[0]["args"]
+    p = _sample_pipeline()
+    spec = parse_arm("kalypso_block:4@1024/1x17")
+    assert pipeline_ops(p, spec.groups, spec.budgets)[0]["args"]["max_block_tokens"] == 1024
+
+
+def test_experiment_grids_follow_the_plan():
+    e1 = experiments.e1()
+    assert [r.workload for r in e1] == ["arxiv_filter", "medec_full", "contractnli_filter"]
+    assert all(r.n == 64 for r in e1)
+    ks = [parse_arm(a).block[0] for a in e1[0].arms if a.startswith("kalypso_block")]
+    assert sorted(set(ks)) == [2, 4, 8, 16, 32]                    # k in {1,...,32}
+    assert sum("@4096" in a for a in e1[0].arms) == 5              # Level 2 arms
+    (e2,) = experiments.e2()
+    shapes = {parse_arm(a).block for a in e2.arms if a.startswith("kalypso_block")}
+    assert len(shapes) == 15 and (1, 8) in shapes and (8, 1) in shapes
+    assert (e2.n, e2.params) == (16, {"right": 8, "f": 1.0})
+    assert [r.n for r in experiments.e3()] == [16, 32, 64, 128]
+
+
+@needs_full_data
+@needs_arxiv
+def test_experiment_arms_fit_their_workloads():
+    for build in experiments.EXPERIMENTS.values():
+        for r in build():
+            w = WORKLOADS[r.workload](r.n, **r.params)
+            for arm in r.arms:
+                check_arm(parse_arm(arm), w)
+
+
+def _results_file(path, latencies, kind="filter", drift=None):
+    meta = _meta(kind=kind, arms=list(latencies), rows=2, right_rows=2,
+                 gold_filter_pass=2)
+    lines = [meta]
+    for arm, value in latencies.items():
+        if value is None:
+            lines.append({"type": "trial", "arm": arm, "repeat": 1, "error": "boom"})
+            continue
+        t = _trial(arm, 1, {}, value, selected=[])   # real filter/join trials record it
+        if drift is not None:
+            t["filter_pass"], t["final_out"] = drift.get(arm, (2, 10))
+        lines.append(t)
+    path.write_text("\n".join(json.dumps(l) for l in lines) + "\n")
+    return path
+
+
+def test_experiment_reports_combine_runs(tmp_path):
+    runs = [experiments.Run("n16", "arxiv_filter", ("kalypso_per_tuple", "kalypso_block:4"),
+                            condition="N = 16"),
+            experiments.Run("n32", "arxiv_filter", ("kalypso_per_tuple", "kalypso_block:4"),
+                            condition="N = 32")]
+    _results_file(tmp_path / "n16.jsonl", {"kalypso_per_tuple": 4.0, "kalypso_block:4": 1.0})
+    _results_file(tmp_path / "n32.jsonl", {"kalypso_per_tuple": 8.0, "kalypso_block:4": 2.0})
+    summary = experiments.write_reports("E3", runs, tmp_path).read_text()
+    assert "## n16: N = 16" in summary and "## n32: N = 32" in summary
+    assert "| `kalypso_block:4` | 2.00 | 4.00x |" in summary
+
+
+def test_summarize_trace_counts_kalypso_retries():
+    t = _trace()
+    t["stages"]["9"]["retries"] = 2
+    assert summarize_trace(t)["retries"] == 2
+    assert summarize_trace(_trace())["retries"] == 0

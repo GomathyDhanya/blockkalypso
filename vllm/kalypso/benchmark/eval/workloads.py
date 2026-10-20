@@ -206,6 +206,27 @@ def load_contractnli(n: int | None = None) -> Workload:
     )
 
 
+def load_contractnli_filter(n: int | None = None) -> Workload:
+    """The paper's ContractNLI filter (CONTRACT_NLI_VALID_CONTRACT) on its own.
+
+    The first ``n`` train contracts (default 64), in dataset order. Every
+    document is a real NDA, so the gold answer is yes for all of them. Used
+    as the long-row case of the filter experiments (median ~1.9k tokens).
+    """
+    contracts = _txt_files(_require(CONTRACTNLI) / "contracts")
+    n = 64 if n is None else n
+    if not 1 <= n <= len(contracts):
+        raise ValueError(f"--n must be between 1 and {len(contracts)} for contractnli_filter")
+    chosen = contracts[:n]
+    rows = [Row(int(p.stem), p.read_text(encoding="utf-8").strip()) for p in chosen]
+    return Workload(
+        name="contractnli_filter", kind=FILTER, data_path=_subset_dir(chosen).resolve(),
+        instruction=scenarios.CONTRACT_NLI_VALID_CONTRACT, rows=rows,
+        positives=frozenset(r.idx for r in rows),
+        source_ids=tuple(int(p.stem) for p in chosen),
+    )
+
+
 def load_contractnli_pipeline(n: int | None = None, with_map: bool = True) -> Workload:
     """The paper's ContractNLI query: filter -> join -> map.
 
@@ -419,6 +440,7 @@ WORKLOADS = {
     "medec": load_medec,
     "join5x5": load_join5x5,
     "contractnli": load_contractnli,
+    "contractnli_filter": load_contractnli_filter,
     "medec_full": load_medec_full,
     "contractnli_fjm": load_contractnli_pipeline,
     "contractnli_fj": lambda n=None: load_contractnli_pipeline(n, with_map=False),

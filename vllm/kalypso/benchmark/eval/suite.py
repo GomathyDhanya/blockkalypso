@@ -29,12 +29,7 @@ def write_summary(out_dir: Path, workloads) -> Path:
         if not trials:
             sections += ["No trials recorded.", ""]
             continue
-        sections.append(report.to_markdown(
-            meta, report.summarize(meta, trials),
-            report.agreement(meta, trials, "kalypso_per_tuple"),
-            "kalypso_per_tuple", report.failures(trials)))
-        sections.append(report.stage_table(meta, trials))
-        sections.append(report.drift_table(meta, trials, "kalypso_per_tuple"))
+        sections.append(report.full_report(meta, trials))
     summary = out_dir / "summary.md"
     summary.write_text("\n".join(sections), encoding="utf-8")
     return summary
