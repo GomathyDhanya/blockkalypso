@@ -11,6 +11,7 @@ so the direct-vLLM arm can rebuild byte-identical prompts:
 
 import csv
 import random
+import re
 import shutil
 import tempfile
 from dataclasses import dataclass
@@ -361,6 +362,15 @@ def _arxiv_right(draw: _Draw, size: int, f: float) -> list[dict]:
     return papers
 
 
+_DATASET = re.compile(r"\bdatasets?\b", re.IGNORECASE)
+_IMAGERY = re.compile(r"\bimages?\b|\bcamera|\bRGB\b|\bvisual\b|\bvideo", re.IGNORECASE)
+
+
+def _mentions_image_dataset(paper: dict) -> bool:
+    """Proxy for CASE_3_FILTER_3: the abstract names a dataset and imagery."""
+    return bool(_DATASET.search(paper["abstract"]) and _IMAGERY.search(paper["abstract"]))
+
+
 def _same_topic(left, right):
     return frozenset(
         (i, j) for i, l in enumerate(left, start=1) for j, r in enumerate(right, start=1)
@@ -386,7 +396,8 @@ def load_arxiv_join(n: int | None = None, right: int = 8, f: float = 1.0,
                     seed: int = 0) -> Workload:
     """The paper's arXiv join (CASE_2_JOIN_ARXIV): ``n`` robotics papers x ``right``.
 
-    Proxy label: both papers are robotics papers of the same topic.
+    Proxy label: both papers are robotics papers on the same task named in
+    their titles (fetch_data.ARXIV_TOPICS, e.g. both about grasping).
     """
     draw = _Draw(seed)
     left = draw.robotics(16 if n is None else n)
@@ -409,8 +420,8 @@ def load_arxiv_pipeline(n: int | None = None, s: float = 0.5, f: float = 1.0,
     F1: CASE_2_FILTER_ARXIV (AI robotics?), join: CASE_2_JOIN_ARXIV (similar
     topic?) against ``right`` papers, F2: CASE_3_FILTER_3 (uses an image
     dataset?). ``s`` sets F1's selectivity and ``f`` the join fanout. Proxy
-    labels: F1 = cs.RO; join = same robotics topic; F2 = the vision topic,
-    so the expected outputs are same-topic vision pairs.
+    labels: F1 = cs.RO; join = same robotics task in the titles; F2 = either
+    abstract names a dataset and imagery (images, camera, RGB, video).
     """
     draw = _Draw(seed)
     left = _arxiv_left(draw, 32 if n is None else n, s)
@@ -422,7 +433,8 @@ def load_arxiv_pipeline(n: int | None = None, s: float = 0.5, f: float = 1.0,
         instruction=scenarios.CASE_2_JOIN_ARXIV,
         rows=_arxiv_rows(left), right_rows=_arxiv_rows(right_papers),
         positives=frozenset((i, j) for i, j in joined
-                            if left[i - 1]["group"] == "robotics/vision"),
+                            if _mentions_image_dataset(left[i - 1])
+                            or _mentions_image_dataset(right_papers[j - 1])),
         source_ids=tuple(p["id"] for p in left + right_papers),
         stages=({"op": "sem_filter", "prompt": scenarios.CASE_2_FILTER_ARXIV},
                 {"op": "join", "instruction": scenarios.CASE_2_JOIN_ARXIV},

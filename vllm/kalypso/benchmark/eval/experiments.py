@@ -71,11 +71,72 @@ def e3() -> list[Run]:
             for n in (16, 32, 64, 128)]
 
 
-EXPERIMENTS = {"E1": e1, "E2": e2, "E3": e3}
+def check_pipeline_data() -> list[Run]:
+    """Before E4: does the model's per-tuple answer match the arXiv proxy labels?
+
+    Per-tuple only, so the measured fanout (pairs the join keeps) and
+    selectivity (papers Filter1 keeps) can be compared with the targets the
+    workloads are built for (f = 1, s = 0.5).
+    """
+    return [
+        Run("join_16x8", "arxiv_join", ("kalypso_per_tuple",), n=16,
+            params={"right": 8, "f": 1.0}, condition="join, target f = 1"),
+        Run("fjf_s05_f1", "arxiv_fjf", ("kalypso_per_tuple",), n=32,
+            params={"s": 0.5, "f": 1.0}, condition="pipeline, target s = 0.5, f = 1"),
+    ]
+
+
+PIPELINE_N, PIPELINE_RIGHT = 32, 32
+
+
+def e4(arms=None) -> list[Run]:
+    """Pipeline, one block size k for F1, the join (k x k) and F2."""
+    arms = arms or ("kalypso_per_tuple",) + tuple(
+        f"kalypso_block:{k}/{k}x{k}/{k}" for k in (2, 4, 8, 16))
+    return [Run("fjf_s05_f1", "arxiv_fjf", tuple(arms), n=PIPELINE_N,
+                params={"s": 0.5, "f": 1.0}, condition="s = 0.5, f = 1")]
+
+
+def e5(arms=None) -> list[Run]:
+    """Pipeline, a block size per stage (the plan's reduced grid)."""
+    joins = ("2x2", "4x4", f"4x{PIPELINE_RIGHT}")          # 4 x all right rows
+    arms = arms or ("kalypso_per_tuple",) + tuple(
+        f"kalypso_block:{f1}/{j}/{f2}" for f1 in (4, 16) for j in joins for f2 in (4, 16))
+    return [Run("fjf_s05_f1", "arxiv_fjf", tuple(arms), n=PIPELINE_N,
+                params={"s": 0.5, "f": 1.0}, condition="s = 0.5, f = 1")]
+
+
+def _with_baseline(arms):
+    if not arms:
+        raise ValueError("E6/E7 need --arms: the best 2-3 settings from E5")
+    return ("kalypso_per_tuple",) + tuple(a for a in arms if a != "kalypso_per_tuple")
+
+
+def e6(arms=None) -> list[Run]:
+    """Selectivity sweep with E5's best settings (f = 1)."""
+    return [Run(f"s{int(s * 100):02d}", "arxiv_fjf", _with_baseline(arms), n=PIPELINE_N,
+                params={"s": s, "f": 1.0}, condition=f"s = {s}, f = 1")
+            for s in (0.1, 0.3, 0.6, 0.9)]
+
+
+def e7(arms=None) -> list[Run]:
+    """Fanout sweep with E5's best settings (s = 0.5)."""
+    return [Run(f"f{str(f).replace('.', '')}", "arxiv_fjf", _with_baseline(arms),
+                n=PIPELINE_N, params={"s": 0.5, "f": f}, condition=f"s = 0.5, f = {f}")
+            for f in (0.2, 1.0, 3.0, 5.0)]
+
+
+EXPERIMENTS = {"E1": e1, "E2": e2, "E3": e3, "E4": e4, "E5": e5, "E6": e6, "E7": e7,
+               "CHECK": check_pipeline_data}
+TAKES_ARMS = {"E4", "E5", "E6", "E7"}
+
+
+def build(name: str, arms=None) -> list[Run]:
+    return EXPERIMENTS[name](arms) if name in TAKES_ARMS else EXPERIMENTS[name]()
 
 
 async def run_experiment(name: str, args) -> Path:
-    runs = EXPERIMENTS[name]()
+    runs = build(name, args.arms)
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     for r in runs:
@@ -114,6 +175,8 @@ def main() -> None:
     parser.add_argument("--server-pid", type=int, default=None)
     parser.add_argument("--allow-warm-cache", action="store_true")
     parser.add_argument("--timeout", type=float, default=3600)
+    parser.add_argument("--arms", default=None, type=lambda s: s.split(","),
+                        help="E4-E7: override the arms (E6/E7 need E5's best settings)")
     args = parser.parse_args()
     args.base_url = args.base_url.rstrip("/").removesuffix("/v1")
     print(f"wrote {asyncio.run(run_experiment(args.experiment, args))}")

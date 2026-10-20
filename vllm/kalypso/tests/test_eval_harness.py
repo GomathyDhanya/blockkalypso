@@ -458,10 +458,10 @@ def test_drift_table_flags_arms_that_changed_the_work():
 
 ARXIV_XML = b"""<?xml version="1.0" encoding="UTF-8"?>
 <feed xmlns="http://www.w3.org/2005/Atom" xmlns:arxiv="http://arxiv.org/schemas/atom">
- <entry><id>http://arxiv.org/abs/2301.00001v2</id><title>Robot  Vision
- Paper</title><summary> Abstract   one. </summary><published>2023-01-01T00:00:00Z</published>
+ <entry><id>http://arxiv.org/abs/2301.00001v2</id><title>Quadruped  Robot
+ Locomotion</title><summary> Abstract   one. </summary><published>2023-01-01T00:00:00Z</published>
  <arxiv:primary_category term="cs.RO"/><category term="cs.RO"/><category term="cs.CV"/></entry>
- <entry><id>http://arxiv.org/abs/2301.00002v1</id><title>Two topics</title><summary>x</summary>
+ <entry><id>http://arxiv.org/abs/2301.00002v1</id><title>Drone grasping</title><summary>x</summary>
  <published>2023-01-01T00:00:00Z</published><arxiv:primary_category term="cs.RO"/>
  <category term="cs.RO"/><category term="cs.CV"/><category term="cs.LG"/></entry>
  <entry><id>http://arxiv.org/abs/2301.00003v1</id><title>DB</title><summary>y</summary>
@@ -472,10 +472,10 @@ ARXIV_XML = b"""<?xml version="1.0" encoding="UTF-8"?>
 
 def test_parse_arxiv_and_topic_groups():
     rows = fetch_data.parse_arxiv(ARXIV_XML)
-    assert rows[0]["id"] == "2301.00001v2" and rows[0]["title"] == "Robot Vision Paper"
+    assert rows[0]["id"] == "2301.00001v2" and rows[0]["title"] == "Quadruped Robot Locomotion"
     assert rows[0]["abstract"] == "Abstract one." and rows[0]["categories"] == "cs.RO cs.CV"
     assert [fetch_data.arxiv_group(r) for r in rows] == [
-        "robotics/vision", None, "other/cs.DB"]   # two topics is ambiguous
+        "robotics/legged", None, "other/cs.DB"]   # drone + grasping is ambiguous
 
 
 def test_parse_params():
@@ -546,8 +546,9 @@ def test_experiment_grids_follow_the_plan():
 @needs_full_data
 @needs_arxiv
 def test_experiment_arms_fit_their_workloads():
-    for build in experiments.EXPERIMENTS.values():
-        for r in build():
+    for name in experiments.EXPERIMENTS:
+        arms = ["kalypso_block:4/4x4/4"] if name in ("E6", "E7") else None
+        for r in experiments.build(name, arms):
             w = WORKLOADS[r.workload](r.n, **r.params)
             for arm in r.arms:
                 check_arm(parse_arm(arm), w)
@@ -586,3 +587,27 @@ def test_summarize_trace_counts_kalypso_retries():
     t["stages"]["9"]["retries"] = 2
     assert summarize_trace(t)["retries"] == 2
     assert summarize_trace(_trace())["retries"] == 0
+
+
+def test_pipeline_experiment_grids_follow_the_plan():
+    (e4,) = experiments.e4()
+    assert e4.arms[1:] == tuple(f"kalypso_block:{k}/{k}x{k}/{k}" for k in (2, 4, 8, 16))
+    (e5,) = experiments.e5()
+    assert len(e5.arms) == 13 and "kalypso_block:16/4x32/4" in e5.arms
+    best = ["kalypso_block:4/4x4/4", "kalypso_block:16/2x2/16"]
+    e6, e7 = experiments.e6(best), experiments.e7(best)
+    assert [r.params["s"] for r in e6] == [0.1, 0.3, 0.6, 0.9]
+    assert [r.params["f"] for r in e7] == [0.2, 1.0, 3.0, 5.0]
+    assert all(r.arms == ("kalypso_per_tuple", *best) for r in e6 + e7)
+    with pytest.raises(ValueError):
+        experiments.e6()
+
+
+@needs_arxiv
+def test_pipeline_experiment_arms_fit_the_workload():
+    best = ["kalypso_block:4/4x4/4"]
+    for runs in (experiments.e4(), experiments.e5(), experiments.e6(best), experiments.e7(best)):
+        for r in runs:
+            w = WORKLOADS[r.workload](r.n, **r.params)
+            for arm in r.arms:
+                check_arm(parse_arm(arm), w)

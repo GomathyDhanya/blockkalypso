@@ -14,8 +14,8 @@ format as the paper's 10-row samples in ``sample_data/``:
 - ``medec/medec_train.csv``: the MEDEC-MS training set with the ``data``
   column the paper's sample uses (Kalypso's Text+Sentences template).
 - ``arxiv/papers.csv``: 2023 arXiv papers for the paper's arXiv
-  filter -> join -> filter case: robotics (cs.RO) papers tagged with one
-  robotics topic by their second category, plus non-robotics papers. The
+  filter -> join -> filter case: robotics (cs.RO) papers whose title names
+  exactly one robotics task (e.g. grasping, SLAM), plus non-robotics papers. The
   paper's arXiv sample is not in the repository, so this set is ours; the
   queries and every paper id are recorded so it can be fetched again.
 
@@ -30,6 +30,7 @@ import datetime as dt
 import hashlib
 import io
 import json
+import re
 import sys
 import time
 import urllib.parse
@@ -123,14 +124,16 @@ def fetch_medec(root: Path) -> dict:
 
 ARXIV_API = "https://export.arxiv.org/api/query"
 ARXIV_DATES = "[202301010000 TO 202312312359]"
-# Robotics topics, by a robotics paper's other categories. A paper is kept
-# only if exactly one topic matches, so "same topic" is unambiguous.
+# Robotics tasks named in a robotics paper's title. A paper is kept only if
+# exactly one task matches, so "same topic" is unambiguous. (Grouping by
+# secondary category was too loose: two cs.RO+cs.LG papers on drones and on
+# grasping are not "similar topic", and Qwen2.5-7B agreed on 1 of 16 pairs.)
 ARXIV_TOPICS = {
-    "vision": {"cs.CV"},
-    "learning": {"cs.LG"},
-    "control": {"cs.SY", "eess.SY"},
-    "hri": {"cs.HC"},
-    "multiagent": {"cs.MA"},
+    "aerial": r"\buav|\bdrone|\bquadrotor|\bmulticopter|\baerial",
+    "driving": r"autonomous driving|self-driving|\bautonomous vehicle",
+    "legged": r"\blegged\b|\bquadruped|\bbiped|\bhumanoid",
+    "grasping": r"\bgrasp",
+    "slam": r"\bslam\b|simultaneous localization",
 }
 # Non-robotics areas whose primary-category papers fill the "no" side.
 ARXIV_OTHER = ("cs.DB", "cs.CR", "cs.PL")
@@ -160,10 +163,11 @@ def parse_arxiv(xml_bytes: bytes) -> list[dict]:
 
 
 def arxiv_group(row: dict) -> str | None:
-    """Robotics topic, the non-robotics area, or None when ambiguous."""
+    """Robotics task, the non-robotics area, or None when ambiguous."""
     cats = set(row["categories"].split())
     if row["primary"] == "cs.RO":
-        topics = [t for t, tagged in ARXIV_TOPICS.items() if cats & tagged]
+        topics = [t for t, pattern in ARXIV_TOPICS.items()
+                  if re.search(pattern, row["title"], re.IGNORECASE)]
         return f"robotics/{topics[0]}" if len(topics) == 1 else None
     if row["primary"] in ARXIV_OTHER and "cs.RO" not in cats:
         return f"other/{row['primary']}"
