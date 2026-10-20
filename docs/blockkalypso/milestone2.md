@@ -296,3 +296,37 @@ k_static = 4 / 4x4 / 4, worst-case regret 1.04: one pipeline setting is within
 4% of the best in every condition, so a static k is enough on latency. Every
 blocked arm's work drifted from per-tuple (fewer join matches; see E4 and E10),
 which this latency-only measure does not account for.
+
+## Insights: which block sizes are good
+
+- **Filters: small blocks win.** k = 2-4 is up to 1.30x faster than
+  per-tuple (E1) and keeps F1 at 0.95-1.00 on arXiv and contracts; use
+  per-tuple for small inputs (N <= 32, E3) and for long rows (contracts, E1);
+  avoid k >= 8, which is slower and on long rows does not fit the context.
+- **Joins alone: a moderate square block is the best balance.** 4 x 4 is 3.14x
+  faster than per-pair with F1 0.55 (per-pair 0.69); the fastest shape, 8 x 4
+  (4.15x), drops F1 to 0.30, and 2 x 8 keeps the most accuracy (F1 0.57) at
+  only 1.90x (E2).
+- **Pipelines: about 3x faster, but blocked joins lose answers.** 8 / 8x8 / 8 is
+  the best measured balance (3.14x, 8 of per-tuple's 13 join matches, F1 0.36);
+  the fastest, 4 / 4x4 / 4 (3.31x), keeps 2 matches and F1 0.00; 2 / 2x2 / 2
+  keeps the most matches (10) at 1.92x (E4). Every blocked setting is far below
+  per-tuple's F1 0.80 on Qwen2.5-14B.
+- **Where blocking pays most:** high Filter1 selectivity (4.0x at s = 0.9, E6)
+  and low join fanout (3.5x at f = 0.2, E7); with many matches per block
+  (f = 5) the gain falls to 1.7-2.0x.
+- **Pipelining matters more with blocks:** overlapping the stages saves 43% of
+  the time for blocked settings versus 26% for per-tuple (E8).
+- **Reforming did not pay off here:** coalescing filled Filter2's blocks but
+  saved no time, because Filter2 receives only a few rows (E9).
+- **Trummer's cost model (Level 3) picks poor block sizes:** it minimises tokens,
+  so it chooses the largest block that fits. For the join alone that is 10%
+  slower than 8 x 4 and less accurate (F1 0.20 vs 0.30); in the pipeline its
+  31 x 30 join returned no matches, so its 5.96x "speedup" is a dropped result
+  (E11). Adding decode cost and an accuracy floor is what Level 4 is for.
+- **One static setting is fine for the pipeline, not for filters:** 4 / 4x4 / 4
+  is within 4% of the best pipeline time in every selectivity and fanout tested,
+  while the filter's best k depends on input size and row length (regret 1.17).
+- **Not yet measured:** per-tuple joins with blocked filters (blocking only
+  where it keeps accuracy) were not in the plan's grids; it is the obvious
+  next configuration to test given the block join's accuracy loss.
