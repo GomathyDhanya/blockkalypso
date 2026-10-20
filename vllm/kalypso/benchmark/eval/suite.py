@@ -62,7 +62,7 @@ def main() -> None:
     for name in args.workloads:
         print(f"== {name} ==", flush=True)
         asyncio.run(run.run(Namespace(
-            base_url=base_url, model=args.model, workload=name, n=None, arms=None,
+            base_url=base_url, model=args.model, workload=name, n=None, params={}, arms=None,
             warmup=args.warmup, repeats=args.repeats, server_pid=args.server_pid,
             allow_warm_cache=args.allow_warm_cache, timeout=args.timeout,
             out=str(args.out_dir / f"{name}.jsonl"))))

@@ -65,6 +65,23 @@ def gpu_name() -> str | None:
     return ", ".join(line.strip() for line in out.splitlines()) if out else None
 
 
+def parse_params(items: list[str]) -> dict:
+    """``["s=0.3", "right=16"]`` -> ``{"s": 0.3, "right": 16}``."""
+    params = {}
+    for item in items:
+        key, sep, value = item.partition("=")
+        if not sep or not key:
+            raise SystemExit(f"--param needs KEY=VALUE, got {item!r}")
+        try:
+            params[key] = int(value)
+        except ValueError:
+            try:
+                params[key] = float(value)
+            except ValueError:
+                params[key] = value
+    return params
+
+
 def run_metadata(args, model: str, workload, server_pid: int | None) -> dict:
     git = ["git", "-C", str(REPO_ROOT)]
     server = {"pid": server_pid}
@@ -81,6 +98,7 @@ def run_metadata(args, model: str, workload, server_pid: int | None) -> dict:
         "model": model,
         "base_url": args.base_url,
         "workload": workload.name,
+        "params": getattr(args, "params", {}),
         "kind": workload.kind,
         "rows": len(workload.rows),
         "right_rows": len(workload.right_rows) if workload.right_rows else None,
@@ -156,7 +174,7 @@ async def trial(client, args, spec, workload, model, server_pid) -> dict:
         # The work the pipeline actually passed downstream; compared across
         # arms in report.drift_table.
         record["filter_pass"] = filter_pass(result.trace, len(workload.right_rows))
-        record["join_out"] = len(result.selected)
+        record["final_out"] = len(result.selected)
     if workload.kind == "map":
         record["missing_rows"] = sorted({str(r.idx) for r in workload.rows} - set(result.outputs))
     return record
@@ -169,7 +187,7 @@ def _summary(record: dict) -> str:
 
 
 async def run(args) -> None:
-    workload = WORKLOADS[args.workload](args.n)
+    workload = WORKLOADS[args.workload](args.n, **args.params)
     try:
         names = args.arms or workload.default_arms or DEFAULT_ARMS[workload.kind]
         specs = [parse_arm(a) for a in names]
@@ -209,6 +227,8 @@ def main() -> None:
     parser.add_argument("--model", default=None, help="defaults to the server's first model")
     parser.add_argument("--workload", choices=sorted(WORKLOADS), default="biodex")
     parser.add_argument("--n", type=int, default=None, help="rows to use; default all")
+    parser.add_argument("--param", action="append", default=[], metavar="KEY=VALUE",
+                        help="extra workload setting, e.g. --param s=0.3 --param f=3")
     parser.add_argument("--arms", default=None, type=lambda s: s.split(","),
                         help="comma-separated; default: every arm that fits the workload")
     parser.add_argument("--warmup", type=int, default=1)
@@ -220,6 +240,7 @@ def main() -> None:
     parser.add_argument("--timeout", type=float, default=3600)
     parser.add_argument("--out", required=True)
     args = parser.parse_args()
+    args.params = parse_params(args.param)
     args.base_url = args.base_url.rstrip("/").removesuffix("/v1")
     asyncio.run(run(args))
 

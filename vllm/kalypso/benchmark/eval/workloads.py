@@ -23,6 +23,7 @@ SAMPLE_DATA = Path(__file__).resolve().parents[1] / "sample_data"
 FULL_DATA = Path(__file__).resolve().parents[1] / "data"
 CONTRACTNLI = FULL_DATA / "contract-nli" / "train"
 MEDEC_FULL = FULL_DATA / "medec" / "medec_train.csv"
+ARXIV = FULL_DATA / "arxiv" / "papers.csv"
 BIODEX_ARTICLES = SAMPLE_DATA / "articles_500"
 REVIEWS = SAMPLE_DATA / "block_filter" / "reviews_20.csv"
 MEDEC = SAMPLE_DATA / "MEDEC-TrainingSet-1000.csv"
@@ -260,6 +261,158 @@ def load_medec_full(n: int | None = None, seed: int = 0) -> Workload:
     )
 
 
+def _arxiv_pool():
+    """arXiv papers by group: "robotics/<topic>" and "other/<area>"."""
+    with _require(ARXIV).open(newline="", encoding="utf-8") as f:
+        papers = list(csv.DictReader(f))
+    groups = {}
+    for paper in papers:
+        groups.setdefault(paper["group"], []).append(paper)
+    return groups
+
+
+def _arxiv_text(paper: dict) -> str:
+    return f"Title: {paper['title']}\n\nAbstract: {paper['abstract']}"
+
+
+class _Draw:
+    """Seeded draws without replacement from each arXiv group."""
+
+    def __init__(self, seed: int):
+        self.rng = random.Random(seed)
+        self.groups = {g: self.rng.sample(ps, len(ps)) for g, ps in sorted(_arxiv_pool().items())}
+
+    @property
+    def topics(self) -> list[str]:
+        return [g for g in self.groups if g.startswith("robotics/")]
+
+    def take(self, group: str) -> dict:
+        if not self.groups[group]:
+            raise ValueError(f"not enough arXiv papers in {group}; lower n, s or f")
+        return self.groups[group].pop()
+
+    def robotics(self, count: int) -> list[dict]:
+        """``count`` robotics papers, spread evenly over the topics."""
+        topics = self.topics
+        return [self.take(topics[i % len(topics)]) for i in range(count)]
+
+    def other(self, count: int) -> list[dict]:
+        areas = [g for g in self.groups if g.startswith("other/")]
+        return [self.take(areas[i % len(areas)]) for i in range(count)]
+
+
+def _arxiv_dir(papers: list[dict]) -> Path:
+    target = Path(tempfile.mkdtemp(prefix="kalypso_eval_"))
+    for i, paper in enumerate(papers, start=1):
+        (target / f"{i}.txt").write_text(_arxiv_text(paper), encoding="utf-8")
+    return target
+
+
+def _arxiv_rows(papers):
+    return [Row(i, _arxiv_text(p)) for i, p in enumerate(papers, start=1)]
+
+
+def _arxiv_left(draw: _Draw, n: int, s: float) -> list[dict]:
+    """``n`` papers, a share ``s`` of them robotics, in a seeded order."""
+    if not 0 <= s <= 1:
+        raise ValueError("s must be between 0 and 1")
+    papers = draw.robotics(round(s * n)) + draw.other(n - round(s * n))
+    draw.rng.shuffle(papers)
+    return papers
+
+
+def _arxiv_right(draw: _Draw, size: int, f: float) -> list[dict]:
+    """``size`` papers giving each robotics left paper ``f`` matches on average.
+
+    f >= 1: round(f) papers from every robotics topic. f < 1: one paper from
+    round(f * topics) topics, so only that share of left papers has a match.
+    The rest are non-robotics papers, which match nothing.
+    """
+    topics = draw.topics
+    if f >= 1:
+        matching = [draw.take(t) for t in topics for _ in range(round(f))]
+    else:
+        matching = [draw.take(t) for t in topics[:round(f * len(topics))]]
+    if len(matching) > size:
+        raise ValueError(f"f={f} needs {len(matching)} right papers; raise right")
+    papers = matching + draw.other(size - len(matching))
+    draw.rng.shuffle(papers)
+    return papers
+
+
+def _same_topic(left, right):
+    return frozenset(
+        (i, j) for i, l in enumerate(left, start=1) for j, r in enumerate(right, start=1)
+        if l["group"].startswith("robotics/") and l["group"] == r["group"])
+
+
+def load_arxiv_filter(n: int | None = None, s: float = 0.5, seed: int = 0) -> Workload:
+    """The paper's arXiv filter (CASE_2_FILTER_ARXIV) over ``n`` abstracts.
+
+    Proxy label: the paper's primary category is cs.RO.
+    """
+    papers = _arxiv_left(_Draw(seed), 64 if n is None else n, s)
+    return Workload(
+        name="arxiv_filter", kind=FILTER, data_path=_arxiv_dir(papers).resolve(),
+        instruction=scenarios.CASE_2_FILTER_ARXIV, rows=_arxiv_rows(papers),
+        positives=frozenset(i for i, p in enumerate(papers, start=1)
+                            if p["group"].startswith("robotics/")),
+        source_ids=tuple(p["id"] for p in papers),
+    )
+
+
+def load_arxiv_join(n: int | None = None, right: int = 8, f: float = 1.0,
+                    seed: int = 0) -> Workload:
+    """The paper's arXiv join (CASE_2_JOIN_ARXIV): ``n`` robotics papers x ``right``.
+
+    Proxy label: both papers are robotics papers of the same topic.
+    """
+    draw = _Draw(seed)
+    left = draw.robotics(16 if n is None else n)
+    draw.rng.shuffle(left)
+    right_papers = _arxiv_right(draw, right, f)
+    return Workload(
+        name="arxiv_join", kind=JOIN, data_path=_arxiv_dir(left).resolve(),
+        right_path=_arxiv_dir(right_papers).resolve(),
+        instruction=scenarios.CASE_2_JOIN_ARXIV,
+        rows=_arxiv_rows(left), right_rows=_arxiv_rows(right_papers),
+        positives=_same_topic(left, right_papers),
+        source_ids=tuple(p["id"] for p in left + right_papers),
+    )
+
+
+def load_arxiv_pipeline(n: int | None = None, s: float = 0.5, f: float = 1.0,
+                        right: int = 32, seed: int = 0) -> Workload:
+    """The paper's arXiv FILTER -> JOIN -> FILTER query (handoff's F1 -> Join -> F2).
+
+    F1: CASE_2_FILTER_ARXIV (AI robotics?), join: CASE_2_JOIN_ARXIV (similar
+    topic?) against ``right`` papers, F2: CASE_3_FILTER_3 (uses an image
+    dataset?). ``s`` sets F1's selectivity and ``f`` the join fanout. Proxy
+    labels: F1 = cs.RO; join = same robotics topic; F2 = the vision topic,
+    so the expected outputs are same-topic vision pairs.
+    """
+    draw = _Draw(seed)
+    left = _arxiv_left(draw, 32 if n is None else n, s)
+    right_papers = _arxiv_right(draw, right, f)
+    joined = _same_topic(left, right_papers)
+    return Workload(
+        name="arxiv_fjf", kind=PIPELINE, data_path=_arxiv_dir(left).resolve(),
+        right_path=_arxiv_dir(right_papers).resolve(),
+        instruction=scenarios.CASE_2_JOIN_ARXIV,
+        rows=_arxiv_rows(left), right_rows=_arxiv_rows(right_papers),
+        positives=frozenset((i, j) for i, j in joined
+                            if left[i - 1]["group"] == "robotics/vision"),
+        source_ids=tuple(p["id"] for p in left + right_papers),
+        stages=({"op": "sem_filter", "prompt": scenarios.CASE_2_FILTER_ARXIV},
+                {"op": "join", "instruction": scenarios.CASE_2_JOIN_ARXIV},
+                {"op": "sem_filter", "prompt": scenarios.CASE_3_FILTER_3}),
+        # Handoff E4: one block size k for F1, the join (k x k) and F2.
+        default_arms=("kalypso_per_tuple",) + tuple(
+            f"kalypso_block:{k}/{k}x{k}/{k}" for k in (2, 4, 8, 16)),
+        gold_filter_pass=sum(p["group"].startswith("robotics/") for p in left),
+    )
+
+
 WORKLOADS = {
     "biodex": load_biodex,
     "reviews": load_reviews,
@@ -269,4 +422,7 @@ WORKLOADS = {
     "medec_full": load_medec_full,
     "contractnli_fjm": load_contractnli_pipeline,
     "contractnli_fj": lambda n=None: load_contractnli_pipeline(n, with_map=False),
+    "arxiv_filter": load_arxiv_filter,
+    "arxiv_join": load_arxiv_join,
+    "arxiv_fjf": load_arxiv_pipeline,
 }

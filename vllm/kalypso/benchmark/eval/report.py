@@ -287,12 +287,12 @@ def drift(meta: dict, trials: list[dict], reference: str,
     out = {}
     for arm in meta["arms"]:
         group = groups.get(arm, [])
-        stats = {key: _stat(t.get(key) for t in group) for key in ("filter_pass", "join_out")}
+        stats = {key: _stat(t.get(key) for t in group) for key in ("filter_pass", "final_out")}
         out[arm] = {key: (v["median"] if v else None) for key, v in stats.items()}
     ref = out.get(reference, {})
     for arm, row in out.items():
         row["drifted"] = arm != reference and any(
-            _drifted(row[key], ref.get(key), tolerance) for key in ("filter_pass", "join_out"))
+            _drifted(row[key], ref.get(key), tolerance) for key in ("filter_pass", "final_out"))
     return out
 
 
@@ -305,8 +305,8 @@ def drift_table(meta: dict, trials: list[dict], reference: str,
     gold_pairs = len(meta["positives"]) if meta.get("positives") is not None else "n/a"
     lines = ["", "Work passed downstream (medians). Gold: "
              f"{meta.get('gold_filter_pass', 'n/a')} rows should pass the filter, "
-             f"{gold_pairs} pairs should match.", "",
-             "| Arm | Rows past filter | Pairs past join | Comparable |", "|---|---|---|---|"]
+             f"{gold_pairs} final outputs are expected.", "",
+             "| Arm | Rows past first filter | Final outputs | Comparable |", "|---|---|---|---|"]
     flagged = []
     for arm in meta["arms"]:
         if arm not in rows or not by_arm(trials).get(arm):
@@ -316,7 +316,7 @@ def drift_table(meta: dict, trials: list[dict], reference: str,
         note = "reference" if arm == reference else ("**no, work drifted**" if r["drifted"] else "yes")
         if r["drifted"]:
             flagged.append(arm)
-        lines.append(f"| `{arm}` | {fmt(r['filter_pass'])} | {fmt(r['join_out'])} | {note} |")
+        lines.append(f"| `{arm}` | {fmt(r['filter_pass'])} | {fmt(r['final_out'])} | {note} |")
     if flagged:
         lines += ["", f"Drifted by more than {tolerance:.0%} from `{reference}`: "
                   + ", ".join(f"`{a}`" for a in flagged)

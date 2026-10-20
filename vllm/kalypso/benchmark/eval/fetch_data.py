@@ -13,9 +13,15 @@ format as the paper's 10-row samples in ``sample_data/``:
   hypothesis) pair.
 - ``medec/medec_train.csv``: the MEDEC-MS training set with the ``data``
   column the paper's sample uses (Kalypso's Text+Sentences template).
+- ``arxiv/papers.csv``: 2023 arXiv papers for the paper's arXiv
+  filter -> join -> filter case: robotics (cs.RO) papers tagged with one
+  robotics topic by their second category, plus non-robotics papers. The
+  paper's arXiv sample is not in the repository, so this set is ours; the
+  queries and every paper id are recorded so it can be fetched again.
 
 ``manifest.json`` records each source URL, its SHA-256 and the row counts.
-Both datasets are CC BY 4.0; their licence files are copied alongside.
+ContractNLI and MEDEC are CC BY 4.0 (licence files copied alongside);
+arXiv metadata, abstracts included, is CC0.
 """
 
 import argparse
@@ -25,7 +31,10 @@ import hashlib
 import io
 import json
 import sys
+import time
+import urllib.parse
 import urllib.request
+import xml.etree.ElementTree as ET
 import zipfile
 from pathlib import Path
 
@@ -112,7 +121,87 @@ def fetch_medec(root: Path) -> dict:
             "counts": {"train": rows}}
 
 
-FETCHERS = {"contractnli": fetch_contractnli, "medec": fetch_medec}
+ARXIV_API = "https://export.arxiv.org/api/query"
+ARXIV_DATES = "[202301010000 TO 202312312359]"
+# Robotics topics, by a robotics paper's other categories. A paper is kept
+# only if exactly one topic matches, so "same topic" is unambiguous.
+ARXIV_TOPICS = {
+    "vision": {"cs.CV"},
+    "learning": {"cs.LG"},
+    "control": {"cs.SY", "eess.SY"},
+    "hri": {"cs.HC"},
+    "multiagent": {"cs.MA"},
+}
+# Non-robotics areas whose primary-category papers fill the "no" side.
+ARXIV_OTHER = ("cs.DB", "cs.CR", "cs.PL")
+ARXIV_NS = {"a": "http://www.w3.org/2005/Atom", "arxiv": "http://arxiv.org/schemas/atom"}
+
+
+def _arxiv_page(category: str, start: int, size: int) -> bytes:
+    query = urllib.parse.urlencode({
+        "search_query": f"cat:{category} AND submittedDate:{ARXIV_DATES}",
+        "start": start, "max_results": size,
+        "sortBy": "submittedDate", "sortOrder": "ascending"})
+    return _download(f"{ARXIV_API}?{query}")
+
+
+def parse_arxiv(xml_bytes: bytes) -> list[dict]:
+    rows = []
+    for entry in ET.fromstring(xml_bytes).findall("a:entry", ARXIV_NS):
+        rows.append({
+            "id": entry.find("a:id", ARXIV_NS).text.rsplit("/abs/", 1)[-1],
+            "title": " ".join(entry.find("a:title", ARXIV_NS).text.split()),
+            "abstract": " ".join(entry.find("a:summary", ARXIV_NS).text.split()),
+            "primary": entry.find("arxiv:primary_category", ARXIV_NS).get("term"),
+            "categories": " ".join(c.get("term") for c in entry.findall("a:category", ARXIV_NS)),
+            "published": entry.find("a:published", ARXIV_NS).text,
+        })
+    return rows
+
+
+def arxiv_group(row: dict) -> str | None:
+    """Robotics topic, the non-robotics area, or None when ambiguous."""
+    cats = set(row["categories"].split())
+    if row["primary"] == "cs.RO":
+        topics = [t for t, tagged in ARXIV_TOPICS.items() if cats & tagged]
+        return f"robotics/{topics[0]}" if len(topics) == 1 else None
+    if row["primary"] in ARXIV_OTHER and "cs.RO" not in cats:
+        return f"other/{row['primary']}"
+    return None
+
+
+def fetch_arxiv(root: Path, robotics: int = 3000, other: int = 400) -> dict:
+    """First ``robotics`` cs.RO and ``other`` per ARXIV_OTHER area, 2023."""
+    plan = [("cs.RO", robotics)] + [(c, other) for c in ARXIV_OTHER]
+    rows, digest = [], hashlib.sha256()
+    for category, total in plan:
+        for start in range(0, total, 1000):
+            page = _arxiv_page(category, start, min(1000, total - start))
+            digest.update(page)
+            rows.extend(parse_arxiv(page))
+            time.sleep(3)  # arXiv API terms: at most one request every 3 s
+    kept, seen = [], set()
+    for row in rows:
+        group = arxiv_group(row)
+        if group and row["id"] not in seen:
+            seen.add(row["id"])
+            kept.append({**row, "group": group})
+    out = root / "arxiv"
+    out.mkdir(parents=True, exist_ok=True)
+    with (out / "papers.csv").open("w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=list(kept[0]))
+        writer.writeheader()
+        writer.writerows(kept)
+    counts = {}
+    for row in kept:
+        counts[row["group"]] = counts.get(row["group"], 0) + 1
+    return {"url": ARXIV_API, "queries": [f"cat:{c} AND submittedDate:{ARXIV_DATES}, "
+                                          f"first {n} by submission date" for c, n in plan],
+            "sha256": digest.hexdigest(), "license": "CC0 (arXiv metadata)",
+            "counts": dict(sorted(counts.items()))}
+
+
+FETCHERS = {"contractnli": fetch_contractnli, "medec": fetch_medec, "arxiv": fetch_arxiv}
 
 
 def main() -> None:

@@ -7,12 +7,15 @@ import json
 import pytest
 
 from vllm.kalypso.benchmark.eval import fetch_data, metrics, report
+from vllm.kalypso.benchmark.eval import run as run_mod
 from vllm.kalypso.benchmark.eval.stages import filter_pass, summarize_trace
 from vllm.kalypso.benchmark.eval.arms import (ArmError, check_arm, direct_requests,
                                               kalypso_ops, parse_arm, pipeline_ops,
                                               parse_query_response)
-from vllm.kalypso.benchmark.eval.workloads import (BIODEX_ARTICLES, FILTER, FULL_DATA,
-                                                   JOIN, PIPELINE, Row, Workload,
+from vllm.kalypso.benchmark.eval.workloads import (ARXIV, BIODEX_ARTICLES, FILTER,
+                                                   FULL_DATA, JOIN, PIPELINE, Row,
+                                                   Workload, load_arxiv_filter,
+                                                   load_arxiv_join, load_arxiv_pipeline,
                                                    load_biodex, load_contractnli,
                                                    load_contractnli_pipeline,
                                                    load_join5x5, load_medec,
@@ -431,7 +434,7 @@ def test_drift_table_flags_arms_that_changed_the_work():
     trials = []
     for arm, fp, jo in (("kalypso_per_tuple", 2, 28), ("kalypso_block:2/1x17", 1, 7),
                         ("kalypso_block:1/1x17", 2, 27)):
-        trials.append({**_trial(arm, 1, {}, 1.0), "filter_pass": fp, "join_out": jo})
+        trials.append({**_trial(arm, 1, {}, 1.0), "filter_pass": fp, "final_out": jo})
     rows = report.drift(meta, trials, "kalypso_per_tuple")
     assert rows["kalypso_block:2/1x17"]["drifted"]
     assert not rows["kalypso_block:1/1x17"]["drifted"]        # 27 vs 28 is within 10%
@@ -439,5 +442,61 @@ def test_drift_table_flags_arms_that_changed_the_work():
     table = report.drift_table(meta, trials, "kalypso_per_tuple")
     assert "| `kalypso_block:2/1x17` | 1 | 7 | **no, work drifted** |" in table
     assert "| `kalypso_block:1/1x17` | 2 | 27 | yes |" in table
-    assert "Gold: 2 rows should pass the filter, 18 pairs should match." in table
+    assert "Gold: 2 rows should pass the filter, 18 final outputs are expected." in table
     assert report.drift_table(_meta(), trials, "kalypso_per_tuple") == ""
+
+
+ARXIV_XML = b"""<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xmlns:arxiv="http://arxiv.org/schemas/atom">
+ <entry><id>http://arxiv.org/abs/2301.00001v2</id><title>Robot  Vision
+ Paper</title><summary> Abstract   one. </summary><published>2023-01-01T00:00:00Z</published>
+ <arxiv:primary_category term="cs.RO"/><category term="cs.RO"/><category term="cs.CV"/></entry>
+ <entry><id>http://arxiv.org/abs/2301.00002v1</id><title>Two topics</title><summary>x</summary>
+ <published>2023-01-01T00:00:00Z</published><arxiv:primary_category term="cs.RO"/>
+ <category term="cs.RO"/><category term="cs.CV"/><category term="cs.LG"/></entry>
+ <entry><id>http://arxiv.org/abs/2301.00003v1</id><title>DB</title><summary>y</summary>
+ <published>2023-01-01T00:00:00Z</published><arxiv:primary_category term="cs.DB"/>
+ <category term="cs.DB"/></entry>
+</feed>"""
+
+
+def test_parse_arxiv_and_topic_groups():
+    rows = fetch_data.parse_arxiv(ARXIV_XML)
+    assert rows[0]["id"] == "2301.00001v2" and rows[0]["title"] == "Robot Vision Paper"
+    assert rows[0]["abstract"] == "Abstract one." and rows[0]["categories"] == "cs.RO cs.CV"
+    assert [fetch_data.arxiv_group(r) for r in rows] == [
+        "robotics/vision", None, "other/cs.DB"]   # two topics is ambiguous
+
+
+def test_parse_params():
+    assert run_mod.parse_params(["s=0.3", "right=16", "name=x"]) == {
+        "s": 0.3, "right": 16, "name": "x"}
+    with pytest.raises(SystemExit):
+        run_mod.parse_params(["s"])
+
+
+needs_arxiv = pytest.mark.skipif(
+    not ARXIV.exists(), reason="arXiv pool not fetched (fetch_data arxiv)")
+
+
+@needs_arxiv
+def test_arxiv_pipeline_hits_target_selectivity_and_fanout(fake_kv_manager):
+    w = load_arxiv_pipeline(32, s=0.25, f=1.0)
+    assert w.kind == PIPELINE and len(w.rows) == 32 and w.gold_filter_pass == 8
+    assert [s["op"] for s in w.stages] == ["sem_filter", "join", "sem_filter"]
+    join = load_arxiv_join(16, right=8, f=1.0)
+    assert len(join.positives) == 16                      # f = 1 match per left paper
+    assert len(load_arxiv_join(16, right=16, f=3.0).positives) == 48
+    assert load_arxiv_pipeline(32).source_ids == load_arxiv_pipeline(32).source_ids
+    for arm in w.default_arms:
+        check_arm(parse_arm(arm), w)
+    ops = pipeline_ops(w, parse_arm("kalypso_block:4/2x8/8").groups)
+    physical = SemanticPlan(executor=None).parse_ops(ops)
+    assert [type(op).__name__ for op in physical] == [
+        "BlockSemFilter", "BlockSemJoin", "BlockSemFilter"]
+    assert (physical[0].block_size, physical[1].right_block_size, physical[2].block_size) == (4, 8, 8)
+    assert len(physical[1].right_table) == 32
+    filt = load_arxiv_filter(64)
+    ctxs = list(data._data_source(None, str(filt.data_path), None))
+    for ctx, (_, messages, _) in zip(ctxs, direct_requests(filt)):
+        assert SemFilter(filt.instruction)._build_prompts(ctx)[1] == messages
