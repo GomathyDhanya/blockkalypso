@@ -123,3 +123,24 @@ F1 vs per-tuple takes per-tuple's output as the truth; agreement counts every ca
 | m2-E8-qwen14b | fjf_s05_f1 | 4/4x4/4+materialized | n/a | 0.00 | 99% | 0 | yes |
 | m2-E8-qwen14b | fjf_s05_f1 | 4/2x2/4 | 0.00 | 0.00 | 99% | 4 | yes |
 | m2-E8-qwen14b | fjf_s05_f1 | 4/2x2/4+materialized | 0.00 | 0.00 | 99% | 0 | yes |
+| m2-E9-qwen14b | s01_f1 | per-tuple | n/a | 1.00 | 100% | 0 | no |
+| m2-E9-qwen14b | s01_f1 | 4/4x4/4 | 0.00 | 0.00 | 100% | 1 | yes |
+| m2-E9-qwen14b | s01_f1 | 4/4x4/4+coalesce | 0.00 | 0.00 | 100% | 1 | yes |
+| m2-E9-qwen14b | s01_f1 | 4/2x2/4 | 0.00 | 0.00 | 100% | 1 | yes |
+| m2-E9-qwen14b | s01_f1 | 4/2x2/4+coalesce | 0.00 | 0.00 | 100% | 1 | yes |
+| m2-E9-qwen14b | s05_f02 | per-tuple | 1.00 | 1.00 | 100% | 0 | no |
+| m2-E9-qwen14b | s05_f02 | 4/4x4/4 | n/a | 0.00 | 100% | 0 | yes |
+| m2-E9-qwen14b | s05_f02 | 4/4x4/4+coalesce | n/a | 0.00 | 100% | 0 | yes |
+| m2-E9-qwen14b | s05_f02 | 4/2x2/4 | n/a | 0.00 | 100% | 0 | yes |
+| m2-E9-qwen14b | s05_f02 | 4/2x2/4+coalesce | n/a | 0.00 | 100% | 0 | yes |
+| m2-E9-qwen14b | s05_f1 | per-tuple | 0.80 | 1.00 | 100% | 0 | no |
+| m2-E9-qwen14b | s05_f1 | 4/4x4/4 | 0.00 | 0.00 | 99% | 1 | yes |
+| m2-E9-qwen14b | s05_f1 | 4/4x4/4+coalesce | 0.00 | 0.00 | 99% | 0 | yes |
+| m2-E9-qwen14b | s05_f1 | 4/2x2/4 | 0.00 | 0.00 | 99% | 4 | yes |
+| m2-E9-qwen14b | s05_f1 | 4/2x2/4+coalesce | 0.00 | 0.00 | 99% | 0 | yes |
+| m2-E11-qwen14b | fjf_s05_f1 | per-tuple | 0.80 | 1.00 | 100% | 0 | no |
+| m2-E11-qwen14b | fjf_s05_f1 | 4/trummer/4 | n/a | 0.00 | 99% | 0 | yes |
+| m2-E11-qwen14b | fjf_s05_f1 | 4/4x4/4 | 0.00 | 0.00 | 99% | 2 | yes |
+| m2-E11-qwen14b | join_16x8 | per-tuple | 0.69 | 1.00 | 100% | 0 |  |
+| m2-E11-qwen14b | join_16x8 | trummer | 0.20 | 0.47 | 93% | 0 |  |
+| m2-E11-qwen14b | join_16x8 | 8x4 | 0.30 | 0.47 | 93% | 0 |  |
