@@ -266,6 +266,64 @@ def stage_table(meta: dict, trials: list[dict]) -> str:
                       *lines]) + "\n"
 
 
+DRIFT_TOLERANCE = 0.10
+
+
+def _drifted(value, ref, tolerance):
+    if value is None or ref is None:
+        return False
+    return abs(value - ref) > tolerance * max(ref, 1)
+
+
+def drift(meta: dict, trials: list[dict], reference: str,
+          tolerance: float = DRIFT_TOLERANCE) -> dict:
+    """Per arm: medians of the work a pipeline passed downstream, and
+    whether it differs from the reference arm by more than ``tolerance``.
+
+    A blocked stage that answers differently changes how much work the later
+    stages get, so its latency is not comparable with the reference.
+    """
+    groups = by_arm(trials)
+    out = {}
+    for arm in meta["arms"]:
+        group = groups.get(arm, [])
+        stats = {key: _stat(t.get(key) for t in group) for key in ("filter_pass", "join_out")}
+        out[arm] = {key: (v["median"] if v else None) for key, v in stats.items()}
+    ref = out.get(reference, {})
+    for arm, row in out.items():
+        row["drifted"] = arm != reference and any(
+            _drifted(row[key], ref.get(key), tolerance) for key in ("filter_pass", "join_out"))
+    return out
+
+
+def drift_table(meta: dict, trials: list[dict], reference: str,
+                tolerance: float = DRIFT_TOLERANCE) -> str:
+    """Markdown for drift(); empty for workloads that are not pipelines."""
+    if meta.get("kind") != "pipeline" or not by_arm(trials):
+        return ""
+    rows = drift(meta, trials, reference, tolerance)
+    gold_pairs = len(meta["positives"]) if meta.get("positives") is not None else "n/a"
+    lines = ["", "Work passed downstream (medians). Gold: "
+             f"{meta.get('gold_filter_pass', 'n/a')} rows should pass the filter, "
+             f"{gold_pairs} pairs should match.", "",
+             "| Arm | Rows past filter | Pairs past join | Comparable |", "|---|---|---|---|"]
+    flagged = []
+    for arm in meta["arms"]:
+        if arm not in rows or not by_arm(trials).get(arm):
+            continue
+        r = rows[arm]
+        fmt = lambda v: "n/a" if v is None else f"{v:g}"
+        note = "reference" if arm == reference else ("**no, work drifted**" if r["drifted"] else "yes")
+        if r["drifted"]:
+            flagged.append(arm)
+        lines.append(f"| `{arm}` | {fmt(r['filter_pass'])} | {fmt(r['join_out'])} | {note} |")
+    if flagged:
+        lines += ["", f"Drifted by more than {tolerance:.0%} from `{reference}`: "
+                  + ", ".join(f"`{a}`" for a in flagged)
+                  + ". Their latency and requests reflect different work, not just blocking."]
+    return "\n".join(lines) + "\n"
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("results", type=Path)
@@ -277,6 +335,7 @@ def main() -> None:
     print(to_markdown(meta, summarize(meta, trials), agreement(meta, trials, args.reference),
                       args.reference, failures(trials)), end="")
     print(stage_table(meta, trials), end="")
+    print(drift_table(meta, trials, args.reference), end="")
 
 
 if __name__ == "__main__":

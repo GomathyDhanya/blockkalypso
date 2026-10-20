@@ -24,7 +24,7 @@ from pathlib import Path
 import httpx
 
 from . import metrics
-from .stages import summarize_trace
+from .stages import filter_pass, summarize_trace
 from .arms import DEFAULT_ARMS, ArmError, check_arm, parse_arm, run_arm
 from .workloads import WORKLOADS
 
@@ -79,6 +79,7 @@ def run_metadata(args, model: str, workload, server_pid: int | None) -> dict:
         "row_ids": [r.idx for r in workload.rows],
         "right_row_ids": [r.idx for r in workload.right_rows] if workload.right_rows else None,
         "stages": list(workload.stages) if workload.stages else None,
+        "gold_filter_pass": workload.gold_filter_pass,
         "data_path": str(workload.data_path),
         "right_path": str(workload.right_path) if workload.right_path else None,
         "positives": _jsonable(workload.positives),
@@ -142,6 +143,11 @@ async def trial(client, args, spec, workload, model, server_pid) -> dict:
         "outputs": dict(sorted(result.outputs.items())),
         "trace": result.trace,
     }
+    if workload.kind == "pipeline":
+        # The work the pipeline actually passed downstream; compared across
+        # arms in report.drift_table.
+        record["filter_pass"] = filter_pass(result.trace, len(workload.right_rows))
+        record["join_out"] = len(result.selected)
     if workload.kind == "map":
         record["missing_rows"] = sorted({str(r.idx) for r in workload.rows} - set(result.outputs))
     return record

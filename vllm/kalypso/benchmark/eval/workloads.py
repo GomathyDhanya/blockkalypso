@@ -62,6 +62,9 @@ class Workload:
     stages: tuple | None = None
     # Arms to run when --arms is not given; None means arms.DEFAULT_ARMS.
     default_arms: tuple | None = None
+    # PIPELINE only: how many rows the first filter should pass per the
+    # labels, used to spot runs whose model answers changed the workload.
+    gold_filter_pass: int | None = None
 
 
 def _txt_files(directory: Path) -> list[Path]:
@@ -223,7 +226,7 @@ def load_contractnli_pipeline(n: int | None = None, with_map: bool = True) -> Wo
         data_path=join.data_path, right_path=join.right_path,
         instruction=scenarios.CONTRACT_NLI_ENTAILMENT_JOIN,
         rows=join.rows, right_rows=join.right_rows, positives=join.positives,
-        source_ids=join.source_ids, stages=stages,
+        source_ids=join.source_ids, stages=stages, gold_filter_pass=len(join.rows),
         default_arms=("kalypso_per_tuple", "kalypso_block:4/1x1",
                       "kalypso_block:1/1x17", "kalypso_block:4/1x17"),
     )

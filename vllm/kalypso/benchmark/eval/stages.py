@@ -51,3 +51,26 @@ def summarize_trace(trace: dict | None) -> dict:
         "fallback_calls": fallbacks,
         "stages": stages,
     }
+
+
+FILTER_OPERATORS = ("SemFilter", "BlockSemFilter")
+
+
+def filter_pass(trace: dict | None, right_rows: int | None) -> int | None:
+    """Rows that passed a pipeline's first filter.
+
+    Read from the first stage that runs a filter. In Kalypso's per-tuple
+    layout that stage also fans each passing row out into one pair per right
+    row (``fanout == "CartesianProduct"``), so its output is divided back.
+    """
+    if not trace:
+        return None
+    for stage_id in sorted(trace.get("stages", {}), key=int):
+        stage = trace["stages"][stage_id]
+        if not set(stage.get("operators", [])) & set(FILTER_OPERATORS):
+            continue
+        out = stage.get("rows_out") or 0
+        if stage.get("fanout") == "CartesianProduct":
+            return out // right_rows if right_rows else None
+        return out
+    return None

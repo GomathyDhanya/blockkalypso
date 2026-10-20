@@ -7,7 +7,7 @@ import json
 import pytest
 
 from vllm.kalypso.benchmark.eval import fetch_data, metrics, report
-from vllm.kalypso.benchmark.eval.stages import summarize_trace
+from vllm.kalypso.benchmark.eval.stages import filter_pass, summarize_trace
 from vllm.kalypso.benchmark.eval.arms import (ArmError, check_arm, direct_requests,
                                               kalypso_ops, parse_arm, pipeline_ops,
                                               parse_query_response)
@@ -407,3 +407,37 @@ def test_contractnli_pipeline_workloads():
     assert fjm.positives == load_contractnli(2).positives
     for arm in fjm.default_arms:
         check_arm(parse_arm(arm), fjm)
+
+
+def _stage(ops, fanout, rows_in, rows_out):
+    return {"operators": ops, "fanout": fanout, "rows_in": rows_in, "rows_out": rows_out}
+
+
+def test_filter_pass_reads_both_kalypso_layouts():
+    per_tuple = {"stages": {"4": _stage(["SemFilter"], "CartesianProduct", 2, 34),
+                            "5": _stage(["SemFilter", "SemMap"], None, 34, 28)}}
+    blocked = {"stages": {"7": _stage(["BlockSemFilter"], None, 2, 1),
+                          "8": _stage(["BlockSemJoin"], None, 1, 7)}}
+    assert filter_pass(per_tuple, 17) == 2
+    assert filter_pass(blocked, 17) == 1
+    assert filter_pass({"stages": {"1": _stage(["BlockSemJoin"], None, 2, 9)}}, 17) is None
+    assert filter_pass(None, 17) is None
+
+
+def test_drift_table_flags_arms_that_changed_the_work():
+    meta = _meta(kind="pipeline", rows=2, right_rows=17, positives=[[1, 1]] * 18,
+                 gold_filter_pass=2,
+                 arms=["kalypso_per_tuple", "kalypso_block:2/1x17", "kalypso_block:1/1x17"])
+    trials = []
+    for arm, fp, jo in (("kalypso_per_tuple", 2, 28), ("kalypso_block:2/1x17", 1, 7),
+                        ("kalypso_block:1/1x17", 2, 27)):
+        trials.append({**_trial(arm, 1, {}, 1.0), "filter_pass": fp, "join_out": jo})
+    rows = report.drift(meta, trials, "kalypso_per_tuple")
+    assert rows["kalypso_block:2/1x17"]["drifted"]
+    assert not rows["kalypso_block:1/1x17"]["drifted"]        # 27 vs 28 is within 10%
+    assert not rows["kalypso_per_tuple"]["drifted"]
+    table = report.drift_table(meta, trials, "kalypso_per_tuple")
+    assert "| `kalypso_block:2/1x17` | 1 | 7 | **no, work drifted** |" in table
+    assert "| `kalypso_block:1/1x17` | 2 | 27 | yes |" in table
+    assert "Gold: 2 rows should pass the filter, 18 pairs should match." in table
+    assert report.drift_table(_meta(), trials, "kalypso_per_tuple") == ""
