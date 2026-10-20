@@ -301,7 +301,8 @@ def full_report(meta: dict, trials: list[dict], reference: str = "kalypso_per_tu
     agree = agreement(meta, trials, reference)
     parts = [to_markdown(meta, summary, agree, reference, failures(trials)),
              "", "Diagnostics:", "", diagnostics_table(meta, summary, agree),
-             stage_table(meta, trials), drift_table(meta, trials, reference)]
+             stage_table(meta, trials), operator_table(meta, trials),
+             drift_table(meta, trials, reference)]
     return "\n".join(part for part in parts if part is not None)
 
 
@@ -358,13 +359,37 @@ def drift(meta: dict, trials: list[dict], reference: str,
     out = {}
     for arm in meta["arms"]:
         group = groups.get(arm, [])
-        stats = {key: _stat(t.get(key) for t in group) for key in ("filter_pass", "final_out")}
+        stats = {key: _stat(t.get(key) for t in group)
+                 for key in ("filter_pass", "join_out", "final_out")}
         out[arm] = {key: (v["median"] if v else None) for key, v in stats.items()}
     ref = out.get(reference, {})
     for arm, row in out.items():
         row["drifted"] = arm != reference and any(
-            _drifted(row[key], ref.get(key), tolerance) for key in ("filter_pass", "final_out"))
+            _drifted(row[key], ref.get(key), tolerance)
+            for key in ("filter_pass", "join_out", "final_out"))
     return out
+
+
+def operator_table(meta: dict, trials: list[dict]) -> str:
+    """Per arm and query operator (first repeat): rows in and out, and how
+    the model's answers began; empty when no trial recorded operators."""
+    stages = meta.get("stages") or []
+    lines = []
+    for arm in meta["arms"]:
+        group = sorted(by_arm(trials).get(arm, []), key=lambda t: t.get("repeat", 0))
+        if not group or not group[0].get("operators"):
+            continue
+        for pos, op in sorted(group[0]["operators"].items(), key=lambda kv: int(kv[0])):
+            name = stages[int(pos)]["op"] if int(pos) < len(stages) else pos
+            answers = ", ".join(f"{k} {v}" for k, v in sorted(op["answers"].items())) or "-"
+            other = "; ".join(op.get("other_samples") or []) or "-"
+            lines.append(f"| `{arm}` | {pos}: {name} | {'+'.join(op['operators'])} | "
+                         f"{op['rows_in']} | {op['rows_out']} | {answers} | {other} |")
+    if not lines:
+        return ""
+    header = "| Arm | Query op | Kalypso operator | Rows in | Rows out | Answers began with | Other answers (samples) |"
+    return "\n".join(["", "Operators (first repeat):", "", header, "|---|---|---|---|---|---|---|",
+                      *lines]) + "\n"
 
 
 def drift_table(meta: dict, trials: list[dict], reference: str,
@@ -377,7 +402,8 @@ def drift_table(meta: dict, trials: list[dict], reference: str,
     lines = ["", "Work passed downstream (medians). Gold: "
              f"{meta.get('gold_filter_pass', 'n/a')} rows should pass the filter, "
              f"{gold_pairs} final outputs are expected.", "",
-             "| Arm | Rows past first filter | Final outputs | Comparable |", "|---|---|---|---|"]
+             "| Arm | Rows past first filter | Pairs past join | Final outputs | Comparable |",
+             "|---|---|---|---|---|"]
     flagged = []
     for arm in meta["arms"]:
         if arm not in rows or not by_arm(trials).get(arm):
@@ -387,7 +413,8 @@ def drift_table(meta: dict, trials: list[dict], reference: str,
         note = "reference" if arm == reference else ("**no, work drifted**" if r["drifted"] else "yes")
         if r["drifted"]:
             flagged.append(arm)
-        lines.append(f"| `{arm}` | {fmt(r['filter_pass'])} | {fmt(r['final_out'])} | {note} |")
+        lines.append(f"| `{arm}` | {fmt(r['filter_pass'])} | {fmt(r['join_out'])} | "
+                     f"{fmt(r['final_out'])} | {note} |")
     if flagged:
         lines += ["", f"Drifted by more than {tolerance:.0%} from `{reference}`: "
                   + ", ".join(f"`{a}`" for a in flagged)

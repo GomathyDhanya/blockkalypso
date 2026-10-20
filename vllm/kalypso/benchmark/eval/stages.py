@@ -78,3 +78,27 @@ def filter_pass(trace: dict | None, right_rows: int | None) -> int | None:
             return out // right_rows if right_rows else None
         return out
     return None
+
+
+def rows_by_position(trace: dict | None) -> dict:
+    """Per query operator (its position in the ops list): rows in and out,
+    summed over stages, and how its answers began.
+
+    Positions are the same whether Kalypso fuses operators into one stage
+    (per-tuple) or runs each as its own stage (blocked), so arms compare.
+    """
+    out = {}
+    for stage in (trace or {}).get("stages", {}).values():
+        for op in stage.get("operator_rows", []) or []:
+            pos = op.get("position")
+            if pos is None:
+                continue
+            row = out.setdefault(pos, {"operators": [], "rows_in": 0, "rows_out": 0,
+                                       "answers": {}, "other_samples": []})
+            row["operators"].append(op["operator"])
+            row["rows_in"] += op.get("rows_in", 0)
+            row["rows_out"] += op.get("rows_out", 0)
+            for head, n in (op.get("answers") or {}).items():
+                row["answers"][head] = row["answers"].get(head, 0) + n
+            row["other_samples"] += op.get("other_samples", [])[:3 - len(row["other_samples"])]
+    return out

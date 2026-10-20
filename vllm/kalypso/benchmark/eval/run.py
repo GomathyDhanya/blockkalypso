@@ -25,7 +25,7 @@ from pathlib import Path
 import httpx
 
 from . import metrics
-from .stages import filter_pass, summarize_trace
+from .stages import filter_pass, rows_by_position, summarize_trace
 from .arms import DEFAULT_ARMS, ArmError, check_arm, parse_arm, run_arm
 from .workloads import WORKLOADS
 
@@ -173,7 +173,13 @@ async def trial(client, args, spec, workload, model, server_pid) -> dict:
     if workload.kind == "pipeline":
         # The work the pipeline actually passed downstream; compared across
         # arms in report.drift_table.
-        record["filter_pass"] = filter_pass(result.trace, len(workload.right_rows))
+        by_pos = rows_by_position(result.trace)
+        record["operators"] = {str(k): v for k, v in sorted(by_pos.items())}
+        ops = [s["op"] for s in workload.stages]
+        first_filter, join = ops.index("sem_filter"), ops.index("join")
+        record["filter_pass"] = (by_pos[first_filter]["rows_out"] if first_filter in by_pos
+                                 else filter_pass(result.trace, len(workload.right_rows)))
+        record["join_out"] = by_pos[join]["rows_out"] if join in by_pos else None
         record["final_out"] = len(result.selected)
     if workload.kind == "map":
         record["missing_rows"] = sorted({str(r.idx) for r in workload.rows} - set(result.outputs))

@@ -10,7 +10,8 @@ from types import SimpleNamespace
 from vllm.kalypso.benchmark.eval import experiments, fetch_data, metrics, report
 from vllm.kalypso.benchmark.eval import arms as arms_mod
 from vllm.kalypso.benchmark.eval import run as run_mod
-from vllm.kalypso.benchmark.eval.stages import filter_pass, summarize_trace
+from vllm.kalypso.benchmark.eval.stages import (filter_pass, rows_by_position,
+                                                summarize_trace)
 from vllm.kalypso.benchmark.eval.arms import (ArmError, check_arm, direct_requests,
                                               kalypso_ops, parse_arm, pipeline_ops,
                                               parse_query_response)
@@ -452,8 +453,8 @@ def test_drift_table_flags_arms_that_changed_the_work():
     assert not rows["kalypso_block:1/1x17"]["drifted"]        # 27 vs 28 is within 10%
     assert not rows["kalypso_per_tuple"]["drifted"]
     table = report.drift_table(meta, trials, "kalypso_per_tuple")
-    assert "| `kalypso_block:2/1x17` | 1 | 7 | **no, work drifted** |" in table
-    assert "| `kalypso_block:1/1x17` | 2 | 27 | yes |" in table
+    assert "| `kalypso_block:2/1x17` | 1 | n/a | 7 | **no, work drifted** |" in table
+    assert "| `kalypso_block:1/1x17` | 2 | n/a | 27 | yes |" in table
     assert "Gold: 2 rows should pass the filter, 18 final outputs are expected." in table
     assert report.drift_table(_meta(), trials, "kalypso_per_tuple") == ""
 
@@ -663,3 +664,30 @@ def test_materialized_arm_sends_the_flag():
     asyncio.run(arms_mod.run_kalypso(Client(), "http://x", w, "m",
                                      parse_arm("kalypso_block:4/1x17/4")))
     assert "materialize" not in sent
+
+
+def test_rows_by_position_sums_operators_across_stages():
+    trace = {"stages": {
+        "4": {"operator_rows": [{"operator": "SemFilter", "position": 0, "rows_in": 32,
+                                 "rows_out": 16, "answers": {"true": 16, "false": 16},
+                                 "other_samples": []}]},
+        "5": {"operator_rows": [
+            {"operator": "SemFilter", "position": 1, "rows_in": 512, "rows_out": 13,
+             "answers": {"true": 13, "false": 499}, "other_samples": []},
+            {"operator": "SemFilter", "position": 2, "rows_in": 13, "rows_out": 0,
+             "answers": {"false": 12, "other": 1}, "other_samples": ["the papers"]}]}}}
+    by_pos = rows_by_position(trace)
+    assert (by_pos[1]["rows_in"], by_pos[1]["rows_out"]) == (512, 13)
+    assert by_pos[2]["answers"] == {"false": 12, "other": 1}
+    assert rows_by_position(None) == {}
+
+
+def test_drift_now_compares_the_join_output():
+    meta = _meta(kind="pipeline", rows=2, right_rows=17, positives=[[1, 1]],
+                 gold_filter_pass=2, arms=["kalypso_per_tuple", "kalypso_block:4/4x4/4"])
+    trials = [{**_trial("kalypso_per_tuple", 1, {}, 1.0), "filter_pass": 16,
+               "join_out": 13, "final_out": 0},
+              {**_trial("kalypso_block:4/4x4/4", 1, {}, 1.0), "filter_pass": 16,
+               "join_out": 2, "final_out": 0}]
+    rows = report.drift(meta, trials, "kalypso_per_tuple")
+    assert rows["kalypso_block:4/4x4/4"]["drifted"]        # same F1, same final, join differs
