@@ -611,3 +611,17 @@ def test_pipeline_experiment_arms_fit_the_workload():
             w = WORKLOADS[r.workload](r.n, **r.params)
             for arm in r.arms:
                 check_arm(parse_arm(arm), w)
+
+
+@needs_arxiv
+def test_arxiv_join_wording_option():
+    paper = load_arxiv_join(16, right=8, join_prompt="paper")
+    statement = load_arxiv_join(16, right=8, join_prompt="statement")
+    assert paper.instruction != statement.instruction
+    assert paper.positives == statement.positives          # same pairs, only wording
+    fjf = load_arxiv_pipeline(32, join_prompt="statement")
+    assert fjf.stages[1]["instruction"] == statement.instruction
+    with pytest.raises(ValueError):
+        load_arxiv_join(16, join_prompt="nope")
+    assert [r.params["join_prompt"] for r in experiments.check_join_prompt()] == [
+        "paper", "statement"]

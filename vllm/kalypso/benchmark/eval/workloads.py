@@ -377,6 +377,23 @@ def _same_topic(left, right):
         if l["group"].startswith("robotics/") and l["group"] == r["group"])
 
 
+# Kalypso's join template asks whether two contexts "together satisfy the
+# condition"; the paper's arXiv join condition is a question. ``join_prompt=
+# "statement"`` restates it as a statement, the form the paper's ContractNLI
+# join uses ("... Answer true only if ...").
+ARXIV_JOIN_PROMPTS = {
+    "paper": scenarios.CASE_2_JOIN_ARXIV,
+    "statement": ("The two papers study the same research topic. "
+                  "Answer true only if both papers clearly address the same topic."),
+}
+
+
+def _join_prompt(name: str) -> str:
+    if name not in ARXIV_JOIN_PROMPTS:
+        raise ValueError(f"join_prompt must be one of {sorted(ARXIV_JOIN_PROMPTS)}")
+    return ARXIV_JOIN_PROMPTS[name]
+
+
 def load_arxiv_filter(n: int | None = None, s: float = 0.5, seed: int = 0) -> Workload:
     """The paper's arXiv filter (CASE_2_FILTER_ARXIV) over ``n`` abstracts.
 
@@ -393,7 +410,7 @@ def load_arxiv_filter(n: int | None = None, s: float = 0.5, seed: int = 0) -> Wo
 
 
 def load_arxiv_join(n: int | None = None, right: int = 8, f: float = 1.0,
-                    seed: int = 0) -> Workload:
+                    seed: int = 0, join_prompt: str = "paper") -> Workload:
     """The paper's arXiv join (CASE_2_JOIN_ARXIV): ``n`` robotics papers x ``right``.
 
     Proxy label: both papers are robotics papers on the same task named in
@@ -406,7 +423,7 @@ def load_arxiv_join(n: int | None = None, right: int = 8, f: float = 1.0,
     return Workload(
         name="arxiv_join", kind=JOIN, data_path=_arxiv_dir(left).resolve(),
         right_path=_arxiv_dir(right_papers).resolve(),
-        instruction=scenarios.CASE_2_JOIN_ARXIV,
+        instruction=_join_prompt(join_prompt),
         rows=_arxiv_rows(left), right_rows=_arxiv_rows(right_papers),
         positives=_same_topic(left, right_papers),
         source_ids=tuple(p["id"] for p in left + right_papers),
@@ -414,7 +431,8 @@ def load_arxiv_join(n: int | None = None, right: int = 8, f: float = 1.0,
 
 
 def load_arxiv_pipeline(n: int | None = None, s: float = 0.5, f: float = 1.0,
-                        right: int = 32, seed: int = 0) -> Workload:
+                        right: int = 32, seed: int = 0,
+                        join_prompt: str = "paper") -> Workload:
     """The paper's arXiv FILTER -> JOIN -> FILTER query (handoff's F1 -> Join -> F2).
 
     F1: CASE_2_FILTER_ARXIV (AI robotics?), join: CASE_2_JOIN_ARXIV (similar
@@ -430,14 +448,14 @@ def load_arxiv_pipeline(n: int | None = None, s: float = 0.5, f: float = 1.0,
     return Workload(
         name="arxiv_fjf", kind=PIPELINE, data_path=_arxiv_dir(left).resolve(),
         right_path=_arxiv_dir(right_papers).resolve(),
-        instruction=scenarios.CASE_2_JOIN_ARXIV,
+        instruction=_join_prompt(join_prompt),
         rows=_arxiv_rows(left), right_rows=_arxiv_rows(right_papers),
         positives=frozenset((i, j) for i, j in joined
                             if _mentions_image_dataset(left[i - 1])
                             or _mentions_image_dataset(right_papers[j - 1])),
         source_ids=tuple(p["id"] for p in left + right_papers),
         stages=({"op": "sem_filter", "prompt": scenarios.CASE_2_FILTER_ARXIV},
-                {"op": "join", "instruction": scenarios.CASE_2_JOIN_ARXIV},
+                {"op": "join", "instruction": _join_prompt(join_prompt)},
                 {"op": "sem_filter", "prompt": scenarios.CASE_3_FILTER_3}),
         # Handoff E4: one block size k for F1, the join (k x k) and F2.
         default_arms=("kalypso_per_tuple",) + tuple(

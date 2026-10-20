@@ -86,6 +86,19 @@ def check_pipeline_data() -> list[Run]:
     ]
 
 
+def check_join_prompt() -> list[Run]:
+    """Does the arXiv join's wording decide the answers? Paper vs statement.
+
+    Per-pair Kalypso and direct vLLM (which records every raw answer) on the
+    16 x 8 join with f = 1, once per wording.
+    """
+    arms = ("kalypso_per_tuple", "vllm_direct")
+    return [Run(f"join_{name}", "arxiv_join", arms, n=16,
+                params={"right": 8, "f": 1.0, "join_prompt": name},
+                condition=f"join wording: {name}")
+            for name in ("paper", "statement")]
+
+
 PIPELINE_N, PIPELINE_RIGHT = 32, 32
 
 
@@ -127,7 +140,7 @@ def e7(arms=None) -> list[Run]:
 
 
 EXPERIMENTS = {"E1": e1, "E2": e2, "E3": e3, "E4": e4, "E5": e5, "E6": e6, "E7": e7,
-               "CHECK": check_pipeline_data}
+               "CHECK": check_pipeline_data, "JOINCHECK": check_join_prompt}
 TAKES_ARMS = {"E4", "E5", "E6", "E7"}
 
 
