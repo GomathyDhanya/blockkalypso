@@ -778,3 +778,20 @@ def test_regret_marks_but_keeps_drifted_arms(tmp_path):
     result = regret.analyze([p])
     assert result["conditions"][0]["best"] == "kalypso_block:2/2x2/2"     # not excluded
     assert "`kalypso_block:2/2x2/2` *" in regret.to_markdown(result)
+
+
+def test_e10_collects_accuracy_from_results(tmp_path):
+    from vllm.kalypso.benchmark.eval import e10
+    d = tmp_path / "m2-E3-test"; d.mkdir()
+    _results_file(d / "n16.jsonl", {"kalypso_per_tuple": 2.0, "kalypso_block:4": 1.0,
+                                    "kalypso_block:16": None})
+    rows = e10.collect([d])
+    by = {r["blocks"]: r for r in rows}
+    assert set(by) == {"per-tuple", "4", "16"}
+    assert by["per-tuple"]["agreement"] == 1.0 and by["16"]["failed"] == 1
+    text = e10.to_markdown(rows)
+    assert "| m2-E3-test | n16 | 16 | failed (1 trials) |" in text
+    assert by["per-tuple"]["f1_vs_reference"] == 1.0
+    assert e10.block_label("kalypso_per_tuple+materialized") == "per-tuple+materialized"
+    assert e10.block_label("kalypso_block:4/4x4/4+materialized") == "4/4x4/4+materialized"
+    assert e10.block_label("kalypso_block:16@4096") == "16@4096"
