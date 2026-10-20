@@ -10,8 +10,13 @@ Arm names:
   kalypso_block:N@T     the same, also capped at T estimated tokens per block
                         (max_block_tokens; Kalypso's Level 2 sizing)
   kalypso_block:KxJ     BlockSemJoin with K left x J right rows (join workloads)
+  kalypso_block:trummer BlockSemJoin sized by Trummer's cost model (Level 3);
+                        also usable as the join size in a pipeline arm
   <arm>+materialized    any Kalypso arm, with each stage finishing before the
                         next starts (no pipelining; experiment E8)
+  <arm>+coalesce        any Kalypso arm, with the block join's output merged
+                        into full blocks for the next block stage (E9);
+                        the two suffixes can be combined
   kalypso_block:N/KxJ   pipelines: one size per filter or join stage, in order,
                         separated by "/" (1 or 1x1 keeps that stage per-tuple);
                         map stages always run per-tuple
@@ -66,6 +71,8 @@ class ArmSpec:
     budgets: tuple[int | None, ...] | None = None
     # Run stage by stage instead of pipelined ("+materialized").
     materialize: bool = False
+    # Merge join output into full blocks for the next stage ("+coalesce").
+    coalesce: bool = False
 
     @property
     def block(self) -> tuple[int, ...] | None:
@@ -73,12 +80,19 @@ class ArmSpec:
         return self.groups[0] if self.groups else None
 
 
-def _size(text: str) -> tuple[tuple[int, ...], int | None]:
+TRUMMER = ("trummer",)
+# Tokens per call the cost model may plan for: the Modal server's context.
+TRUMMER_CONTEXT = 16384
+
+
+def _size(text: str) -> tuple[tuple, int | None]:
     """``"16@4096"`` -> ``((16,), 4096)``; ``"2x8"`` -> ``((2, 8), None)``.
 
     Returns ``((), None)`` when the text is not a valid size. A token budget
     only applies to a filter block of more than one row.
     """
+    if text.lower() == "trummer":
+        return TRUMMER, None
     size_text, sep, budget_text = text.partition("@")
     try:
         size = tuple(int(part) for part in size_text.lower().split("x"))
@@ -92,26 +106,31 @@ def _size(text: str) -> tuple[tuple[int, ...], int | None]:
     return size, budget
 
 
-MATERIALIZED = "+materialized"
+MATERIALIZED, COALESCE = "+materialized", "+coalesce"
 
 
 def parse_arm(name: str) -> ArmSpec:
-    base = name.removesuffix(MATERIALIZED)
-    materialize = base != name
+    base, flags = name, set()
+    while base.endswith((MATERIALIZED, COALESCE)):
+        suffix = MATERIALIZED if base.endswith(MATERIALIZED) else COALESCE
+        flags.add(suffix)
+        base = base.removesuffix(suffix)
+    materialize, coalesce = MATERIALIZED in flags, COALESCE in flags
     kind, _, sizes = base.partition(":")
     if kind == "kalypso_per_tuple" and not sizes:
-        return ArmSpec(name, kind, materialize=materialize)
-    if kind == "vllm_direct" and not sizes and not materialize:
+        return ArmSpec(name, kind, materialize=materialize, coalesce=coalesce)
+    if kind == "vllm_direct" and not sizes and not flags:
         return ArmSpec(name, kind)
     if kind == "kalypso_block" and sizes:
         parsed = [_size(part) for part in sizes.split("/")]
         if all(size for size, _ in parsed):
             return ArmSpec(name, kind, tuple(size for size, _ in parsed),
-                           tuple(budget for _, budget in parsed), materialize)
+                           tuple(budget for _, budget in parsed), materialize, coalesce)
     raise ValueError(
         f"bad arm {name!r}; use kalypso_per_tuple, vllm_direct, "
         "kalypso_block:N or N@T (filter), kalypso_block:KxJ (join) or "
-        "kalypso_block:N/KxJ (pipeline), optionally ending in +materialized")
+        "kalypso_block:N/KxJ (pipeline), optionally ending in +materialized "
+        "and/or +coalesce")
 
 
 def _blockable(workload: Workload) -> list[dict]:
@@ -129,7 +148,9 @@ def check_arm(spec: ArmSpec, workload: Workload) -> None:
             raise ValueError(f"{spec.name}: give one size per filter/join stage "
                              f"({len(stages)}), separated by '/'")
         for size, stage in zip(spec.groups, stages):
-            if len(size) != (2 if stage["op"] == "join" else 1):
+            if size == TRUMMER and stage["op"] == "join":
+                continue
+            if size == TRUMMER or len(size) != (2 if stage["op"] == "join" else 1):
                 raise ValueError(f"{spec.name}: {stage['op']} takes "
                                  f"{'KxJ' if stage['op'] == 'join' else 'N'}, got {size}")
         return
@@ -139,9 +160,11 @@ def check_arm(spec: ArmSpec, workload: Workload) -> None:
         raise ValueError(f"{spec.name}: '/' sizes are for pipeline workloads")
     if workload.kind == MAP:
         raise ValueError(f"{spec.name}: there is no block operator for maps")
+    if spec.block == TRUMMER and workload.kind != JOIN:
+        raise ValueError(f"{spec.name}: trummer sizes joins only")
     if workload.kind == FILTER and len(spec.block) != 1:
         raise ValueError(f"{spec.name}: filter blocks take one size, e.g. kalypso_block:10")
-    if workload.kind == JOIN and len(spec.block) != 2:
+    if workload.kind == JOIN and spec.block != TRUMMER and len(spec.block) != 2:
         raise ValueError(f"{spec.name}: join blocks take KxJ, e.g. kalypso_block:5x5")
 
 
@@ -169,8 +192,7 @@ def pipeline_ops(workload: Workload, groups=None, budgets=None) -> list[dict]:
         else:
             args = {"instruction": stage["instruction"],
                     "right_table": str(workload.right_path)}
-            if size and size != (1, 1):
-                args["left_block_size"], args["right_block_size"] = size
+            _join_size(args, size, workload)
             ops.append({"op": OpName.JOIN, "args": args})
     return ops
 
@@ -184,9 +206,19 @@ def kalypso_ops(workload: Workload, block: tuple[int, ...] | None = None,
         return [{"op": OpName.SEM_FILTER,
                  "args": _filter_args(workload.instruction, block, budget)}]
     args = {"instruction": workload.instruction, "right_table": str(workload.right_path)}
-    if block:
-        args["left_block_size"], args["right_block_size"] = block
+    _join_size(args, block, workload)
     return [{"op": OpName.JOIN, "args": args}]
+
+
+def _join_size(args: dict, size, workload: Workload) -> None:
+    """Fixed K x J, or Trummer's cost model with the workload's selectivity."""
+    if size == TRUMMER:
+        args["block_sizing"] = "trummer"
+        args["context_tokens"] = TRUMMER_CONTEXT
+        if workload.join_selectivity is not None:
+            args["selectivity"] = workload.join_selectivity
+    elif size and size != (1, 1):
+        args["left_block_size"], args["right_block_size"] = size
 
 
 def parse_query_response(workload: Workload, body: dict) -> ArmOutput:
@@ -222,6 +254,8 @@ async def run_kalypso(client: httpx.AsyncClient, base_url: str, workload: Worklo
     }
     if spec and spec.materialize:
         payload["materialize"] = True
+    if spec and spec.coalesce:
+        payload["coalesce"] = True
     response = await client.post(f"{base_url}/v1/semantic/query", json=payload)
     if response.status_code >= 400:
         raise ArmError(f"/v1/semantic/query returned {response.status_code}: "

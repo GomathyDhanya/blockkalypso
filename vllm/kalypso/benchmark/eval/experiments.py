@@ -149,9 +149,41 @@ def e8(arms=None) -> list[Run]:
                 params={"s": 0.5, "f": 1.0}, condition="s = 0.5, f = 1")]
 
 
+def e9(arms=None) -> list[Run]:
+    """Block reforming off vs on: each setting with and without coalescing
+    Filter2's input, at s = 0.5, f = 1 and at the two low-occupancy corners
+    of E6/E7 (low selectivity, low fanout)."""
+    if not arms:
+        raise ValueError("E9 needs --arms: the best block setting(s)")
+    base = [a.removesuffix("+coalesce") for a in arms if a != "kalypso_per_tuple"]
+    paired = ("kalypso_per_tuple",) + tuple(x for a in base for x in (a, a + "+coalesce"))
+    conditions = [("s05_f1", 0.5, 1.0), ("s01_f1", 0.1, 1.0), ("s05_f02", 0.5, 0.2)]
+    return [Run(name, "arxiv_fjf", paired, n=PIPELINE_N, params={"s": s, "f": f},
+                condition=f"s = {s}, f = {f}")
+            for name, s, f in conditions]
+
+
+def e11() -> list[Run]:
+    """Trummer's cost model (Level 3) vs the measured best.
+
+    The model's (k, j) runs next to the fastest shapes measured on
+    Qwen2.5-14B: 8x4 for the join alone (E2) and 4/4x4/4 for the pipeline
+    (E4/E5). The chosen sizes are in each trace's stage "sizing".
+    """
+    return [
+        Run("join_16x8", "arxiv_join",
+            ("kalypso_per_tuple", "kalypso_block:trummer", "kalypso_block:8x4"), n=16,
+            params={"right": 8, "f": 1.0}, condition="join alone, 16 x 8, f = 1"),
+        Run("fjf_s05_f1", "arxiv_fjf",
+            ("kalypso_per_tuple", "kalypso_block:4/trummer/4", "kalypso_block:4/4x4/4"),
+            n=PIPELINE_N, params={"s": 0.5, "f": 1.0}, condition="pipeline, s = 0.5, f = 1"),
+    ]
+
+
 EXPERIMENTS = {"E1": e1, "E2": e2, "E3": e3, "E4": e4, "E5": e5, "E6": e6, "E7": e7,
-               "E8": e8, "CHECK": check_pipeline_data, "JOINCHECK": check_join_prompt}
-TAKES_ARMS = {"E4", "E5", "E6", "E7", "E8"}
+               "E8": e8, "E9": e9, "E11": e11, "CHECK": check_pipeline_data,
+               "JOINCHECK": check_join_prompt}
+TAKES_ARMS = {"E4", "E5", "E6", "E7", "E8", "E9"}
 
 
 def build(name: str, arms=None) -> list[Run]:
@@ -199,7 +231,7 @@ def main() -> None:
     parser.add_argument("--allow-warm-cache", action="store_true")
     parser.add_argument("--timeout", type=float, default=3600)
     parser.add_argument("--arms", default=None, type=lambda s: s.split(","),
-                        help="E4-E8: override the arms (E6-E8 need E4/E5's best settings)")
+                        help="E4-E9: override the arms (E6-E9 need E4/E5's best settings)")
     args = parser.parse_args()
     args.base_url = args.base_url.rstrip("/").removesuffix("/v1")
     print(f"wrote {asyncio.run(run_experiment(args.experiment, args))}")

@@ -3,11 +3,12 @@
 import csv
 import io
 import json
+import math
 
 import pytest
 from types import SimpleNamespace
 
-from vllm.kalypso.benchmark.eval import experiments, fetch_data, metrics, report
+from vllm.kalypso.benchmark.eval import experiments, fetch_data, metrics, regret, report
 from vllm.kalypso.benchmark.eval import arms as arms_mod
 from vllm.kalypso.benchmark.eval import run as run_mod
 from vllm.kalypso.benchmark.eval.stages import (filter_pass, rows_by_position,
@@ -550,7 +551,7 @@ def test_experiment_grids_follow_the_plan():
 @needs_arxiv
 def test_experiment_arms_fit_their_workloads():
     for name in experiments.EXPERIMENTS:
-        arms = ["kalypso_block:4/4x4/4"] if name in ("E6", "E7", "E8") else None
+        arms = ["kalypso_block:4/4x4/4"] if name in ("E6", "E7", "E8", "E9") else None
         for r in experiments.build(name, arms):
             w = WORKLOADS[r.workload](r.n, **r.params)
             for arm in r.arms:
@@ -691,3 +692,89 @@ def test_drift_now_compares_the_join_output():
                "join_out": 2, "final_out": 0}]
     rows = report.drift(meta, trials, "kalypso_per_tuple")
     assert rows["kalypso_block:4/4x4/4"]["drifted"]        # same F1, same final, join differs
+
+
+def test_coalesce_arms_and_e9_grid():
+    spec = parse_arm("kalypso_block:4/4x4/4+coalesce")
+    assert spec.coalesce and not spec.materialize
+    both = parse_arm("kalypso_block:4/4x4/4+coalesce+materialized")
+    assert both.coalesce and both.materialize and both.groups == ((4,), (4, 4), (4,))
+    assert parse_arm("kalypso_block:4/4x4/4+materialized+coalesce").coalesce
+    with pytest.raises(ValueError):
+        parse_arm("vllm_direct+coalesce")
+    runs = experiments.e9(["kalypso_block:4/4x4/4"])
+    assert [(r.params["s"], r.params["f"]) for r in runs] == [(0.5, 1.0), (0.1, 1.0), (0.5, 0.2)]
+    assert runs[0].arms == ("kalypso_per_tuple", "kalypso_block:4/4x4/4",
+                            "kalypso_block:4/4x4/4+coalesce")
+    with pytest.raises(ValueError):
+        experiments.e9()
+
+
+def test_coalesce_arm_sends_the_flag():
+    import asyncio
+    sent = {}
+
+    class Client:
+        async def post(self, url, json):
+            sent.clear(); sent.update(json)
+            return SimpleNamespace(status_code=200, json=lambda: {"results": []})
+
+    w = _sample_pipeline()
+    asyncio.run(arms_mod.run_kalypso(Client(), "http://x", w, "m",
+                                     parse_arm("kalypso_block:4/1x17+coalesce")))
+    assert sent["coalesce"] is True and "materialize" not in sent
+
+
+def test_trummer_arms_and_e11():
+    spec = parse_arm("kalypso_block:trummer")
+    assert spec.block == ("trummer",)
+    assert parse_arm("kalypso_block:4/trummer/4").groups == ((4,), ("trummer",), (4,))
+    with pytest.raises(ValueError):
+        check_arm(spec, load_reviews())                    # filters are not sized by it
+    w = _sample_pipeline()
+    w = Workload(**{**w.__dict__, "join_selectivity": 0.25})
+    check_arm(parse_arm("kalypso_block:4/trummer"), w)
+    args = pipeline_ops(w, parse_arm("kalypso_block:4/trummer").groups)[1]["args"]
+    assert args["block_sizing"] == "trummer" and args["selectivity"] == 0.25
+    assert "left_block_size" not in args
+    runs = experiments.e11()
+    assert [r.workload for r in runs] == ["arxiv_join", "arxiv_fjf"]
+    assert "kalypso_block:trummer" in runs[0].arms and "kalypso_block:8x4" in runs[0].arms
+
+
+@needs_arxiv
+def test_arxiv_workloads_carry_join_selectivity():
+    j = load_arxiv_join(16, right=8, f=1.0)
+    assert j.join_selectivity == len(j.positives) / (16 * 8) == 0.125
+    p = load_arxiv_pipeline(32, s=0.5, f=1.0)
+    assert 0 < p.join_selectivity <= 1
+
+
+def test_regret_follows_the_plan(tmp_path):
+    a = _results_file(tmp_path / "n16.jsonl", {"kalypso_per_tuple": 10.0,
+                                               "kalypso_block:4": 2.0, "kalypso_block:16": 2.1})
+    b = _results_file(tmp_path / "n128.jsonl", {"kalypso_per_tuple": 20.0,
+                                                "kalypso_block:4": 3.0, "kalypso_block:16": None})
+    result = regret.analyze([a, b])
+    labels = [c["label"] for c in result["conditions"]]
+    assert result["conditions"][0]["best"] == "kalypso_block:4"
+    assert math.isinf(result["regrets"]["kalypso_block:16"][labels[1]])   # failed there
+    assert result["static"] == "kalypso_block:4" and result["exceeded"] == []
+    text = regret.to_markdown(result)
+    assert "| `kalypso_block:16` | 1.05 | failed | failed |" in text
+    assert "Verdict: a static k is enough" in text
+    c = _results_file(tmp_path / "x.jsonl", {"kalypso_per_tuple": 9.0,
+                                             "kalypso_block:4": 9.0, "kalypso_block:16": 3.0})
+    result = regret.analyze(regret.condition_files([tmp_path]))
+    assert result["static"] == "kalypso_block:4"
+    assert result["exceeded"] == [f"{tmp_path.name}/x"]
+    assert "dynamic k / reforming is needed" in regret.to_markdown(result)
+
+
+def test_regret_marks_but_keeps_drifted_arms(tmp_path):
+    p = _results_file(tmp_path / "p.jsonl",
+                      {"kalypso_per_tuple": 10.0, "kalypso_block:2/2x2/2": 1.0},
+                      kind="pipeline", drift={"kalypso_block:2/2x2/2": (1, 2)})
+    result = regret.analyze([p])
+    assert result["conditions"][0]["best"] == "kalypso_block:2/2x2/2"     # not excluded
+    assert "`kalypso_block:2/2x2/2` *" in regret.to_markdown(result)
