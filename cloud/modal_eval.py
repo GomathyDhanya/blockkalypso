@@ -88,7 +88,7 @@ DEFAULT_GPU = "L4"
               volumes={"/results": results, "/cache": hf_cache})
 def run_suite(model: str, workloads: str, out: str, warmup: int, repeats: int,
               max_model_len: int, git_sha: str, git_dirty: bool,
-              experiment: str = "") -> str:
+              experiment: str = "", arms: str = "") -> str:
     """Run eval.experiments <experiment>, or eval.suite over ``workloads``."""
     import os
     server = _start_server(model, max_model_len)
@@ -104,6 +104,7 @@ def run_suite(model: str, workloads: str, out: str, warmup: int, repeats: int,
                 "--base-url", f"http://127.0.0.1:{PORT}", "--server-pid", str(server.pid),
                 "--warmup", str(warmup), "--repeats", str(repeats),
                 "--out-dir", str(out_dir),
+                *(["--arms", arms] if arms and experiment else []),
             ], check=True, env={**os.environ, "EVAL_GIT_SHA": git_sha,
                                 "EVAL_GIT_DIRTY": "1" if git_dirty else "0"})
         finally:
@@ -126,7 +127,7 @@ def _git(*args: str) -> str:
 @app.local_entrypoint()
 def main(model: str = "Qwen/Qwen2.5-0.5B-Instruct", workloads: str = "reviews",
          experiment: str = "", out: str = "", warmup: int = 1, repeats: int = 3,
-         max_model_len: int = 16384, gpu: str = DEFAULT_GPU):
+         max_model_len: int = 16384, gpu: str = DEFAULT_GPU, arms: str = ""):
     sha = _git("rev-parse", "HEAD")
     dirty = bool(_git("status", "--porcelain", "--untracked-files=no"))
     out = out or f"{time.strftime('%Y%m%d-%H%M%S')}-{model.split('/')[-1]}"
@@ -136,6 +137,6 @@ def main(model: str = "Qwen/Qwen2.5-0.5B-Instruct", workloads: str = "reviews",
     # A bigger model may need more GPU memory than the default L4 (24 GB).
     function = run_suite if gpu == DEFAULT_GPU else run_suite.with_options(gpu=gpu)
     summary = function.remote(model, workloads, out, warmup, repeats, max_model_len,
-                              sha, dirty, experiment)
+                              sha, dirty, experiment, arms)
     print(summary)
     print(f"\nDownload: modal volume get blockkalypso-results {out} ./results-{out}")
