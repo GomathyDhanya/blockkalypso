@@ -16,6 +16,7 @@ import argparse
 import asyncio
 import datetime as dt
 import json
+import os
 import platform
 import subprocess
 import sys
@@ -68,8 +69,10 @@ def run_metadata(args, model: str, workload, server_pid: int | None) -> dict:
     return {
         "type": "meta",
         "timestamp": dt.datetime.now().astimezone().isoformat(timespec="seconds"),
-        "git_sha": _run(git + ["rev-parse", "HEAD"]),
-        "git_dirty": bool(_run(git + ["status", "--porcelain", "--untracked-files=no"])),
+        # Off a checkout (e.g. in a cloud image) the launcher passes these.
+        "git_sha": os.environ.get("EVAL_GIT_SHA") or _run(git + ["rev-parse", "HEAD"]),
+        "git_dirty": (os.environ["EVAL_GIT_DIRTY"] == "1" if "EVAL_GIT_DIRTY" in os.environ
+                      else bool(_run(git + ["status", "--porcelain", "--untracked-files=no"]))),
         "model": model,
         "base_url": args.base_url,
         "workload": workload.name,
