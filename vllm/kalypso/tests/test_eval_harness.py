@@ -9,12 +9,15 @@ import pytest
 from vllm.kalypso.benchmark.eval import fetch_data, metrics, report
 from vllm.kalypso.benchmark.eval.stages import summarize_trace
 from vllm.kalypso.benchmark.eval.arms import (ArmError, check_arm, direct_requests,
-                                              kalypso_ops, parse_arm,
+                                              kalypso_ops, parse_arm, pipeline_ops,
                                               parse_query_response)
 from vllm.kalypso.benchmark.eval.workloads import (BIODEX_ARTICLES, FILTER, FULL_DATA,
-                                                   JOIN, load_biodex, load_contractnli,
+                                                   JOIN, PIPELINE, Row, Workload,
+                                                   load_biodex, load_contractnli,
+                                                   load_contractnli_pipeline,
                                                    load_join5x5, load_medec,
                                                    load_medec_full, load_reviews)
+from vllm.kalypso.controller.plan import SemanticPlan
 from vllm.kalypso.data import data
 from vllm.kalypso.sem_ops.filters import SemFilter
 from vllm.kalypso.sem_ops.joins import CartesianProduct
@@ -331,3 +334,76 @@ def test_medec_full_workload_is_seeded_and_matches_kalypso_prompts(fake_kv_manag
     ctxs = list(data._data_source(None, str(a.data_path), None))
     for ctx, (_, messages, _) in zip(ctxs, direct_requests(a)):
         assert SemFilter(a.instruction)._build_prompts(ctx)[1] == messages
+
+
+def _sample_pipeline():
+    base = SAMPLE / "contract-nli"
+    rows = [Row(i, f"c{i}") for i in (1, 2)]
+    right = [Row(i, f"h{i}") for i in (1, 2, 3)]
+    return Workload(
+        name="p", kind=PIPELINE, data_path=base / "contracts", instruction="j",
+        rows=rows, right_path=base / "hypotheses", right_rows=right,
+        positives=frozenset({(1, 2), (2, 3)}),
+        stages=({"op": "sem_filter", "prompt": "valid?"},
+                {"op": "join", "instruction": "entails?"},
+                {"op": "sem_map", "prompt": "explain"}))
+
+
+def test_pipeline_arms_parse_and_check():
+    w = _sample_pipeline()
+    spec = parse_arm("kalypso_block:4/1x17")
+    assert spec.groups == ((4,), (1, 17)) and spec.block == (4,)
+    check_arm(spec, w)
+    check_arm(parse_arm("kalypso_per_tuple"), w)
+    for bad in ("kalypso_block:4", "kalypso_block:1x17/4", "kalypso_block:4/1x17/2"):
+        with pytest.raises(ValueError):
+            check_arm(parse_arm(bad), w)
+    with pytest.raises(ValueError):
+        check_arm(parse_arm("vllm_direct"), w)
+    with pytest.raises(ValueError):
+        check_arm(parse_arm("kalypso_block:4/2"), load_reviews())
+
+
+def test_pipeline_ops_build_the_intended_kalypso_plan(fake_kv_manager):
+    w = _sample_pipeline()
+    assert pipeline_ops(w) == [
+        {"op": "sem_filter", "args": {"prompt": "valid?"}},
+        {"op": "join", "args": {"instruction": "entails?", "right_table": str(w.right_path)}},
+        {"op": "sem_map", "args": {"prompt": "explain"}},
+    ]
+    assert pipeline_ops(w, parse_arm("kalypso_block:1/1x1").groups) == pipeline_ops(w)
+    blocked = pipeline_ops(w, parse_arm("kalypso_block:4/1x17").groups)
+    assert blocked[0]["args"]["block_size"] == 4
+    assert (blocked[1]["args"]["left_block_size"], blocked[1]["args"]["right_block_size"]) == (1, 17)
+    physical = SemanticPlan(executor=None).parse_ops(blocked)
+    assert [type(op).__name__ for op in physical] == ["BlockSemFilter", "BlockSemJoin", "SemMap"]
+    assert physical[1].right_block_size == 17 and len(physical[1].right_table) == 10
+    per_tuple = SemanticPlan(executor=None).parse_ops(pipeline_ops(w))
+    assert [type(op).__name__ for op in per_tuple] == ["SemFilter", "CartesianProduct",
+                                                      "SemFilter", "SemMap"]
+
+
+def test_pipeline_scoring_uses_real_row_ids():
+    w = _sample_pipeline()
+    out = parse_query_response(w, {"results": [
+        {"idx": 1, "right_idx": 2, "outputs": [{"op": "m", "value": "because"}]}]})
+    assert out.selected == {(1, 2)} and out.outputs == {"1,2": "because"}
+    meta = _meta(kind="pipeline", rows=2, right_rows=3, row_ids=[1, 2],
+                 right_row_ids=[1, 2, 3], positives=[[1, 2], [2, 3]],
+                 arms=["kalypso_per_tuple", "kalypso_block:2/2x3"])
+    trials = [_trial("kalypso_per_tuple", 1, {}, 1.0, selected=[[1, 2], [2, 3]]),
+              _trial("kalypso_block:2/2x3", 1, {}, 1.0, selected=[[1, 2]])]
+    q = report.quality(meta, trials[1])
+    assert (q["tp"], q["fp"], q["fn"], q["tn"]) == (1, 0, 1, 4)
+    assert report.agreement(meta, trials, "kalypso_per_tuple")["kalypso_block:2/2x3"][
+        "vs_reference"] == 5 / 6
+
+
+@needs_full_data
+def test_contractnli_pipeline_workloads():
+    fjm, fj = load_contractnli_pipeline(2), load_contractnli_pipeline(2, with_map=False)
+    assert [s["op"] for s in fjm.stages] == ["sem_filter", "join", "sem_map"]
+    assert [s["op"] for s in fj.stages] == ["sem_filter", "join"]
+    assert fjm.positives == load_contractnli(2).positives
+    for arm in fjm.default_arms:
+        check_arm(parse_arm(arm), fjm)

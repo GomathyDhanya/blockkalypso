@@ -8,6 +8,9 @@ Arm names:
   vllm_direct           the same per-row prompts sent straight to vLLM
   kalypso_block:N       BlockSemFilter with block_size N (filter workloads)
   kalypso_block:KxJ     BlockSemJoin with K left x J right rows (join workloads)
+  kalypso_block:N/KxJ   pipelines: one size per filter or join stage, in order,
+                        separated by "/" (1 or 1x1 keeps that stage per-tuple);
+                        map stages always run per-tuple
 """
 
 import asyncio
@@ -23,7 +26,7 @@ from vllm.kalypso.sem_ops.base import OpName
 from vllm.kalypso.sem_ops.filters import SemFilter
 from vllm.kalypso.sem_ops.prompt_utils import get_data_prompt, get_prompt
 
-from .workloads import FILTER, JOIN, MAP, Workload
+from .workloads import FILTER, JOIN, MAP, PIPELINE, Workload
 
 # Kalypso retries a truncated map at this limit (SemMap.MAX_TOKEN_LIMIT), so
 # it is the most a Kalypso map output can be; the direct arm uses it up front.
@@ -53,28 +56,60 @@ class ArmError(RuntimeError):
 class ArmSpec:
     name: str                          # as given on the command line
     kind: str                          # "kalypso_per_tuple", "vllm_direct", "kalypso_block"
-    block: tuple[int, ...] | None = None
+    # One size per blockable stage: (N,) for a filter, (K, J) for a join.
+    groups: tuple[tuple[int, ...], ...] | None = None
+
+    @property
+    def block(self) -> tuple[int, ...] | None:
+        """The single block size of a one-operator arm."""
+        return self.groups[0] if self.groups else None
+
+
+def _size(text: str) -> tuple[int, ...]:
+    try:
+        size = tuple(int(part) for part in text.lower().split("x"))
+    except ValueError:
+        return ()
+    return size if len(size) in (1, 2) and all(b >= 1 for b in size) else ()
 
 
 def parse_arm(name: str) -> ArmSpec:
-    kind, _, size = name.partition(":")
-    if kind in ("kalypso_per_tuple", "vllm_direct") and not size:
+    kind, _, sizes = name.partition(":")
+    if kind in ("kalypso_per_tuple", "vllm_direct") and not sizes:
         return ArmSpec(name, kind)
-    if kind == "kalypso_block" and size:
-        try:
-            block = tuple(int(part) for part in size.lower().split("x"))
-        except ValueError:
-            block = ()
-        if len(block) in (1, 2) and all(b >= 1 for b in block):
-            return ArmSpec(name, kind, block)
+    if kind == "kalypso_block" and sizes:
+        groups = tuple(_size(part) for part in sizes.split("/"))
+        if all(groups):
+            return ArmSpec(name, kind, groups)
     raise ValueError(
         f"bad arm {name!r}; use kalypso_per_tuple, vllm_direct, "
-        "kalypso_block:N (filter) or kalypso_block:KxJ (join)")
+        "kalypso_block:N (filter), kalypso_block:KxJ (join) or "
+        "kalypso_block:N/KxJ (pipeline)")
+
+
+def _blockable(workload: Workload) -> list[dict]:
+    return [s for s in workload.stages if s["op"] in ("sem_filter", "join")]
 
 
 def check_arm(spec: ArmSpec, workload: Workload) -> None:
+    if workload.kind == PIPELINE:
+        if spec.kind == "vllm_direct":
+            raise ValueError("vllm_direct runs single operators only, not pipelines")
+        if spec.kind != "kalypso_block":
+            return
+        stages = _blockable(workload)
+        if len(spec.groups) != len(stages):
+            raise ValueError(f"{spec.name}: give one size per filter/join stage "
+                             f"({len(stages)}), separated by '/'")
+        for size, stage in zip(spec.groups, stages):
+            if len(size) != (2 if stage["op"] == "join" else 1):
+                raise ValueError(f"{spec.name}: {stage['op']} takes "
+                                 f"{'KxJ' if stage['op'] == 'join' else 'N'}, got {size}")
+        return
     if spec.kind != "kalypso_block":
         return
+    if len(spec.groups) != 1:
+        raise ValueError(f"{spec.name}: '/' sizes are for pipeline workloads")
     if workload.kind == MAP:
         raise ValueError(f"{spec.name}: there is no block operator for maps")
     if workload.kind == FILTER and len(spec.block) != 1:
@@ -83,8 +118,31 @@ def check_arm(spec: ArmSpec, workload: Workload) -> None:
         raise ValueError(f"{spec.name}: join blocks take KxJ, e.g. kalypso_block:5x5")
 
 
+def pipeline_ops(workload: Workload, groups=None) -> list[dict]:
+    """Ops for a pipeline; ``groups`` gives each filter/join stage's size."""
+    sizes = iter(groups or ())
+    ops = []
+    for stage in workload.stages:
+        if stage["op"] == "sem_map":
+            ops.append({"op": OpName.SEM_MAP, "args": {"prompt": stage["prompt"]}})
+            continue
+        size = next(sizes, None)
+        if stage["op"] == "sem_filter":
+            args = {"prompt": stage["prompt"]}
+            if size and size[0] > 1:
+                args["block_size"] = size[0]
+            ops.append({"op": OpName.SEM_FILTER, "args": args})
+        else:
+            args = {"instruction": stage["instruction"],
+                    "right_table": str(workload.right_path)}
+            if size and size != (1, 1):
+                args["left_block_size"], args["right_block_size"] = size
+            ops.append({"op": OpName.JOIN, "args": args})
+    return ops
+
+
 def kalypso_ops(workload: Workload, block: tuple[int, ...] | None = None) -> list[dict]:
-    """The /v1/semantic/query ops for a workload, per-tuple or blocked."""
+    """The /v1/semantic/query ops for a one-operator workload."""
     if workload.kind == MAP:
         return [{"op": OpName.SEM_MAP, "args": {"prompt": workload.instruction}}]
     if workload.kind == FILTER:
@@ -104,7 +162,7 @@ def parse_query_response(workload: Workload, body: dict) -> ArmOutput:
         values = [o.get("value") for o in result.get("outputs", [])]
         value = "" if not values else str(values[-1])
         idx = int(result["idx"])
-        if workload.kind == JOIN:
+        if workload.kind in (JOIN, PIPELINE):
             if result.get("right_idx") is None:
                 raise ArmError("join result has no right_idx; restart the server on "
                                "code that reports it (api_server.py)")
@@ -119,10 +177,12 @@ def parse_query_response(workload: Workload, body: dict) -> ArmOutput:
 
 
 async def run_kalypso(client: httpx.AsyncClient, base_url: str, workload: Workload,
-                      model: str, block: tuple[int, ...] | None = None) -> ArmOutput:
+                      model: str, spec: ArmSpec | None = None) -> ArmOutput:
+    groups = spec.groups if spec else None
     payload = {
         "data_path": str(workload.data_path),
-        "ops": kalypso_ops(workload, block),
+        "ops": (pipeline_ops(workload, groups) if workload.kind == PIPELINE
+                else kalypso_ops(workload, groups[0] if groups else None)),
         "model_name": model,
     }
     response = await client.post(f"{base_url}/v1/semantic/query", json=payload)
@@ -191,7 +251,7 @@ async def run_arm(spec: ArmSpec, client: httpx.AsyncClient, base_url: str,
                   workload: Workload, model: str) -> ArmOutput:
     if spec.kind == "vllm_direct":
         return await run_direct(client, base_url, workload, model)
-    return await run_kalypso(client, base_url, workload, model, spec.block)
+    return await run_kalypso(client, base_url, workload, model, spec)
 
 
 DEFAULT_ARMS = {
@@ -199,4 +259,5 @@ DEFAULT_ARMS = {
     FILTER: ["kalypso_per_tuple", "vllm_direct",
              "kalypso_block:5", "kalypso_block:10", "kalypso_block:20"],
     JOIN: ["kalypso_per_tuple", "vllm_direct", "kalypso_block:2x2", "kalypso_block:5x5"],
+    PIPELINE: ["kalypso_per_tuple"],
 }

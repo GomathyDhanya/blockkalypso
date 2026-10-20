@@ -32,7 +32,7 @@ JOIN_DIR = SAMPLE_DATA / "block_join"
 REVIEWS_INSTRUCTION = "Does the review complain about the restaurant?"
 JOIN_INSTRUCTION = "The complaint in the left item belongs to the category in the right item."
 
-MAP, FILTER, JOIN = "map", "filter", "join"
+MAP, FILTER, JOIN, PIPELINE = "map", "filter", "join", "pipeline"
 
 
 @dataclass(frozen=True)
@@ -44,11 +44,11 @@ class Row:
 @dataclass(frozen=True)
 class Workload:
     name: str
-    kind: str                       # MAP, FILTER or JOIN
+    kind: str                       # MAP, FILTER, JOIN or PIPELINE
     data_path: Path                 # what Kalypso's /v1/semantic/query reads
     instruction: str
     rows: list[Row]
-    right_path: Path | None = None  # JOIN only
+    right_path: Path | None = None  # JOIN and PIPELINE (the join's right table)
     right_rows: list[Row] | None = None
     # FILTER: idxs that should pass; JOIN: (left idx, right idx) matches;
     # None when the workload has no labels.
@@ -56,6 +56,12 @@ class Workload:
     # Which source rows the workload uses (e.g. MEDEC Text IDs), so a run
     # can be reproduced from the full dataset.
     source_ids: tuple | None = None
+    # PIPELINE only: the query's stages in order, as dicts with "op"
+    # (sem_filter, join or sem_map) and that op's prompt/instruction. A
+    # pipeline is scored on the (left, right) pairs it outputs, like a join.
+    stages: tuple | None = None
+    # Arms to run when --arms is not given; None means arms.DEFAULT_ARMS.
+    default_arms: tuple | None = None
 
 
 def _txt_files(directory: Path) -> list[Path]:
@@ -196,6 +202,33 @@ def load_contractnli(n: int | None = None) -> Workload:
     )
 
 
+def load_contractnli_pipeline(n: int | None = None, with_map: bool = True) -> Workload:
+    """The paper's ContractNLI query: filter -> join -> map.
+
+    Stages and prompts as in client_contract_nli_filter_join_map.py: keep
+    valid contracts, join them with the 17 hypotheses they entail, explain
+    each entailment. ``with_map=False`` stops after the join. Scored on the
+    output pairs against the gold Entailment labels; every ContractNLI
+    document is an NDA, so the filter's gold answer is yes for all of them.
+    """
+    join = load_contractnli(n)
+    stages = (
+        {"op": "sem_filter", "prompt": scenarios.CONTRACT_NLI_VALID_CONTRACT},
+        {"op": "join", "instruction": scenarios.CONTRACT_NLI_ENTAILMENT_JOIN},
+    )
+    if with_map:
+        stages += ({"op": "sem_map", "prompt": scenarios.CONTRACT_NLI_EXPLAIN_ENTAILMENT},)
+    return Workload(
+        name="contractnli_fjm" if with_map else "contractnli_fj", kind=PIPELINE,
+        data_path=join.data_path, right_path=join.right_path,
+        instruction=scenarios.CONTRACT_NLI_ENTAILMENT_JOIN,
+        rows=join.rows, right_rows=join.right_rows, positives=join.positives,
+        source_ids=join.source_ids, stages=stages,
+        default_arms=("kalypso_per_tuple", "kalypso_block:4/1x1",
+                      "kalypso_block:1/1x17", "kalypso_block:4/1x17"),
+    )
+
+
 def load_medec_full(n: int | None = None, seed: int = 0) -> Workload:
     """MEDEC-MS training notes: a seeded random sample of ``n`` (default 64).
 
@@ -231,4 +264,6 @@ WORKLOADS = {
     "join5x5": load_join5x5,
     "contractnli": load_contractnli,
     "medec_full": load_medec_full,
+    "contractnli_fjm": load_contractnli_pipeline,
+    "contractnli_fj": lambda n=None: load_contractnli_pipeline(n, with_map=False),
 }

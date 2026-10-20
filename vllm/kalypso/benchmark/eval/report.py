@@ -75,10 +75,16 @@ def _key(item):
 
 
 def universe(meta: dict) -> list:
-    """Every item an arm decides on: row idxs, or (left, right) pairs."""
-    if meta.get("kind") == "join":
-        return [(l, r) for l in range(meta["rows"]) for r in range(meta["right_rows"])]
-    return list(range(meta["rows"]))
+    """Every item an arm decides on: row idxs, or (left, right) pairs.
+
+    Uses the row ids run.py records; older results files without them had
+    ids 0..n-1.
+    """
+    left = meta.get("row_ids") or list(range(meta["rows"]))
+    if meta.get("kind") in ("join", "pipeline"):
+        right = meta.get("right_row_ids") or list(range(meta["right_rows"]))
+        return [(l, r) for l in left for r in right]
+    return list(left)
 
 
 def quality(meta: dict, trial: dict) -> dict:
@@ -192,7 +198,7 @@ def to_markdown(meta: dict, summary: dict, agree: dict, reference: str,
     server = meta.get("server") or {}
     items = len(universe(meta))
     size = (f"{meta['rows']} x {meta['right_rows']} = {items} pairs"
-            if meta.get("kind") == "join" else f"{meta['rows']} rows")
+            if meta.get("kind") in ("join", "pipeline") else f"{meta['rows']} rows")
     labeled = meta.get("positives") is not None
     positives = f", {len(meta['positives'])} positive" if labeled else ""
     lines = [

@@ -76,6 +76,9 @@ def run_metadata(args, model: str, workload, server_pid: int | None) -> dict:
         "kind": workload.kind,
         "rows": len(workload.rows),
         "right_rows": len(workload.right_rows) if workload.right_rows else None,
+        "row_ids": [r.idx for r in workload.rows],
+        "right_row_ids": [r.idx for r in workload.right_rows] if workload.right_rows else None,
+        "stages": list(workload.stages) if workload.stages else None,
         "data_path": str(workload.data_path),
         "right_path": str(workload.right_path) if workload.right_path else None,
         "positives": _jsonable(workload.positives),
@@ -153,7 +156,8 @@ def _summary(record: dict) -> str:
 async def run(args) -> None:
     workload = WORKLOADS[args.workload](args.n)
     try:
-        specs = [parse_arm(a) for a in (args.arms or DEFAULT_ARMS[workload.kind])]
+        names = args.arms or workload.default_arms or DEFAULT_ARMS[workload.kind]
+        specs = [parse_arm(a) for a in names]
         for spec in specs:
             check_arm(spec, workload)
     except ValueError as exc:
