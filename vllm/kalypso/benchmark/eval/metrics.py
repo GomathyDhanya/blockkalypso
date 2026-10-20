@@ -104,7 +104,8 @@ def process_tree_rss_kb(root_pid: int) -> int | None:
     return total
 
 
-async def _sample_kv(client, base_url, stop, samples, interval=0.25):
+# Fast enough to see the peak of sub-second GPU trials; /metrics is local.
+async def _sample_kv(client, base_url, stop, samples, interval=0.05):
     while not stop.is_set():
         try:
             value = (await snapshot(client, base_url))["kv_cache_pct"]

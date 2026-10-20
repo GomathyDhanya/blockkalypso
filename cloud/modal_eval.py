@@ -30,6 +30,8 @@ VLLM_PKG = ("$(python3 -c 'import importlib.util; print(next(iter(importlib.util
 image = (
     modal.Image.from_registry("vllm/vllm-openai:v0.29.0")
     .entrypoint([])
+    # Modal looks for `python`; the vLLM image only ships `python3`.
+    .run_commands("ln -sf \"$(command -v python3)\" /usr/local/bin/python")
     .add_local_dir(REPO / "vllm/kalypso", f"{SOURCE}/vllm/kalypso", copy=True,
                    ignore=["**/__pycache__", "benchmark/data", "benchmark/data/**"])
     .add_local_file(REPO / "vllm/entrypoints/openai/api_server.py",

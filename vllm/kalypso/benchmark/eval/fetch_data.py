@@ -117,10 +117,15 @@ FETCHERS = {"contractnli": fetch_contractnli, "medec": fetch_medec}
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("datasets", nargs="*", choices=list(FETCHERS), default=[],
-                        help="default: all")
+    # Names are checked by hand: argparse on Python 3.12 rejects an empty
+    # list for nargs="*" with choices.
+    parser.add_argument("datasets", nargs="*",
+                        help=f"any of {', '.join(FETCHERS)}; default: all")
     parser.add_argument("--root", type=Path, default=DATA_ROOT)
     args = parser.parse_args()
+    unknown = [name for name in args.datasets if name not in FETCHERS]
+    if unknown:
+        parser.error(f"unknown datasets {unknown}; choose from {list(FETCHERS)}")
     names = args.datasets or list(FETCHERS)
     manifest_path = args.root / "manifest.json"
     manifest = (json.loads(manifest_path.read_text()) if manifest_path.exists() else {})

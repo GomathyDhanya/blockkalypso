@@ -60,6 +60,11 @@ def cpu_name() -> str:
     return platform.processor()
 
 
+def gpu_name() -> str | None:
+    out = _run(["nvidia-smi", "--query-gpu=name", "--format=csv,noheader"])
+    return ", ".join(line.strip() for line in out.splitlines()) if out else None
+
+
 def run_metadata(args, model: str, workload, server_pid: int | None) -> dict:
     git = ["git", "-C", str(REPO_ROOT)]
     server = {"pid": server_pid}
@@ -95,6 +100,7 @@ def run_metadata(args, model: str, workload, server_pid: int | None) -> dict:
         "server": server,
         "platform": platform.platform(),
         "cpu": cpu_name(),
+        "gpu": gpu_name(),
         "python": platform.python_version(),
     }
 

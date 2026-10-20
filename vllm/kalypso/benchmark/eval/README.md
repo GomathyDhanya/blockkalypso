@@ -88,6 +88,28 @@ Defaults: one warmup trial per arm, then 3 repeats with arms interleaved
 are server-wide. An arm that fails (e.g. a block too large for the context) is
 recorded with its error and the run continues.
 
+## Running on a GPU (Modal)
+
+`cloud/modal_eval.py` builds the project's Kalypso container
+(`docker/Dockerfile.kalypso`: vLLM 0.29.0 plus this checkout's Kalypso),
+fetches the full datasets into the image, then starts the server and runs
+`eval.suite` in one container on an L4 GPU. Results go to the Modal volume
+`blockkalypso-results`.
+
+```bash
+pip install modal && python3 -m modal setup    # once
+python3 -m modal run cloud/modal_eval.py \
+  --model Qwen/Qwen2.5-7B-Instruct \
+  --workloads contractnli_fj,medec_full --out m2-qwen7b
+python3 -m modal volume get blockkalypso-results m2-qwen7b ./results
+```
+
+GPU functions need a payment method on the Modal account; set a spending
+limit so runs stop at the free credit. On the GPU this is Kalypso on vLLM
+0.29.0, not the repository's vLLM fork used for local CPU runs, so compare
+arms within one setup. GPU batching is not bit-for-bit deterministic, so
+per-tuple Kalypso and `vllm_direct` can disagree on a few rows there.
+
 ## Metrics (one JSON line per trial)
 
 | Field | Source |

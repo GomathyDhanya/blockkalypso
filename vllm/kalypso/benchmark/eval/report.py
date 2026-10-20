@@ -202,7 +202,7 @@ def to_markdown(meta: dict, summary: dict, agree: dict, reference: str,
     labeled = meta.get("positives") is not None
     positives = f", {len(meta['positives'])} positive" if labeled else ""
     lines = [
-        f"Model `{meta['model']}` on {meta['cpu']} ({meta['platform']}); "
+        f"Model `{meta['model']}` on {meta.get('gpu') or meta['cpu']} ({meta['platform']}); "
         f"workload `{meta['workload']}` ({meta.get('kind', 'map')}), {size}"
         f"{positives}; "
         f"{meta['repeats']} repeats after {meta['warmup']} warmup; "
