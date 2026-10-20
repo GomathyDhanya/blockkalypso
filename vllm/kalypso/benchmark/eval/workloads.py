@@ -362,13 +362,13 @@ def _arxiv_right(draw: _Draw, size: int, f: float) -> list[dict]:
     return papers
 
 
-_DATASET = re.compile(r"\bdatasets?\b", re.IGNORECASE)
-_IMAGERY = re.compile(r"\bimages?\b|\bcamera|\bRGB\b|\bvisual\b|\bvideo", re.IGNORECASE)
+_AI_ML = re.compile(r"\blearn(ing|ed)\b|\bneural\b|\breinforcement\b|\bdeep\b"
+                    r"|\bmachine learning\b|\btransformer|\blanguage model", re.IGNORECASE)
 
 
-def _mentions_image_dataset(paper: dict) -> bool:
-    """Proxy for CASE_3_FILTER_3: the abstract names a dataset and imagery."""
-    return bool(_DATASET.search(paper["abstract"]) and _IMAGERY.search(paper["abstract"]))
+def _about_ai_ml(paper: dict) -> bool:
+    """Proxy for CASE_3_FILTER_1: the abstract uses AI / machine-learning terms."""
+    return bool(_AI_ML.search(paper["abstract"]))
 
 
 def _same_topic(left, right):
@@ -442,10 +442,13 @@ def load_arxiv_pipeline(n: int | None = None, s: float = 0.5, f: float = 1.0,
     """The paper's arXiv FILTER -> JOIN -> FILTER query (handoff's F1 -> Join -> F2).
 
     F1: CASE_2_FILTER_ARXIV (AI robotics?), join: CASE_2_JOIN_ARXIV (similar
-    topic?) against ``right`` papers, F2: CASE_3_FILTER_3 (uses an image
-    dataset?). ``s`` sets F1's selectivity and ``f`` the join fanout. Proxy
-    labels: F1 = cs.RO; join = same robotics task in the titles; F2 = either
-    abstract names a dataset and imagery (images, camera, RGB, video).
+    topic?) against ``right`` papers, F2: CASE_3_FILTER_1 (about AI or
+    machine learning?). ``s`` sets F1's selectivity and ``f`` the join
+    fanout. Proxy labels: F1 = cs.RO; join = same robotics task in the titles;
+    F2 = either abstract uses AI/ML terms. (F2 was CASE_3_FILTER_3, "uses an
+    image dataset?", a single-abstract question: on joined pairs Qwen2.5-14B
+    answered false to every pair, per-tuple included, so Filter2 never passed
+    a row.)
     """
     draw = _Draw(seed)
     left = _arxiv_left(draw, 32 if n is None else n, s)
@@ -457,12 +460,11 @@ def load_arxiv_pipeline(n: int | None = None, s: float = 0.5, f: float = 1.0,
         instruction=_join_prompt(join_prompt),
         rows=_arxiv_rows(left), right_rows=_arxiv_rows(right_papers),
         positives=frozenset((i, j) for i, j in joined
-                            if _mentions_image_dataset(left[i - 1])
-                            or _mentions_image_dataset(right_papers[j - 1])),
+                            if _about_ai_ml(left[i - 1]) or _about_ai_ml(right_papers[j - 1])),
         source_ids=tuple(p["id"] for p in left + right_papers),
         stages=({"op": "sem_filter", "prompt": scenarios.CASE_2_FILTER_ARXIV},
                 {"op": "join", "instruction": _join_prompt(join_prompt)},
-                {"op": "sem_filter", "prompt": scenarios.CASE_3_FILTER_3}),
+                {"op": "sem_filter", "prompt": scenarios.CASE_3_FILTER_1}),
         # Handoff E4: one block size k for F1, the join (k x k) and F2.
         default_arms=("kalypso_per_tuple",) + tuple(
             f"kalypso_block:{k}/{k}x{k}/{k}" for k in (2, 4, 8, 16)),
