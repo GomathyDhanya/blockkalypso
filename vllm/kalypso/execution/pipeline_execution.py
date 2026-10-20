@@ -16,7 +16,11 @@ class PlanExecutor:
         self.pipeline_executor = AsyncPipelineExecutor()
         self.blocking_executor = BlockingExecutor()
 
-    async def execute(self, ctxs, plan, trace=None):
+    async def execute(self, ctxs, plan, trace=None, materialize=False):
+        """Run a built plan. ``materialize`` runs each pipeline segment one
+        stage at a time: a stage processes all of its input before the next
+        stage starts (no overlap), with the same operators and block sizes.
+        """
 
         stage_stat_list = []
         for item in plan:
@@ -32,6 +36,15 @@ class PlanExecutor:
                 ctxs = next_ctxs
 
             # STAGES
+            elif materialize:
+                for position, stage in enumerate(item):
+                    ctxs, stage_stat = await self.pipeline_executor.execute_tasks(
+                        ctxs,
+                        [stage],
+                        trace=trace,
+                        emits_output=position == len(item) - 1,
+                    )
+                    stage_stat_list.append(stage_stat)
             else:
                 ctxs, stage_stat = await self.pipeline_executor.execute_tasks(
                     ctxs,
@@ -131,13 +144,16 @@ class AsyncPipelineExecutor:
     def __init__(self):
         self.manager = KVMemoryManager.get_instance()
 
-    async def execute_tasks(self, ctxs, stages, trace=None):
+    async def execute_tasks(self, ctxs, stages, trace=None, emits_output=True):
         """
         ctxs: initial contexts
         stages: [stage1, stage2, ...]
         trace: optional QueryTrace that records task timing and stage output
+        emits_output: False when the last of ``stages`` is not the query's
+            last stage (materialized runs), so its rows are not query output
         """
         trace = trace if trace is not None else tr.QueryTrace()
+        emitted = trace.outputs_emitted if emits_output else (lambda count: None)
         trace.register_stages(stages)
         stage_stat = {}
         out = []
@@ -450,7 +466,7 @@ class AsyncPipelineExecutor:
 
             if next_stage_index >= len(stages):
                 out.extend(children)
-                trace.outputs_emitted(len(children))
+                emitted(len(children))
             elif next_stage_index in pending_join_rows:
                 enqueue_join_rows(
                     next_stage_index, children,
@@ -621,7 +637,7 @@ class AsyncPipelineExecutor:
                         )
                         if next_stage_index >= len(stages):
                             out.append(child_ctx)
-                            trace.outputs_emitted(1)
+                            emitted(1)
                             await finalize_task(child_task)
                         else:
                             stages[next_stage_index].enqueue(child_task)
@@ -646,7 +662,7 @@ class AsyncPipelineExecutor:
                 )
                 if next_stage_index >= len(stages):
                     out.append(result)
-                    trace.outputs_emitted(1)
+                    emitted(1)
                     await finalize_task(next_task)
                 elif next_stage_index in pending_join_rows:
                     enqueue_join_rows(next_stage_index, [result], task.trackers)

@@ -17,3 +17,6 @@ class SemanticQueryRequest(BaseModel):
     # (already unambiguous) and for data_path (the file's own columns rule).
     text_column: str | None = None
     model_name: str | None = None
+    # Run each pipeline stage to completion before the next starts, instead
+    # of overlapping them (for comparing pipelined and materialized runs).
+    materialize: bool = False

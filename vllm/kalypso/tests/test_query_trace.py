@@ -3,11 +3,13 @@
 import asyncio
 from types import SimpleNamespace
 
+import pytest
+
 from vllm.kalypso.controller.plan import SemanticPlan
 from vllm.kalypso.execution import trace as tr
 from vllm.kalypso.execution.pipeline_execution import AsyncPipelineExecutor
 
-from .test_block_filter import row
+from .test_block_filter import FakeOut, row
 from .test_block_join_pipeline import QueryExecutor
 
 
@@ -102,3 +104,79 @@ def test_trace_of_filter_join_filter_pipeline(fake_kv_manager, monkeypatch):
     # The F2 block holding the carrot match passes nothing, so it is dropped.
     assert sorted(t["outcome"] for t in d["tasks"]) == [tr.DONE] * 5 + [tr.DROPPED]
     assert f1["first_start"] <= join["first_start"] <= f2["first_start"]
+
+
+class PairAwareExecutor(QueryExecutor):
+    """QueryExecutor that also answers Kalypso's per-pair join prompt."""
+
+    async def execute(self, raw_request, prompt, max_tokens, pin=False, priority=0):
+        body = prompt[-1]["content"]
+        if "Condition:same item" in body:
+            self.join_calls += 1
+            left, right = (m["content"].split('"text":', 1)[1].split("}")[0].strip()
+                           for m in prompt[-3:-1])
+            return FakeOut("TRUE" if left == right else "FALSE")
+        if "Condition:only apple" in body:
+            self.filter_calls += 1
+            context = " ".join(m["content"] for m in prompt[:-1] if m["role"] != "system")
+            return FakeOut("TRUE" if "apple" in context else "FALSE")
+        return await super().execute(raw_request, prompt, max_tokens, pin=pin,
+                                     priority=priority)
+
+
+def _filter_join_filter(monkeypatch, blocked=True):
+    executor = PairAwareExecutor()
+    left = [row(text, idx, executor) for idx, text in
+            enumerate(("apple", "banana", "carrot", "date"))]
+    right = [row(text, 100 + idx) for idx, text in
+             enumerate(("carrot", "apple", "pear"))]
+    monkeypatch.setattr("vllm.kalypso.controller.plan.data._data_source",
+                        lambda *args: iter(right))
+    plan = SemanticPlan(executor=executor)
+    sizes = ({"block_size": 2}, {"left_block_size": 2, "right_block_size": 2}) if blocked \
+        else ({}, {})
+    physical = plan.parse_ops([
+        {"op": "sem_filter", "args": {"prompt": "keep all", **sizes[0]}},
+        {"op": "join", "args": {"instruction": "same item", "right_table": "right.csv",
+                                **sizes[1]}},
+        {"op": "sem_filter", "args": {"prompt": "only apple", **sizes[0]}},
+    ])
+    return plan, plan.build(left, physical), left
+
+
+@pytest.mark.parametrize("blocked", [True, False])
+def test_materialized_runs_stages_one_after_another(fake_kv_manager, monkeypatch, blocked):
+    monkeypatch.setattr(AsyncPipelineExecutor, "LOG_SCHEDULER", False)
+    results = {}
+    for materialize in (False, True):
+        plan, built, left = _filter_join_filter(monkeypatch, blocked)
+        trace = tr.QueryTrace()
+        out, _ = asyncio.run(plan.plan_executor.execute(
+            left, built, trace=trace, materialize=materialize))
+        results[materialize] = (sorted((c.state.idx, c.state.right_idx) for c in out),
+                                trace.to_dict())
+    assert results[True][0] == results[False][0] == [(0, 101)]   # same answers
+    d = results[True][1]
+    stages = [d["stages"][k] for k in sorted(d["stages"], key=int)]
+    for prev, cur in zip(stages, stages[1:]):
+        assert cur["first_start"] >= prev["last_end"]               # no overlap
+    assert d["outputs"] == 1                                         # final stage only
+    assert d["first_output_s"] >= stages[-1]["first_start"]
+
+
+def test_materialized_flag_reaches_the_executor(fake_kv_manager, monkeypatch):
+    seen = {}
+
+    async def fake_execute(self, ctxs, plan, trace=None, materialize=False):
+        seen["materialize"] = materialize
+        return [], []
+
+    from vllm.kalypso.execution.pipeline_execution import PlanExecutor
+    monkeypatch.setattr(PlanExecutor, "execute", fake_execute)
+    monkeypatch.setattr("vllm.kalypso.controller.plan.data._data_source",
+                        lambda *args: iter([]))
+    from vllm.kalypso.query import Query
+    plan = SemanticPlan(executor=None)
+    monkeypatch.setattr(plan, "build", lambda ctxs, ops: [])
+    asyncio.run(plan.execute(None, Query([], "x"), materialize=True))
+    assert seen["materialize"] is True
