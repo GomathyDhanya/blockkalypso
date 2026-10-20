@@ -76,6 +76,26 @@ class Stage:
         self.block_tasks = self.block_size > 1 or any(
             getattr(op, "requires_block_task", False) for op in self.operators
         )
+        # Per operator: rows it was given, rows it passed on, and how its
+        # answers began (first word of the verdict a filter records). Read by
+        # the query trace, so fused per-tuple stages can be checked operator
+        # by operator.
+        self.op_counts = [
+            {"rows_in": 0, "rows_out": 0, "answers": {}, "other_samples": []}
+            for _ in self.operators
+        ]
+
+    def _count_answer(self, idx, ctx) -> None:
+        output = getattr(ctx, "output", None)
+        if not output or not isinstance(output[-1], dict) or len(output[-1]) != 1:
+            return
+        verdict = str(next(iter(output[-1].values()))).strip().lower()
+        head = (verdict.split() or [""])[0].strip("*.:,<>`'\"")
+        head = head if head in ("true", "false", "yes", "no", "undecided") else "other"
+        counts = self.op_counts[idx]
+        counts["answers"][head] = counts["answers"].get(head, 0) + 1
+        if head == "other" and len(counts["other_samples"]) < 3:
+            counts["other_samples"].append(verdict[:80])
 
     def _infer_block_size(self) -> int:
         for op in self.operators:
@@ -259,6 +279,7 @@ class Stage:
                     if idx == task.op_index and task.retry_priority is not None
                     else -(self.priority_offset + idx)
                 )
+                before = len(getattr(task.ctx, "output", []) or [])
                 keep_going = await op(
                     task.ctx,
                     priority=priority,
@@ -269,8 +290,12 @@ class Stage:
                         op_index=idx,
                         retain_budget=False,
                     )
+                self.op_counts[idx]["rows_in"] += 1
+                if len(getattr(task.ctx, "output", []) or []) > before:
+                    self._count_answer(idx, task.ctx)
                 if keep_going is False:
                     return None
+                self.op_counts[idx]["rows_out"] += 1
 
         return task.ctx
 
@@ -292,6 +317,9 @@ class Stage:
                 break
             op = self.operators[idx]
             priority = -(self.priority_offset + idx)
+            self.op_counts[idx]["rows_in"] += len(rows)
+            given = list(rows)
+            before = [len(getattr(row, "output", []) or []) for row in given]
             if supports_blocks(op):
                 rows = await op.run_block(rows, priority=priority)
             else:
@@ -299,6 +327,10 @@ class Stage:
                     *(self._run_row_op(op, row, priority) for row in rows)
                 )
                 rows = [row for row, k in zip(rows, keep) if k is not False]
+            for row, count in zip(given, before):
+                if len(getattr(row, "output", []) or []) > count:
+                    self._count_answer(idx, row)
+            self.op_counts[idx]["rows_out"] += len(rows)
 
         return rows or None
 

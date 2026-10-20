@@ -180,3 +180,27 @@ def test_materialized_flag_reaches_the_executor(fake_kv_manager, monkeypatch):
     monkeypatch.setattr(plan, "build", lambda ctxs, ops: [])
     asyncio.run(plan.execute(None, Query([], "x"), materialize=True))
     assert seen["materialize"] is True
+
+
+@pytest.mark.parametrize("blocked", [True, False])
+def test_trace_counts_each_operator_even_in_fused_stages(fake_kv_manager, monkeypatch,
+                                                         blocked):
+    monkeypatch.setattr(AsyncPipelineExecutor, "LOG_SCHEDULER", False)
+    plan, built, left = _filter_join_filter(monkeypatch, blocked)
+    trace = tr.QueryTrace()
+    asyncio.run(plan.plan_executor.execute(left, built, trace=trace))
+    ops = {}
+    for stage in trace.to_dict()["stages"].values():
+        for op in stage["operator_rows"]:
+            ops.setdefault(op["position"], []).append(op)
+    count = lambda pos, key: sum(o[key] for o in ops[pos])
+    assert (count(0, "rows_in"), count(0, "rows_out")) == (4, 4)          # keep all
+    assert count(1, "rows_out") == 2                                       # 2 matches
+    assert (count(2, "rows_in"), count(2, "rows_out")) == (2, 1)          # only apple
+    if not blocked:   # per-tuple: join check and F2 share a stage, still separate here
+        assert count(1, "rows_in") == 12                                   # 4 x 3 pairs
+        heads = {}
+        for o in ops[1]:
+            for k, v in o["answers"].items():
+                heads[k] = heads.get(k, 0) + v
+        assert heads == {"true": 2, "false": 10}

@@ -88,6 +88,11 @@ class QueryTrace:
         if block_size > 1 and first_attempts:
             summary["mean_occupancy"] = round(
                 sum(r.rows for r in first_attempts) / (block_size * len(first_attempts)), 4)
+        counts = getattr(stage, "op_counts", None) or []
+        summary["operator_rows"] = [
+            {"operator": type(op).__name__, "position": getattr(op, "position", None),
+             **counts[i]}
+            for i, op in enumerate(getattr(stage, "operators", ())) if i < len(counts)]
         for op in getattr(stage, "operators", ()):
             stats = getattr(op, "stats", None)
             if stats is not None and hasattr(stats, "as_dict"):
