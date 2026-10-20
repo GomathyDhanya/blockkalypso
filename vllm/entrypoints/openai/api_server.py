@@ -707,7 +707,11 @@ async def semantic_query(
     print('query called')
 
     processor = raw_request.app.state.query_processor
-    out_ctxs = await processor.execute(raw_request, _query)
+    # Imported here: the container build copies this route body without the
+    # module's imports (docker/kalypso/prepare.py).
+    from vllm.kalypso.execution.trace import QueryTrace
+    trace = QueryTrace()
+    out_ctxs = await processor.execute(raw_request, _query, trace=trace)
 
     results = []
     for ctx in out_ctxs:
@@ -739,6 +743,8 @@ async def semantic_query(
         "num_output_rows": len(out_ctxs),
         "latency_sec": round(elapsed, 3),
         "results": results,
+        # Per-stage rows, timing, block occupancy and fallback counters.
+        "trace": trace.to_dict(),
     }
 
 

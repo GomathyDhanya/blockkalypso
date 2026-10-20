@@ -6,6 +6,7 @@ from vllm.kalypso.budget import KVMemoryManager
 from vllm.kalypso.context import RetryTaskResult
 # from vllm.kalypso.controller.map_estimator import MapRatioEstimator
 from vllm.kalypso.controller.stage import Task
+from vllm.kalypso.execution import trace as tr
 from vllm.kalypso.sem_ops import OpBehavior, ops
 
 
@@ -15,7 +16,7 @@ class PlanExecutor:
         self.pipeline_executor = AsyncPipelineExecutor()
         self.blocking_executor = BlockingExecutor()
 
-    async def execute(self, ctxs, plan):
+    async def execute(self, ctxs, plan, trace=None):
 
         stage_stat_list = []
         for item in plan:
@@ -35,6 +36,7 @@ class PlanExecutor:
                 ctxs, stage_stat = await self.pipeline_executor.execute_tasks(
                     ctxs,
                     item,
+                    trace=trace,
                 )
                 stage_stat_list.append(stage_stat)
 
@@ -129,11 +131,14 @@ class AsyncPipelineExecutor:
     def __init__(self):
         self.manager = KVMemoryManager.get_instance()
 
-    async def execute_tasks(self, ctxs, stages):
+    async def execute_tasks(self, ctxs, stages, trace=None):
         """
         ctxs: initial contexts
         stages: [stage1, stage2, ...]
+        trace: optional QueryTrace that records task timing and stage output
         """
+        trace = trace if trace is not None else tr.QueryTrace()
+        trace.register_stages(stages)
         stage_stat = {}
         out = []
         active = {}
@@ -378,6 +383,7 @@ class AsyncPipelineExecutor:
 
                     record_input(stage.stage_id)
                     stage.pop_task()
+                    trace.task_started(stage, task)
                     log_running_tasks(
                         f"start task={task.task_id} stage={stage.stage_id}"
                     )
@@ -397,6 +403,7 @@ class AsyncPipelineExecutor:
 
                 record_input(stage.stage_id)
                 stage.pop_task()
+                trace.task_started(stage, task)
                 # refresh_retry_max_tokens(stage, task)
                 await stage.force_accept(task, self.manager)
                 log_running_tasks(
@@ -434,6 +441,7 @@ class AsyncPipelineExecutor:
             else:
                 children = list(rows)
             record_output(stage.stage_id, len(children))
+            trace.task_finished(task, len(children), tr.DONE)
 
             def downstream_trackers(count):
                 if task.trackers and count > 1:
@@ -442,6 +450,7 @@ class AsyncPipelineExecutor:
 
             if next_stage_index >= len(stages):
                 out.extend(children)
+                trace.outputs_emitted(len(children))
             elif next_stage_index in pending_join_rows:
                 enqueue_join_rows(
                     next_stage_index, children,
@@ -501,6 +510,7 @@ class AsyncPipelineExecutor:
                 try:
                     result = future.result()
                 except Exception:
+                    trace.task_finished(task, 0, tr.ERROR)
                     await stage.release_budget(budget, self.manager)
                     log_running_tasks(
                         f"finish task={task.task_id} stage={stage.stage_id}"
@@ -508,6 +518,7 @@ class AsyncPipelineExecutor:
                     raise
 
                 if isinstance(result, RetryTaskResult):
+                    trace.task_finished(task, 0, tr.RETRY)
                     if self.LOG_RETRY_TRACE:
                         print(
                             "[scheduler-retry] "
@@ -539,6 +550,7 @@ class AsyncPipelineExecutor:
                     continue
 
                 if result is None:
+                    trace.task_finished(task, 0, tr.DROPPED)
                     await stage.release_budget(budget, self.manager)
                     log_running_tasks(
                         f"finish task={task.task_id} stage={stage.stage_id}"
@@ -555,6 +567,7 @@ class AsyncPipelineExecutor:
                 if stage.fanout_op is not None:
                     child_ctxs = stage.fanout_op(result) or []
                     record_output(stage.stage_id, len(child_ctxs))
+                    trace.task_finished(task, len(child_ctxs), tr.DONE)
 
                     if not child_ctxs:
                         if task.ctx.state.pin_req_id is not None:
@@ -608,6 +621,7 @@ class AsyncPipelineExecutor:
                         )
                         if next_stage_index >= len(stages):
                             out.append(child_ctx)
+                            trace.outputs_emitted(1)
                             await finalize_task(child_task)
                         else:
                             stages[next_stage_index].enqueue(child_task)
@@ -623,6 +637,7 @@ class AsyncPipelineExecutor:
                     continue
 
                 record_output(stage.stage_id, 1)
+                trace.task_finished(task, 1, tr.DONE)
                 next_task = Task(
                     ctx=([result] if next_stage_index < len(stages)
                          and stages[next_stage_index].block_tasks else result),
@@ -631,6 +646,7 @@ class AsyncPipelineExecutor:
                 )
                 if next_stage_index >= len(stages):
                     out.append(result)
+                    trace.outputs_emitted(1)
                     await finalize_task(next_task)
                 elif next_stage_index in pending_join_rows:
                     enqueue_join_rows(next_stage_index, [result], task.trackers)

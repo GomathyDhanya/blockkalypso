@@ -545,7 +545,7 @@ class SemanticPlan:
 
         
 
-    async def execute(self, raw_request, query: Query):
+    async def execute(self, raw_request, query: Query, trace=None):
         
         ctxs = list(data._data_source(raw_request, query.data_path, self.executor))
         MapRatioEstimator.instance()
@@ -555,7 +555,7 @@ class SemanticPlan:
 
         ops.ICPFilter.reset_stats()
         ops.CascadeOperator.reset_stats()
-        out, _ = await self.plan_executor.execute(ctxs, plan)
+        out, _ = await self.plan_executor.execute(ctxs, plan, trace=trace)
         MapRatioEstimator.instance().reset()
         icp_stats = ops.ICPFilter.get_stats()
         if icp_stats["called"] > 0:
