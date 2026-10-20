@@ -80,6 +80,7 @@ def run_metadata(args, model: str, workload, server_pid: int | None) -> dict:
         "right_path": str(workload.right_path) if workload.right_path else None,
         "positives": _jsonable(workload.positives),
         "instruction": workload.instruction,
+        "source_ids": list(workload.source_ids) if workload.source_ids else None,
         "arms": args.arms,
         "warmup": args.warmup,
         "repeats": args.repeats,

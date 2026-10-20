@@ -10,6 +10,7 @@ so the direct-vLLM arm can rebuild byte-identical prompts:
 """
 
 import csv
+import random
 import shutil
 import tempfile
 from dataclasses import dataclass
@@ -18,6 +19,10 @@ from pathlib import Path
 from vllm.kalypso.benchmark import scenarios
 
 SAMPLE_DATA = Path(__file__).resolve().parents[1] / "sample_data"
+# Full public datasets, written by fetch_data.py (git-ignored).
+FULL_DATA = Path(__file__).resolve().parents[1] / "data"
+CONTRACTNLI = FULL_DATA / "contract-nli" / "train"
+MEDEC_FULL = FULL_DATA / "medec" / "medec_train.csv"
 BIODEX_ARTICLES = SAMPLE_DATA / "articles_500"
 REVIEWS = SAMPLE_DATA / "block_filter" / "reviews_20.csv"
 MEDEC = SAMPLE_DATA / "MEDEC-TrainingSet-1000.csv"
@@ -48,6 +53,9 @@ class Workload:
     # FILTER: idxs that should pass; JOIN: (left idx, right idx) matches;
     # None when the workload has no labels.
     positives: frozenset | None = None
+    # Which source rows the workload uses (e.g. MEDEC Text IDs), so a run
+    # can be reproduced from the full dataset.
+    source_ids: tuple | None = None
 
 
 def _txt_files(directory: Path) -> list[Path]:
@@ -151,9 +159,76 @@ def load_join5x5(n: int | None = None) -> Workload:
     )
 
 
+def _require(path: Path) -> Path:
+    if not path.exists():
+        raise FileNotFoundError(
+            f"{path} not found; run: python -m vllm.kalypso.benchmark.eval.fetch_data")
+    return path
+
+
+def load_contractnli(n: int | None = None) -> Workload:
+    """ContractNLI join: the first ``n`` train contracts x all 17 hypotheses.
+
+    Contracts are taken in dataset order, as the paper's 10-row sample is
+    (train documents 0-9). Labels: a pair matches when its gold choice is
+    Entailment, which is what the paper's join prompt asks.
+    """
+    contracts = _txt_files(_require(CONTRACTNLI) / "contracts")
+    hypotheses = _txt_files(CONTRACTNLI / "hypotheses")
+    n = 20 if n is None else n
+    if not 1 <= n <= len(contracts):
+        raise ValueError(f"--n must be between 1 and {len(contracts)} for contractnli")
+    chosen = contracts[:n]
+    keep = {int(p.stem) for p in chosen}
+    with (CONTRACTNLI / "labels.csv").open(newline="", encoding="utf-8") as f:
+        positives = frozenset(
+            (int(r["contract"]), int(r["hypothesis"])) for r in csv.DictReader(f)
+            if r["choice"] == "Entailment" and int(r["contract"]) in keep)
+    return Workload(
+        name="contractnli", kind=JOIN,
+        data_path=_subset_dir(chosen).resolve(),
+        right_path=(CONTRACTNLI / "hypotheses").resolve(),
+        instruction=scenarios.CONTRACT_NLI_ENTAILMENT_JOIN,
+        rows=[Row(int(p.stem), p.read_text(encoding="utf-8").strip()) for p in chosen],
+        right_rows=[Row(int(p.stem), p.read_text(encoding="utf-8").strip()) for p in hypotheses],
+        positives=positives,
+        source_ids=tuple(int(p.stem) for p in chosen),
+    )
+
+
+def load_medec_full(n: int | None = None, seed: int = 0) -> Workload:
+    """MEDEC-MS training notes: a seeded random sample of ``n`` (default 64).
+
+    The paper's prompt (``MEDEC_ERROR_FILTER``) and row text (the ``data``
+    column); label = the note contains an error. The sample keeps roughly the
+    dataset's own share of erroneous notes (56%).
+    """
+    with _require(MEDEC_FULL).open(newline="", encoding="utf-8") as f:
+        records = list(csv.DictReader(f))
+    n = 64 if n is None else n
+    if not 1 <= n <= len(records):
+        raise ValueError(f"--n must be between 1 and {len(records)} for medec_full")
+    chosen = sorted(random.Random(seed).sample(range(len(records)), n))
+    rows = [records[i] for i in chosen]
+    target = Path(tempfile.mkdtemp(prefix="kalypso_eval_")) / "medec.csv"
+    with target.open("w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=list(records[0]))
+        writer.writeheader()
+        writer.writerows(rows)
+    return Workload(
+        name="medec_full", kind=FILTER, data_path=target.resolve(),
+        instruction=scenarios.MEDEC_ERROR_FILTER,
+        rows=[Row(i, _csv_text(r)) for i, r in enumerate(rows)],
+        positives=frozenset(i for i, r in enumerate(rows) if r["Error Flag"].strip() == "1"),
+        source_ids=tuple(r["Text ID"] for r in rows),
+    )
+
+
 WORKLOADS = {
     "biodex": load_biodex,
     "reviews": load_reviews,
     "medec": load_medec,
     "join5x5": load_join5x5,
+    "contractnli": load_contractnli,
+    "medec_full": load_medec_full,
 }

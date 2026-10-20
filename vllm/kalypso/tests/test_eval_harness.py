@@ -1,17 +1,20 @@
 """Server-free parts of the evaluation harness (benchmark/eval)."""
 
+import csv
+import io
 import json
 
 import pytest
 
-from vllm.kalypso.benchmark.eval import metrics, report
+from vllm.kalypso.benchmark.eval import fetch_data, metrics, report
 from vllm.kalypso.benchmark.eval.stages import summarize_trace
 from vllm.kalypso.benchmark.eval.arms import (ArmError, check_arm, direct_requests,
                                               kalypso_ops, parse_arm,
                                               parse_query_response)
-from vllm.kalypso.benchmark.eval.workloads import (BIODEX_ARTICLES, FILTER, JOIN,
-                                                   load_biodex, load_join5x5,
-                                                   load_medec, load_reviews)
+from vllm.kalypso.benchmark.eval.workloads import (BIODEX_ARTICLES, FILTER, FULL_DATA,
+                                                   JOIN, load_biodex, load_contractnli,
+                                                   load_join5x5, load_medec,
+                                                   load_medec_full, load_reviews)
 from vllm.kalypso.data import data
 from vllm.kalypso.sem_ops.filters import SemFilter
 from vllm.kalypso.sem_ops.joins import CartesianProduct
@@ -265,3 +268,66 @@ def test_stage_table_reports_medians_per_stage():
     assert "| `kalypso_block:4` | 0 | BlockSemFilter | 4 | 2 | 8 | 4 | 0.50 | 1.00 | 0.00 | 4.00 [3.00-5.00] |" in table
     assert "| `kalypso_block:4` | 1 | BlockSemJoin | 2 |" in table
     assert report.stage_table(meta, [_trial("kalypso_block:4", 1, {}, 1.0)]) == ""
+
+
+SAMPLE = BIODEX_ARTICLES.parent
+
+
+def test_fetch_writes_contractnli_like_the_paper_sample(tmp_path):
+    hyp = (SAMPLE / "contract-nli" / "hypotheses" / "1.txt").read_text()
+    labels = {"nda-11": {"short_description": "No reverse engineering",
+                         "hypothesis": hyp.split("HYPOTHESIS:\n", 1)[1].strip()},
+              "nda-2": {"short_description": "x", "hypothesis": "y"}}
+    split = {"labels": labels, "documents": [
+        {"id": 7, "text": "Contract A", "annotation_sets": [{"annotations": {
+            "nda-11": {"choice": "Entailment"}, "nda-2": {"choice": "NotMentioned"}}}]}]}
+    counts = fetch_data.write_contractnli_split(split, tmp_path)
+    assert counts == {"contracts": 1, "hypotheses": 2}
+    assert (tmp_path / "hypotheses" / "1.txt").read_text() == hyp
+    assert (tmp_path / "contracts" / "1.txt").read_text() == "Contract A"
+    rows = (tmp_path / "labels.csv").read_text().splitlines()
+    assert rows[1:] == ["1,1,nda-11,Entailment,7", "1,2,nda-2,NotMentioned,7"]
+
+
+def test_fetch_builds_medec_data_column_like_the_paper_sample(tmp_path):
+    with (SAMPLE / "MEDEC-TrainingSet-1000.csv").open(newline="", encoding="utf-8") as f:
+        sample = list(csv.DictReader(f))
+    raw = io.StringIO()
+    writer = csv.DictWriter(raw, fieldnames=[k for k in sample[0] if k != "data"])
+    writer.writeheader()
+    writer.writerows({k: v for k, v in r.items() if k != "data"} for r in sample)
+    assert fetch_data.write_medec(raw.getvalue().encode(), tmp_path) == len(sample)
+    with (tmp_path / "medec_train.csv").open(newline="", encoding="utf-8") as f:
+        assert list(csv.DictReader(f)) == sample
+
+
+needs_full_data = pytest.mark.skipif(
+    not (FULL_DATA / "manifest.json").exists(),
+    reason="full datasets not fetched (python -m vllm.kalypso.benchmark.eval.fetch_data)")
+
+
+@needs_full_data
+def test_contractnli_workload_matches_labels_and_kalypso_prompts(fake_kv_manager):
+    w = load_contractnli(3)
+    assert w.kind == JOIN and [r.idx for r in w.rows] == [1, 2, 3]
+    assert len(w.right_rows) == 17 and w.source_ids == (1, 2, 3)
+    assert w.positives and all(l in (1, 2, 3) and 1 <= r <= 17 for l, r in w.positives)
+    left = list(data._data_source(None, str(w.data_path), None))
+    right = list(data._data_source(None, str(w.right_path), None))
+    by_key = {key: messages for key, messages, _ in direct_requests(w)}
+    pairs = [p for ctx in left for p in CartesianProduct(right)(ctx)]
+    assert len(pairs) == len(by_key) == 51
+    for pair in pairs:
+        key = f"{pair.state.idx},{pair.state.right_idx}"
+        assert SemFilter(w.instruction)._build_prompts(pair)[1] == by_key[key]
+
+
+@needs_full_data
+def test_medec_full_workload_is_seeded_and_matches_kalypso_prompts(fake_kv_manager):
+    a, b = load_medec_full(16), load_medec_full(16)
+    assert a.source_ids == b.source_ids and len(a.rows) == 16
+    assert load_medec_full(16, seed=1).source_ids != a.source_ids
+    assert a.positives <= {r.idx for r in a.rows}
+    ctxs = list(data._data_source(None, str(a.data_path), None))
+    for ctx, (_, messages, _) in zip(ctxs, direct_requests(a)):
+        assert SemFilter(a.instruction)._build_prompts(ctx)[1] == messages
