@@ -97,6 +97,8 @@ class QueryTrace:
             stats = getattr(op, "stats", None)
             if stats is not None and hasattr(stats, "as_dict"):
                 summary["operator_stats"][type(op).__name__] = stats.as_dict()
+            if getattr(op, "sizing", None):
+                summary["sizing"] = op.sizing        # cost-model block choice
         return summary
 
     def to_dict(self) -> dict:
