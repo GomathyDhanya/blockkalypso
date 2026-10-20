@@ -624,4 +624,4 @@ def test_arxiv_join_wording_option():
     with pytest.raises(ValueError):
         load_arxiv_join(16, join_prompt="nope")
     assert [r.params["join_prompt"] for r in experiments.check_join_prompt()] == [
-        "paper", "statement"]
+        "paper", "statement", "related", "task"]

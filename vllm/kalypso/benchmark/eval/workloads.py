@@ -385,6 +385,12 @@ ARXIV_JOIN_PROMPTS = {
     "paper": scenarios.CASE_2_JOIN_ARXIV,
     "statement": ("The two papers study the same research topic. "
                   "Answer true only if both papers clearly address the same topic."),
+    # Qwen2.5-7B answered false to every pair under both wordings above, even
+    # two drone papers: it reads "topic" much more narrowly than the labels.
+    # These two state the relation at the level the labels are built on.
+    "related": "The two papers are on related research topics.",
+    "task": ("Both papers work on the same type of robot or robotic task, "
+             "for example both on drones or both on grasping."),
 }
 
 

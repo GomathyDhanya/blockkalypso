@@ -96,7 +96,7 @@ def check_join_prompt() -> list[Run]:
     return [Run(f"join_{name}", "arxiv_join", arms, n=16,
                 params={"right": 8, "f": 1.0, "join_prompt": name},
                 condition=f"join wording: {name}")
-            for name in ("paper", "statement")]
+            for name in ("paper", "statement", "related", "task")]
 
 
 PIPELINE_N, PIPELINE_RIGHT = 32, 32
