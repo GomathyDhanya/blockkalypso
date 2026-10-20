@@ -5,8 +5,10 @@ import io
 import json
 
 import pytest
+from types import SimpleNamespace
 
 from vllm.kalypso.benchmark.eval import experiments, fetch_data, metrics, report
+from vllm.kalypso.benchmark.eval import arms as arms_mod
 from vllm.kalypso.benchmark.eval import run as run_mod
 from vllm.kalypso.benchmark.eval.stages import filter_pass, summarize_trace
 from vllm.kalypso.benchmark.eval.arms import (ArmError, check_arm, direct_requests,
@@ -547,7 +549,7 @@ def test_experiment_grids_follow_the_plan():
 @needs_arxiv
 def test_experiment_arms_fit_their_workloads():
     for name in experiments.EXPERIMENTS:
-        arms = ["kalypso_block:4/4x4/4"] if name in ("E6", "E7") else None
+        arms = ["kalypso_block:4/4x4/4"] if name in ("E6", "E7", "E8") else None
         for r in experiments.build(name, arms):
             w = WORKLOADS[r.workload](r.n, **r.params)
             for arm in r.arms:
@@ -625,3 +627,39 @@ def test_arxiv_join_wording_option():
         load_arxiv_join(16, join_prompt="nope")
     assert [r.params["join_prompt"] for r in experiments.check_join_prompt()] == [
         "paper", "statement", "related", "task"]
+
+
+def test_materialized_arms_and_e8_grid():
+    spec = parse_arm("kalypso_block:4/4x4/4+materialized")
+    assert spec.materialize and spec.groups == ((4,), (4, 4), (4,))
+    assert parse_arm("kalypso_per_tuple+materialized").materialize
+    assert not parse_arm("kalypso_block:4/4x4/4").materialize
+    with pytest.raises(ValueError):
+        parse_arm("vllm_direct+materialized")
+    check_arm(parse_arm("kalypso_block:4/4x4+materialized"), _sample_pipeline())
+    (e8,) = experiments.e8(["kalypso_block:4/4x4/4"])
+    assert e8.arms == ("kalypso_per_tuple", "kalypso_per_tuple+materialized",
+                       "kalypso_block:4/4x4/4", "kalypso_block:4/4x4/4+materialized")
+    with pytest.raises(ValueError):
+        experiments.e8()
+
+
+def test_materialized_arm_sends_the_flag():
+    import asyncio
+    sent = {}
+
+    class Client:
+        async def post(self, url, json):
+            sent.update(json)
+            return SimpleNamespace(status_code=200, json=lambda: {"results": []})
+
+    w = _sample_pipeline()
+    asyncio.run(arms_mod.run_kalypso(Client(), "http://x", w, "m",
+                                     parse_arm("kalypso_block:4/1x17/4+materialized")))
+    assert sent["materialize"] is True
+    asyncio.run(arms_mod.run_kalypso(Client(), "http://x", w, "m",
+                                     parse_arm("kalypso_block:4/1x17/4")))
+    sent.clear()
+    asyncio.run(arms_mod.run_kalypso(Client(), "http://x", w, "m",
+                                     parse_arm("kalypso_block:4/1x17/4")))
+    assert "materialize" not in sent

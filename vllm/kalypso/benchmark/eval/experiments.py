@@ -139,9 +139,19 @@ def e7(arms=None) -> list[Run]:
             for f in (0.2, 1.0, 3.0, 5.0)]
 
 
+def e8(arms=None) -> list[Run]:
+    """Pipelined vs materialized: the best setting(s) run both ways."""
+    if not arms:
+        raise ValueError("E8 needs --arms: the best setting(s) from E4/E5")
+    base = _with_baseline([a.removesuffix("+materialized") for a in arms])
+    paired = tuple(x for a in base for x in (a, a + "+materialized"))
+    return [Run("fjf_s05_f1", "arxiv_fjf", paired, n=PIPELINE_N,
+                params={"s": 0.5, "f": 1.0}, condition="s = 0.5, f = 1")]
+
+
 EXPERIMENTS = {"E1": e1, "E2": e2, "E3": e3, "E4": e4, "E5": e5, "E6": e6, "E7": e7,
-               "CHECK": check_pipeline_data, "JOINCHECK": check_join_prompt}
-TAKES_ARMS = {"E4", "E5", "E6", "E7"}
+               "E8": e8, "CHECK": check_pipeline_data, "JOINCHECK": check_join_prompt}
+TAKES_ARMS = {"E4", "E5", "E6", "E7", "E8"}
 
 
 def build(name: str, arms=None) -> list[Run]:
@@ -189,7 +199,7 @@ def main() -> None:
     parser.add_argument("--allow-warm-cache", action="store_true")
     parser.add_argument("--timeout", type=float, default=3600)
     parser.add_argument("--arms", default=None, type=lambda s: s.split(","),
-                        help="E4-E7: override the arms (E6/E7 need E5's best settings)")
+                        help="E4-E8: override the arms (E6-E8 need E4/E5's best settings)")
     args = parser.parse_args()
     args.base_url = args.base_url.rstrip("/").removesuffix("/v1")
     print(f"wrote {asyncio.run(run_experiment(args.experiment, args))}")

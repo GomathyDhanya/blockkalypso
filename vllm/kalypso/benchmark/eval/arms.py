@@ -10,6 +10,8 @@ Arm names:
   kalypso_block:N@T     the same, also capped at T estimated tokens per block
                         (max_block_tokens; Kalypso's Level 2 sizing)
   kalypso_block:KxJ     BlockSemJoin with K left x J right rows (join workloads)
+  <arm>+materialized    any Kalypso arm, with each stage finishing before the
+                        next starts (no pipelining; experiment E8)
   kalypso_block:N/KxJ   pipelines: one size per filter or join stage, in order,
                         separated by "/" (1 or 1x1 keeps that stage per-tuple);
                         map stages always run per-tuple
@@ -62,6 +64,8 @@ class ArmSpec:
     groups: tuple[tuple[int, ...], ...] | None = None
     # Per stage, the filter's token budget (N@T), or None.
     budgets: tuple[int | None, ...] | None = None
+    # Run stage by stage instead of pipelined ("+materialized").
+    materialize: bool = False
 
     @property
     def block(self) -> tuple[int, ...] | None:
@@ -88,19 +92,26 @@ def _size(text: str) -> tuple[tuple[int, ...], int | None]:
     return size, budget
 
 
+MATERIALIZED = "+materialized"
+
+
 def parse_arm(name: str) -> ArmSpec:
-    kind, _, sizes = name.partition(":")
-    if kind in ("kalypso_per_tuple", "vllm_direct") and not sizes:
+    base = name.removesuffix(MATERIALIZED)
+    materialize = base != name
+    kind, _, sizes = base.partition(":")
+    if kind == "kalypso_per_tuple" and not sizes:
+        return ArmSpec(name, kind, materialize=materialize)
+    if kind == "vllm_direct" and not sizes and not materialize:
         return ArmSpec(name, kind)
     if kind == "kalypso_block" and sizes:
         parsed = [_size(part) for part in sizes.split("/")]
         if all(size for size, _ in parsed):
             return ArmSpec(name, kind, tuple(size for size, _ in parsed),
-                           tuple(budget for _, budget in parsed))
+                           tuple(budget for _, budget in parsed), materialize)
     raise ValueError(
         f"bad arm {name!r}; use kalypso_per_tuple, vllm_direct, "
         "kalypso_block:N or N@T (filter), kalypso_block:KxJ (join) or "
-        "kalypso_block:N/KxJ (pipeline)")
+        "kalypso_block:N/KxJ (pipeline), optionally ending in +materialized")
 
 
 def _blockable(workload: Workload) -> list[dict]:
@@ -209,6 +220,8 @@ async def run_kalypso(client: httpx.AsyncClient, base_url: str, workload: Worklo
                                  budgets[0] if budgets else None)),
         "model_name": model,
     }
+    if spec and spec.materialize:
+        payload["materialize"] = True
     response = await client.post(f"{base_url}/v1/semantic/query", json=payload)
     if response.status_code >= 400:
         raise ArmError(f"/v1/semantic/query returned {response.status_code}: "
