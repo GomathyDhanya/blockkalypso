@@ -5,6 +5,7 @@ import json
 import pytest
 
 from vllm.kalypso.benchmark.eval import metrics, report
+from vllm.kalypso.benchmark.eval.stages import summarize_trace
 from vllm.kalypso.benchmark.eval.arms import (ArmError, check_arm, direct_requests,
                                               kalypso_ops, parse_arm,
                                               parse_query_response)
@@ -222,3 +223,45 @@ def test_report_lists_failed_arms():
                                "kalypso_per_tuple", failed)
     assert "| `kalypso_block:10` | failed in all 1 trials |" in table
     assert "returned 500" in table
+
+
+def _trace():
+    stats = {"BlockSemFilter": {"fallback_calls": 1, "llm_calls": 5}}
+    return {
+        "elapsed_s": 9.0, "first_output_s": 4.0, "outputs": 3,
+        "stages": {
+            "10": {"operators": ["BlockSemJoin"], "block_size": 2, "tasks": 2,
+                   "rows_in": 4, "rows_out": 6, "mean_occupancy": 1.0,
+                   "first_start": 2.0, "last_end": 7.0,
+                   "operator_stats": {"BlockSemJoin": {"fallback_calls": 2}}},
+            "9": {"operators": ["BlockSemFilter"], "block_size": 4, "tasks": 2,
+                  "rows_in": 8, "rows_out": 4, "mean_occupancy": 1.0,
+                  "first_start": 0.0, "last_end": 3.0, "operator_stats": stats},
+        },
+        "tasks": [],
+    }
+
+
+def test_summarize_trace_orders_stages_and_measures_overlap():
+    d = summarize_trace(_trace())
+    assert d["first_output_s"] == 4.0 and d["fallback_calls"] == 3
+    f1, join = d["stages"]
+    assert f1["operators"] == ["BlockSemFilter"] and f1["selectivity"] == 0.5
+    assert f1["overlap_s"] is None
+    assert join["selectivity"] == 1.5            # fanout
+    assert join["overlap_s"] == 1.0              # started at 2.0, F1 ended at 3.0
+    assert summarize_trace(None) == {"first_output_s": None, "fallback_calls": None,
+                                     "stages": []}
+
+
+def test_stage_table_reports_medians_per_stage():
+    meta = _meta(arms=["kalypso_block:4"])
+    trials = []
+    for repeat, end in ((1, 3.0), (2, 5.0)):
+        t = _trace()
+        t["stages"]["9"]["last_end"] = end
+        trials.append({**_trial("kalypso_block:4", repeat, {}, 1.0), **summarize_trace(t)})
+    table = report.stage_table(meta, trials)
+    assert "| `kalypso_block:4` | 0 | BlockSemFilter | 4 | 2 | 8 | 4 | 0.50 | 1.00 | 0.00 | 4.00 [3.00-5.00] |" in table
+    assert "| `kalypso_block:4` | 1 | BlockSemJoin | 2 |" in table
+    assert report.stage_table(meta, [_trial("kalypso_block:4", 1, {}, 1.0)]) == ""

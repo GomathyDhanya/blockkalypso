@@ -162,8 +162,9 @@ are the same single block.
 | 0.5B | F1 (precision / recall) | 0.80 (0.80 / 0.80) | 0.38 (0.25 / 0.80) | 0.00 (0 / 0) |
 | 1.5B | F1 (precision / recall) | 0.33 (0.20 / 1.00) | 0.67 (0.50 / 1.00) | 0.60 (0.60 / 0.60) |
 
-Block 2x2 makes 9 calls, not 4, because some pairs fall back to per-pair
-calls when a block answer is unusable.
+Block 2x2 makes 9 calls: 5 rows per side split into blocks of 2, 2 and 1,
+so there are 3 x 3 = 9 block pairs (the 1x1 corner pair is a plain per-pair
+call).
 
 ### What the numbers show
 

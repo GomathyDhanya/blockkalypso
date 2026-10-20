@@ -24,6 +24,7 @@ from pathlib import Path
 import httpx
 
 from . import metrics
+from .stages import summarize_trace
 from .arms import DEFAULT_ARMS, ArmError, check_arm, parse_arm, run_arm
 from .workloads import WORKLOADS
 
@@ -132,8 +133,10 @@ async def trial(client, args, spec, workload, model, server_pid) -> dict:
         "rows_out": len(result.outputs),
         "rows_per_s": round(rows_in / measured["latency_s"], 3)
         if measured["latency_s"] else None,
+        **summarize_trace(result.trace),
         "selected": _jsonable(result.selected),
         "outputs": dict(sorted(result.outputs.items())),
+        "trace": result.trace,
     }
     if workload.kind == "map":
         record["missing_rows"] = sorted({str(r.idx) for r in workload.rows} - set(result.outputs))

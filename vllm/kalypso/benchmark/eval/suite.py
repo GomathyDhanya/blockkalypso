@@ -33,6 +33,7 @@ def write_summary(out_dir: Path, workloads) -> Path:
             meta, report.summarize(meta, trials),
             report.agreement(meta, trials, "kalypso_per_tuple"),
             "kalypso_per_tuple", report.failures(trials)))
+        sections.append(report.stage_table(meta, trials))
     summary = out_dir / "summary.md"
     summary.write_text("\n".join(sections), encoding="utf-8")
     return summary

@@ -23,6 +23,8 @@ SYSTEM_COLUMNS = (
     ("peak_kv_cache_pct", "Peak KV %"),
     ("peak_server_rss_kb", "Peak RSS (MiB)"),
     ("rows_per_s", "Items/s"),
+    ("first_output_s", "First output (s)"),
+    ("fallback_calls", "Fallback calls"),
     ("truncated", "Truncated"),
 )
 QUALITY_COLUMNS = (
@@ -35,8 +37,21 @@ _FORMATS = {
     "latency_s": "{:.2f}", "prefix_cache_hit_rate": "{:.2f}",
     "peak_kv_cache_pct": "{:.1f}", "peak_server_rss_kb": "{:.0f}",
     "rows_per_s": "{:.2f}", "accuracy": "{:.2f}", "precision": "{:.2f}",
-    "recall": "{:.2f}", "f1": "{:.2f}",
+    "recall": "{:.2f}", "f1": "{:.2f}", "first_output_s": "{:.2f}",
+    "selectivity": "{:.2f}", "occupancy": "{:.2f}", "start_s": "{:.2f}",
+    "end_s": "{:.2f}", "overlap_s": "{:.2f}",
 }
+STAGE_COLUMNS = (
+    ("tasks", "Tasks"),
+    ("rows_in", "Rows in"),
+    ("rows_out", "Rows out"),
+    ("selectivity", "Out/in"),
+    ("occupancy", "Occupancy"),
+    ("start_s", "Start (s)"),
+    ("end_s", "End (s)"),
+    ("overlap_s", "Overlap (s)"),
+    ("fallback_calls", "Fallbacks"),
+)
 
 
 def load(path: Path) -> tuple[dict, list[dict]]:
@@ -213,6 +228,38 @@ def to_markdown(meta: dict, summary: dict, agree: dict, reference: str,
     return "\n".join(lines) + "\n"
 
 
+def _stat(values):
+    values = [v for v in values if v is not None]
+    if not values:
+        return None
+    return {"median": statistics.median(values), "min": min(values), "max": max(values)}
+
+
+def stage_table(meta: dict, trials: list[dict]) -> str:
+    """Per arm and stage (by position): medians over repeats.
+
+    Empty when no trial carries stage data (e.g. only direct-vLLM arms).
+    """
+    groups = by_arm(trials)
+    header = ["Arm", "Stage", "Operators", "Block"] + [label for _, label in STAGE_COLUMNS]
+    lines = []
+    for arm in meta["arms"]:
+        group = groups.get(arm, [])
+        depth = max((len(t.get("stages") or []) for t in group), default=0)
+        for pos in range(depth):
+            rows = [t["stages"][pos] for t in group if len(t.get("stages") or []) > pos]
+            first = rows[0]
+            cells = [f"`{arm}`", str(pos), "+".join(first["operators"]) or "-",
+                     str(first.get("block_size"))]
+            cells += [_cell(_stat(r.get(key) for r in rows), key) for key, _ in STAGE_COLUMNS]
+            lines.append("| " + " | ".join(cells) + " |")
+    if not lines:
+        return ""
+    return "\n".join(["", "Stages (medians over repeats; times from query start):", "",
+                      "| " + " | ".join(header) + " |", "|" + "---|" * len(header),
+                      *lines]) + "\n"
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("results", type=Path)
@@ -223,6 +270,7 @@ def main() -> None:
         raise SystemExit(f"{args.results} has no trials")
     print(to_markdown(meta, summarize(meta, trials), agreement(meta, trials, args.reference),
                       args.reference, failures(trials)), end="")
+    print(stage_table(meta, trials), end="")
 
 
 if __name__ == "__main__":

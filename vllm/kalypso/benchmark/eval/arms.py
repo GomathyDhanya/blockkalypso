@@ -41,6 +41,8 @@ class ArmOutput:
     # Filter: idxs that passed. Join: (left, right) pairs that matched.
     # None for maps.
     selected: frozenset | None = None
+    # The server's per-query execution trace (Kalypso arms only).
+    trace: dict | None = None
 
 
 class ArmError(RuntimeError):
@@ -112,7 +114,8 @@ def parse_query_response(workload: Workload, body: dict) -> ArmOutput:
         else:
             outputs[str(idx)] = value
             selected.add(idx)
-    return ArmOutput(outputs, None if workload.kind == MAP else frozenset(selected))
+    return ArmOutput(outputs, None if workload.kind == MAP else frozenset(selected),
+                     trace=body.get("trace"))
 
 
 async def run_kalypso(client: httpx.AsyncClient, base_url: str, workload: Workload,
