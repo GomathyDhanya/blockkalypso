@@ -5,7 +5,7 @@ from vllm.entrypoints.openai.protocol import CompletionRequest, ChatCompletionRe
 from vllm.entrypoints.openai.api_server import create_completion, create_chat_completion
 from vllm.kalypso.pin_registry import PinnedRequestRegistry
 
-from .executor import LLMExecutor, CompletionResult
+from .executor import LLMExecutor, CompletionResult, LLMRequestRejected
 
 
 class VLLMExecutor(LLMExecutor):
@@ -114,6 +114,11 @@ class VLLMExecutor(LLMExecutor):
 
         raw = gen.body.decode("utf-8")
         data = json.loads(raw)
+        if "id" not in data:
+            raise LLMRequestRejected(
+                "chat completion request rejected by vLLM "
+                f"(status={getattr(gen, 'status_code', '?')}): {data}"
+            )
         request_id = data["id"]
         self._log(
             "[vllm-exec] "
@@ -169,6 +174,11 @@ class VLLMExecutor(LLMExecutor):
 
         raw = gen.body.decode("utf-8")
         data = json.loads(raw)
+        if "id" not in data:
+            raise LLMRequestRejected(
+                "completion request rejected by vLLM "
+                f"(status={getattr(gen, 'status_code', '?')}): {data}"
+            )
         request_id = data["id"]
         self._log(
             "[vllm-exec] "

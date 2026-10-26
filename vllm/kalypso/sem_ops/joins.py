@@ -23,34 +23,40 @@ from vllm.kalypso.controller.map_estimator import MapRatioEstimator
 from vllm.kalypso.execution.pipeline_execution import BlockingExecutor
 
 
+def join_pair(left_ctx, right_ctx):
+    """Build one Kalypso join context pairing ``left_ctx`` with
+    ``right_ctx``. Shared by ``CartesianProduct.__call__`` (the per-pair
+    join's full fanout) and ``BlockSemJoin.run_block`` (which already
+    knows which single right row each match pairs with, and builds just
+    that one pair instead of fanning out over a whole right table).
+    """
+    base_input = SemanticInput(
+        data=left_ctx.input.data[:],
+        right_data=[],
+    )
+    _input = base_input.add_right(right_ctx.input.data)
+    new_ctx = SemContext(
+        input=_input,
+        state=ExecutionState(
+            raw_request=left_ctx.state.raw_request,
+            pin_req_id=None,
+            executor=left_ctx.state.executor,
+            # Keep the left row's id; it was dropped (-1) before.
+            idx=left_ctx.state.idx,
+        ),
+    )
+    # Which right row this pair came from, for join results.
+    new_ctx.state.right_idx = right_ctx.state.idx
+    return new_ctx
+
+
 class CartesianProduct(BaseOp):
     def __init__(self, right_table, position=-1):
         super().__init__(behavior=OpBehavior.JOIN, position=position)
         self.right_table = right_table
 
     def __call__(self, ctx):
-        out = []
-
-        for right in self.right_table:
-            base_input = SemanticInput(
-                data=ctx.input.data[:],
-                right_data=[]
-            )
-            _input = base_input.add_right(right.input.data)
-            new_ctx = SemContext(
-                input=_input,
-                state=ExecutionState(
-                    raw_request=ctx.state.raw_request,
-                    pin_req_id=None,
-                    executor=ctx.state.executor,
-                    # Keep the left row's id; it was dropped (-1) before.
-                    idx=ctx.state.idx,
-                ),
-                )
-            # Which right row this pair came from, for join results.
-            new_ctx.state.right_idx = right.state.idx
-            out.append(new_ctx)
-        return out
+        return [join_pair(ctx, right) for right in self.right_table]
 
 
 class IndexedCartesianProduct(BaseOp):

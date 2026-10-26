@@ -10,6 +10,15 @@ class CompletionResult:
         self.finish_reason = finish_reason
 
 
+class LLMRequestRejected(RuntimeError):
+    """The LLM engine rejected a request outright (e.g. the prompt plus
+    max_tokens exceeds the model's context length), so no CompletionResult
+    is available. Distinct from a parse failure of a well-formed reply, so
+    callers (e.g. a block operator) can tell the two apart and, in the
+    future, react by retrying with a smaller block instead of crashing.
+    """
+
+
 class LLMExecutor(ABC):
     @abstractmethod
     async def complete(

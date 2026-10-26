@@ -74,6 +74,23 @@ class SemMap(BaseOp):
         prompt_token_len = KVMemoryManager.get_instance().token_length(prompt_str)
         self.max_tokens = self._planned_max_tokens(ctx, prompt_token_len)
         return prompt_token_len + self.max_tokens
+
+    def worst_case_tokens(self, ctx) -> int:
+        """Like ``estimate_tokens``, but reserves for the largest retry this
+        row could trigger (``MAX_TOKEN_LIMIT``) instead of only the
+        ratio-estimated size.
+
+        A per-row op retrying in place inside a block task
+        (``Stage._run_row_op``) never goes through ``Stage.accept``/
+        ``estimate_budget`` again, so the block task's reservation must
+        already cover the retry before it happens, not just the expected
+        case.
+        """
+        prompt = self._build_prompt(ctx)
+        prompt_str = KVMemoryManager.get_instance().apply_chat_template(prompt)
+        prompt_token_len = KVMemoryManager.get_instance().token_length(prompt_str)
+        planned = self._planned_max_tokens(ctx, prompt_token_len)
+        return prompt_token_len + max(planned, self.MAX_TOKEN_LIMIT)
     
     
     async def _run_single(self, ctx: SemContext, priority: int = 0):

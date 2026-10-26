@@ -190,7 +190,13 @@ class Stage:
             return op.estimate_tokens(task.ctx)
         if supports_blocks(op):
             return op.estimate_tokens(task.rows)
-        return sum(op.estimate_tokens(row) for row in task.rows)
+        # A per-row op inside a block task retries in place (see
+        # Stage._run_row_op) without ever re-entering accept()/
+        # estimate_budget(), so its reservation must already cover a
+        # possible retry; prefer worst_case_tokens when the op defines it
+        # (e.g. SemMap, whose retry can grow up to MAX_TOKEN_LIMIT).
+        estimate = getattr(op, "worst_case_tokens", op.estimate_tokens)
+        return sum(estimate(row) for row in task.rows)
 
     def estimate_budget(self, task: Task) -> int:
         """Bytes to reserve for ``task``: one reservation for all its rows."""

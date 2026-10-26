@@ -692,9 +692,28 @@ async def semantic_query(
             detail="Exactly one of data_path or records must be provided.",
         )
 
-    data_path = sem_request.data_path or _materialize_records_to_csv(
-        sem_request.records, sem_request.text_column
+    processor = raw_request.app.state.query_processor
+    if (
+        sem_request.model_name is not None
+        and sem_request.model_name != processor.model_name
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f'model_name "{sem_request.model_name}" does not match the '
+                f'model this server is running ("{processor.model_name}"); '
+                "this server process serves a single model."
+            ),
+        )
+
+    # Only set when we had to materialize `records` ourselves — cleaned up
+    # in the `finally` below. A caller-supplied data_path is never ours to
+    # delete.
+    materialized_path = (
+        None if sem_request.data_path
+        else _materialize_records_to_csv(sem_request.records, sem_request.text_column)
     )
+    data_path = sem_request.data_path or materialized_path
 
     started = asyncio.get_running_loop().time()
     print("=== Semantic Execute Request ===")
@@ -706,8 +725,15 @@ async def semantic_query(
     _query = query.Query(sem_request.ops, data_path)
     print('query called')
 
-    processor = raw_request.app.state.query_processor
-    out_ctxs = await processor.execute(raw_request, _query)
+    try:
+        out_ctxs = await processor.execute(raw_request, _query)
+    finally:
+        if materialized_path is not None:
+            import os
+            try:
+                os.remove(materialized_path)
+            except OSError:
+                pass
 
     results = []
     for ctx in out_ctxs:

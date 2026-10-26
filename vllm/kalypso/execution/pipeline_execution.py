@@ -150,13 +150,22 @@ class AsyncPipelineExecutor:
             stage.stage_id: 0
             for stage in stages
         }
-        # A block join can receive rows from several upstream tasks. Gather
-        # them until its left-side block is full, then flush the final partial
-        # block once its upstream stage has drained.
+        # A block-task stage can receive rows one at a time instead of as a
+        # full block: a BlockSemJoin always gathers left rows this way, and
+        # any other block-task stage (e.g. a block filter) needs the same
+        # buffering when it follows a non-block stage, since a per-pair join
+        # fanout or a plain per-row op hands rows downstream one at a time —
+        # without this, that single row is sent on as its own "block" of one
+        # (see bug: a blocked filter after a per-pair join was never blocked).
+        # Rows gathered this way until the block is full, then the final
+        # partial block is flushed once the upstream stage(s) have drained.
         pending_join_rows = {
             index: [] for index, stage in enumerate(stages)
-            if stage.operators and isinstance(stage.operators[0], ops.BlockSemJoin)
-            and index > 0
+            if stage.block_tasks and index > 0
+            and (
+                (stage.operators and isinstance(stage.operators[0], ops.BlockSemJoin))
+                or not stages[index - 1].block_tasks
+            )
         }
         total_retries = 0
 
@@ -176,12 +185,23 @@ class AsyncPipelineExecutor:
                 del pending[:stage.block_size]
                 stage.enqueue(Task(ctx=block, stage_index=index))
 
+        def upstream_busy(index):
+            """True while any earlier stage can still produce rows for
+            ``index`` — not just the one immediately before it, since with
+            two or more stages ahead of a block-task stage, an earlier one
+            can still be producing rows after its immediate predecessor
+            goes idle.
+            """
+            return any(
+                stage.has_waiting_tasks() or stage.running_count()
+                or pending_join_rows.get(i)
+                for i, stage in enumerate(stages[:index]))
+
         def flush_partial_join_blocks():
             for index, pending in pending_join_rows.items():
                 if not pending:
                     continue
-                upstream = stages[index - 1]
-                if upstream.has_waiting_tasks() or upstream.running_count():
+                if upstream_busy(index):
                     continue
                 stages[index].enqueue(Task(ctx=pending[:], stage_index=index))
                 pending.clear()

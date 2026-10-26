@@ -146,6 +146,10 @@ class BlockJoinStats:
     duplicate_pairs: int = 0
     unparseable_blocks: int = 0
     truncated_block_calls: int = 0
+    # Of truncated_block_calls: how many had a parseable-looking pair list
+    # (not caught by unparseable_blocks) but were still sent to the
+    # per-pair fallback because the cutoff could have hidden more matches.
+    truncated_pairwise_fallbacks: int = 0
 
     @property
     def llm_calls(self) -> int:
@@ -203,11 +207,16 @@ class BlockSemJoin(BaseOp):
         return self.max_tokens_overhead + self.max_tokens_per_pair * k * j
 
     def estimate_tokens(self, left_ctxs, right_ctxs=None, token_length=None) -> int:
-        """Prompt + output tokens for one block pair (``token_length``: str -> int)."""
-        if right_ctxs is None:
-            from vllm.kalypso.budget import KVMemoryManager
+        """Prompt + output tokens for one block pair (``token_length``: str -> int).
 
-            token_length = KVMemoryManager.get_instance().token_length
+        When ``token_length`` is not supplied (the path the pipeline actually
+        uses: ``Stage.estimate_tokens_for`` calls this with one argument),
+        the prompt is measured through the chat template, matching
+        ``BlockSemFilter.estimate_tokens`` — a plain newline join of the
+        message contents skips template/role overhead and undercounts the
+        real prompt size.
+        """
+        if right_ctxs is None:
             return max((
                 self.estimate_tokens(left_ctxs, block, token_length)
                 for block in make_blocks(self.right_table, self.right_block_size)
@@ -220,14 +229,20 @@ class BlockSemJoin(BaseOp):
             [row_text(c) for c in right_ctxs],
             self.system_prompt,
         )
-        text = "\n".join(m["content"] for m in msgs)
-        return token_length(text) + self.block_max_tokens(len(left_ctxs), len(right_ctxs))
+        if token_length is None:
+            from vllm.kalypso.budget import KVMemoryManager
+
+            mgr = KVMemoryManager.get_instance()
+            prompt_tokens = mgr.token_length(mgr.apply_chat_template(msgs))
+        else:
+            prompt_tokens = token_length("\n".join(m["content"] for m in msgs))
+        return prompt_tokens + self.block_max_tokens(len(left_ctxs), len(right_ctxs))
 
     async def run_block(self, left_ctxs, priority: int = 0):
         """Evaluate one incoming left block and emit Kalypso join contexts."""
         if not left_ctxs or not self.right_table:
             return []
-        from .joins import CartesianProduct
+        from .joins import join_pair
 
         executor, raw_request = first_executor(left_ctxs)
         left_texts = [row_text(ctx) for ctx in left_ctxs]
@@ -245,13 +260,16 @@ class BlockSemJoin(BaseOp):
             for _, _, _, right_block in right_blocks
         ]
         joined = []
-        for (_, _, right_offset, _), result in zip(right_blocks, results):
+        for (_, _, right_offset, right_block), result in zip(right_blocks, results):
+            # Build each matched pair directly (no CartesianProduct object
+            # constructed per match, or even per block — join_pair is a
+            # plain function shared with CartesianProduct itself).
             for left_pos, right_pos in result.matches:
-                right_ctx = self.right_table[right_offset + right_pos]
                 left_ctx = left_ctxs[left_pos]
-                for pair in CartesianProduct([right_ctx])(left_ctx):
-                    pair.output = list(left_ctx.output)
-                    joined.append(pair)
+                right_ctx = right_block[right_pos]
+                pair = join_pair(left_ctx, right_ctx)
+                pair.output = list(left_ctx.output)
+                joined.append(pair)
         return joined
 
     async def evaluate_block_pair(
@@ -277,7 +295,8 @@ class BlockSemJoin(BaseOp):
             build_block_join_messages(self.condition, left_texts, right_texts, self.system_prompt),
             self.block_max_tokens(k, j), priority,
         )
-        if finish == "length":
+        truncated = finish == "length"
+        if truncated:
             self.stats.truncated_block_calls += 1
         parsed = parse_block_join(text, k, j)
         self.stats.invalid_pairs += len(parsed.invalid)
@@ -285,6 +304,17 @@ class BlockSemJoin(BaseOp):
 
         if not parsed.parseable:
             self.stats.unparseable_blocks += 1
+            result = await self._pairwise(executor, raw_request, left_texts, right_texts, priority)
+            result.raw_outputs.insert(0, text)
+            return result
+
+        if truncated:
+            # A parseable-looking list of pairs from a truncated response
+            # cannot be trusted as the complete answer: the model may have
+            # found more matches after the point it got cut off. Fall back
+            # to the exhaustive per-pair baseline for this block instead of
+            # silently returning a partial match list.
+            self.stats.truncated_pairwise_fallbacks += 1
             result = await self._pairwise(executor, raw_request, left_texts, right_texts, priority)
             result.raw_outputs.insert(0, text)
             return result

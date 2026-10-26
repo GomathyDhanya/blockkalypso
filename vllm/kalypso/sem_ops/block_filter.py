@@ -86,6 +86,11 @@ def parse_block_answers(text: str | None, n: int) -> dict[int, bool]:
     seen: dict[int, set[bool]] = {}
     for m in _ANSWER_RE.finditer(text or ""):
         seen.setdefault(int(m.group(1)), set()).add(m.group(2).lower() in _TRUE_WORDS)
+    # Coincidence-prone, not a guaranteed-correct remap: this only checks
+    # that the *set* of ids seen is exactly {0, .., n-1}, which a model
+    # numbering from 0 will produce, but so would one that happened to
+    # answer every item except the true id n (e.g. it skipped item n
+    # and repeated item 0). Both look identical to this check.
     if n > 0 and set(seen) == set(range(n)):
         seen = {i + 1: v for i, v in seen.items()}
     return {i: next(iter(v)) for i, v in seen.items() if 1 <= i <= n and len(v) == 1}

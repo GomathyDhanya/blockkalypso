@@ -10,7 +10,13 @@ def _data_source(raw_request, data_path, executor):
     path = Path(data_path)
 
     if path.is_dir():
-        for txt_path in sorted(path.glob("*.txt"), key=lambda p: int(p.stem)):
+        def _sort_key(p):
+            # Numeric filenames sort numerically (unchanged behavior);
+            # anything else sorts after them, alphabetically, instead of
+            # crashing on int().
+            return (0, int(p.stem)) if p.stem.isdigit() else (1, p.stem)
+
+        for txt_path in sorted(path.glob("*.txt"), key=_sort_key):
             yield from _message_reader(raw_request, txt_path, executor)
 
     elif path.suffix.lower() == ".json":
@@ -34,7 +40,10 @@ def _message_reader(raw_request, path: Path, executor):
             raw_request=raw_request,
             pin_req_id=None,
             executor=executor,
-            idx=int(path.stem),
+            # Directory datasets use the file name as the row id; keep it an
+            # int when the name is numeric (unchanged behavior), otherwise
+            # fall back to the stem itself rather than crashing.
+            idx=int(path.stem) if path.stem.isdigit() else path.stem,
         ),
     )
 
