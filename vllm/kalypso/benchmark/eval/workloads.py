@@ -16,6 +16,7 @@ use, pinned to one commit and checked by SHA-256, into the git-ignored
 import csv
 import hashlib
 import html
+import random
 import shutil
 import tempfile
 import urllib.request
@@ -252,6 +253,40 @@ def load_movie_opposite(n: int | None = None) -> Workload:
     )
 
 
+# Fixed-selectivity versions of movie_positive: SELECTIVITY_ROWS reviews, of
+# which a share s is positive, drawn with a fixed seed and shuffled so
+# positives and negatives mix inside every block. The 448 negative reviews
+# bound s from below: 400 rows at s = 0.10 need 360 of them.
+SELECTIVITY_ROWS = 400
+SELECTIVITY_SEED = 0
+SELECTIVITIES = {"movie_sel10": 0.10, "movie_sel25": 0.25, "movie_sel50": 0.50,
+                 "movie_sel75": 0.75, "movie_sel90": 0.90}
+
+
+def load_movie_selectivity(name: str, n: int | None = None) -> Workload:
+    """SemBench movie Q1 with a set share of positive reviews (``SELECTIVITIES``).
+
+    ``--n`` keeps the first n of the shuffled rows, so s holds only roughly.
+    """
+    reviews = _sembench_reviews()
+    positives = [r for r in reviews if _positive(r)]
+    negatives = [r for r in reviews if not _positive(r)]
+    want = round(SELECTIVITIES[name] * SELECTIVITY_ROWS)
+    if want > len(positives) or SELECTIVITY_ROWS - want > len(negatives):
+        raise ValueError(f"{name}: not enough reviews for {SELECTIVITY_ROWS} rows")
+    rng = random.Random(SELECTIVITY_SEED)
+    chosen = rng.sample(positives, want) + rng.sample(negatives, SELECTIVITY_ROWS - want)
+    rng.shuffle(chosen)
+    chosen = chosen[:_limit(n, len(chosen), name)]
+    return Workload(
+        name=name, kind=FILTER,
+        data_path=_movie_csv(f"{name}_{len(chosen)}", chosen),
+        instruction=MOVIE_POSITIVE_INSTRUCTION,
+        rows=[Row(i, r["reviewText"]) for i, r in enumerate(chosen)],
+        positives=frozenset(i for i, r in enumerate(chosen) if _positive(r)),
+    )
+
+
 WORKLOADS = {
     "biodex": load_biodex,
     "reviews": load_reviews,
@@ -260,4 +295,6 @@ WORKLOADS = {
     "movie_positive": load_movie_positive,
     "movie_taken3": load_movie_taken3,
     "movie_opposite": load_movie_opposite,
+    **{name: (lambda n=None, name=name: load_movie_selectivity(name, n))
+       for name in SELECTIVITIES},
 }
