@@ -24,6 +24,8 @@ SYSTEM_COLUMNS = (
     ("peak_server_rss_kb", "Peak RSS (MiB)"),
     ("rows_per_s", "Items/s"),
     ("truncated", "Truncated"),
+    ("mean_prefill_time_s", "Mean prefill (s)"),
+    ("mean_decode_time_s", "Mean decode (s)"),
 )
 QUALITY_COLUMNS = (
     ("accuracy", "Accuracy"),
@@ -36,6 +38,7 @@ _FORMATS = {
     "peak_kv_cache_pct": "{:.1f}", "peak_server_rss_kb": "{:.0f}",
     "rows_per_s": "{:.2f}", "accuracy": "{:.2f}", "precision": "{:.2f}",
     "recall": "{:.2f}", "f1": "{:.2f}",
+    "mean_prefill_time_s": "{:.3f}", "mean_decode_time_s": "{:.3f}",
 }
 
 
