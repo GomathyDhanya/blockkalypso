@@ -171,21 +171,17 @@ class SemanticPlan:
             plan.append(current_segment)
             current_segment = []
 
-        for op_index, op in enumerate(operators):
-
-            # A block join is deliberately lowered to an ordinary Cartesian
-            # product followed by a block predicate filter. Keep that product
-            # as its own plan item so all candidate pairs are available for
-            # fixed-size filter blocks, rather than attaching it as a fanout
-            # that would enqueue one pair per downstream task.
-            next_op = operators[op_index + 1] if op_index + 1 < len(operators) else None
-            if isinstance(op, ops.CartesianProduct) and isinstance(next_op, ops.BlockSemJoin):
-                emit_stage()
-                flush_segment()
-                plan.append(op)
-                continue
+        for op in operators:
 
             if op.behavior == OpBehavior.TUPLE_INDEPENDENT:
+                # A block operator owns its task boundaries. Do not fuse it
+                # with row operators (including retrying maps), or another
+                # block operator with a different count/token limit.
+                if getattr(op, "supports_blocks", False):
+                    emit_stage()
+                    stage_ops_chain.append(op)
+                    emit_stage()
+                    continue
                 stage_ops_chain.append(op)
                 continue
 
@@ -274,6 +270,11 @@ class SemanticPlan:
             n = len(ops_list)
 
             for i, op in enumerate(ops_list):
+                if getattr(op, "supports_blocks", False):
+                    # Block prompts cannot reuse a single row's pinned prefix.
+                    # End the row pin chain before entering a block stage.
+                    finalize_chain(None)
+                    continue
                 next_op = ops_list[i + 1] if i + 1 < n else None
                 next_behavior = next_op.behavior if next_op else None
 
@@ -379,7 +380,7 @@ class SemanticPlan:
 
                 left_block_size = int(args.get("left_block_size", args.get("block_size", 1)))
                 right_block_size = int(args.get("right_block_size", args.get("block_size", 1)))
-                if left_block_size > 1 or right_block_size > 1:
+                if left_block_size > 1 or right_block_size > 1 or args.get("pair_block_size") is not None:
                     if icp or args.get("cascade") or args.get("llm_cascade"):
                         raise ValueError("block join does not support ICP or cascade")
                     physical.append(ops.CartesianProduct(

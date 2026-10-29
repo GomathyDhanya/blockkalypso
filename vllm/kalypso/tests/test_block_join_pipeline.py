@@ -83,17 +83,59 @@ def test_filter_cartesian_product_block_join_filter_query(
         {"op": "sem_filter", "args": {"prompt": "only apple", "block_size": 2}},
     ])
     built = plan.build(left, physical)
-    assert isinstance(built[1], ops.CartesianProduct)
-    assert isinstance(built[2][0].operators[0], ops.BlockSemJoin)
+    assert len(built) == 1
+    assert isinstance(built[0][0].fanout_op, ops.CartesianProduct)
+    assert isinstance(built[0][1].operators[0], ops.BlockSemJoin)
 
     output, stats = asyncio.run(plan.plan_executor.execute(left, built))
     assert [(ctx.state.idx, ctx.state.right_idx) for ctx in output] == [(0, 101)]
     assert len(output[0].output) == 2
     assert executor.join_calls == 3  # 12 Cartesian-product pairs in blocks of four
-    join_stage = built[2][0]
-    assert stats[1][join_stage.stage_id]["input"] == 3
+    join_stage = built[0][1]
+    assert stats[0][join_stage.stage_id]["input"] == 3
     assert all(fake_kv_manager.stage_usage(stage.stage_id)[0] == 0
-               for segment in (built[0], built[2]) for stage in segment)
+               for stage in built[0])
+
+
+def test_block_join_starts_before_upstream_filter_finishes(fake_kv_manager, monkeypatch):
+    class StreamingExecutor(QueryExecutor):
+        def __init__(self):
+            super().__init__()
+            self.join_started = asyncio.Event()
+            self.upstream_finished = False
+            self.join_overlapped_upstream = False
+
+        async def execute(self, raw_request, prompt, max_tokens, pin=False, priority=0):
+            body = prompt[-1]["content"]
+            if body.startswith("Question for each item: keep all") and "carrot" in body:
+                await self.join_started.wait()
+                self.upstream_finished = True
+            if body.startswith("Question for each item: same item"):
+                self.join_overlapped_upstream |= not self.upstream_finished
+                self.join_started.set()
+            return await super().execute(raw_request, prompt, max_tokens,
+                                         pin=pin, priority=priority)
+
+    executor = StreamingExecutor()
+    left = [row(text, idx, executor) for idx, text in
+            enumerate(("apple", "banana", "carrot", "date"))]
+    right = [row("apple", 100), row("carrot", 101)]
+    monkeypatch.setattr("vllm.kalypso.controller.plan.data._data_source",
+                        lambda *args: iter(right))
+    plan = SemanticPlan(executor=executor)
+    physical = plan.parse_ops([
+        {"op": "sem_filter", "args": {"prompt": "keep all", "block_size": 2}},
+        {"op": "join", "args": {"instruction": "same item",
+                                "right_table": "right.csv",
+                                "left_block_size": 2, "right_block_size": 2}},
+    ])
+    output, _ = asyncio.run(asyncio.wait_for(
+        plan.plan_executor.execute(left, plan.build(left, physical)), timeout=2,
+    ))
+    assert executor.join_overlapped_upstream
+    assert sorted((ctx.state.idx, ctx.state.right_idx) for ctx in output) == [
+        (0, 100), (2, 101),
+    ]
 
 
 def test_block_join_fallback_keeps_ordinary_join_ids(fake_kv_manager, monkeypatch):

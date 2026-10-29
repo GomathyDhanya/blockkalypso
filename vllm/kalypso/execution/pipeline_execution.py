@@ -150,7 +150,63 @@ class AsyncPipelineExecutor:
             stage.stage_id: 0
             for stage in stages
         }
+        # Both block filters and joins accumulate rows across producer tasks.
+        # No top-level materialization barrier is needed.
+        pending_join_rows = {
+            index: [] for index, stage in enumerate(stages)
+            if index > 0 and stage.block_tasks
+        }
         total_retries = 0
+
+        def enqueue_join_rows(index, rows, trackers=()):
+            """Accumulate Cartesian candidates into one join-filter task.
+
+            ``trackers`` belongs to each candidate, not to a whole incoming
+            batch: a Cartesian product can emit several children for one
+            pinned parent. Keeping one tracker tuple per row lets a mixed
+            block release every upstream parent exactly once per candidate.
+            """
+            stage = stages[index]
+            pending = pending_join_rows[index]
+            def emit(entries):
+                stage.enqueue(Task(
+                    ctx=[row for row, _ in entries],
+                    stage_index=index,
+                    trackers=tuple(
+                        tracker for _, row_trackers in entries
+                        for tracker in row_trackers
+                    ),
+                ))
+            for row in rows:
+                # Use the same token-aware grouping policy as initial tasks.
+                if pending and len(stage.make_blocks(
+                    [entry[0] for entry in pending] + [row]
+                )) > 1:
+                    emit(pending[:])
+                    pending.clear()
+                pending.append((row, trackers))
+                if len(pending) >= stage.block_size:
+                    emit(pending[:])
+                    pending.clear()
+
+        def flush_partial_join_blocks():
+            """Run the final incomplete candidate block after its producer drains."""
+            for index, pending in pending_join_rows.items():
+                if not pending:
+                    continue
+                upstream = stages[index - 1]
+                if upstream.has_waiting_tasks() or upstream.running_count():
+                    continue
+                entries = pending[:]
+                pending.clear()
+                stages[index].enqueue(Task(
+                    ctx=[row for row, _ in entries],
+                    stage_index=index,
+                    trackers=tuple(
+                        tracker for _, row_trackers in entries
+                        for tracker in row_trackers
+                    ),
+                ))
 
         def add_deferred_parent(stage_id: int, reserved_budget: int) -> None:
             deferred_parent_counts[stage_id] = (
@@ -219,7 +275,9 @@ class AsyncPipelineExecutor:
             stage_stat[stage_id]["output"] += count
 
         def has_pending_work():
-            return any(stage.has_waiting_tasks() for stage in stages)
+            return any(stage.has_waiting_tasks() for stage in stages) or any(
+                pending_join_rows.values()
+            )
 
         async def rebalance_stage_capacity():
             changed = False
@@ -406,6 +464,11 @@ class AsyncPipelineExecutor:
 
             if next_stage_index >= len(stages):
                 out.extend(children)
+            elif next_stage_index in pending_join_rows:
+                enqueue_join_rows(
+                    next_stage_index, children,
+                    downstream_trackers(len(children)),
+                )
             elif stage.fanout_op is None and stages[next_stage_index].block_tasks:
                 groups = stages[next_stage_index].make_blocks(children)
                 trackers = downstream_trackers(len(groups))
@@ -434,6 +497,7 @@ class AsyncPipelineExecutor:
             await rebalance_stage_capacity()
 
         while has_pending_work() or active:
+            flush_partial_join_blocks()
             await rebalance_stage_capacity()
             await launch_ready_tasks()
 
@@ -530,7 +594,10 @@ class AsyncPipelineExecutor:
                         continue
 
                     deferred_release = False
-                    trackers = task.trackers
+                    # An incoming completion obligation belongs to this task,
+                    # not to every fanout descendant independently.
+                    trackers = ((CompletionTracker(task.trackers, len(child_ctxs)),)
+                                if task.trackers else ())
                     if task.ctx.state.pin_req_id is not None:
                         add_deferred_parent(stage.stage_id, budget)
                         if self.LOG_DEFERRAL_TRACE:
@@ -555,6 +622,9 @@ class AsyncPipelineExecutor:
                         deferred_release = True
 
                     for child_ctx in child_ctxs:
+                        if next_stage_index in pending_join_rows:
+                            enqueue_join_rows(next_stage_index, [child_ctx], trackers)
+                            continue
                         child_task = Task(
                             ctx=([child_ctx] if next_stage_index < len(stages)
                                  and stages[next_stage_index].block_tasks else child_ctx),
@@ -587,6 +657,8 @@ class AsyncPipelineExecutor:
                 if next_stage_index >= len(stages):
                     out.append(result)
                     await finalize_task(next_task)
+                elif next_stage_index in pending_join_rows:
+                    enqueue_join_rows(next_stage_index, [result], task.trackers)
                 else:
                     stages[next_stage_index].enqueue(next_task)
 

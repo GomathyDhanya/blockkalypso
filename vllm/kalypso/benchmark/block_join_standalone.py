@@ -5,7 +5,7 @@ categories) twice against an OpenAI-compatible server, e.g. Kalypso's own
 vLLM server:
 
 * pairwise baseline: one call per (left, right) pair, like Kalypso's join;
-* block join: blocks of ``--k`` left rows by ``--j`` right rows, one call each.
+* block join: Cartesian candidates in blocks of ``--k * --j`` pairs.
 
 Prints LLM calls, tokens, latency, the matches each produced, agreement
 between the two, and agreement with the hand-written expected matches.
@@ -24,8 +24,8 @@ import httpx
 
 from block_ops_common import SAMPLE_DATA, HTTPExecutor, Timer, resolve_model
 
-from vllm.kalypso.sem_ops.block_join import BlockSemJoin
-from vllm.kalypso.sem_ops.block_utils import make_join_blocks
+from vllm.kalypso.sem_ops.block_join import BlockSemJoin, format_join_candidate
+from vllm.kalypso.sem_ops.block_utils import make_blocks
 
 DATA = SAMPLE_DATA / "block_join"
 DEFAULT_CONDITION = "The complaint in the left item belongs to the category in the right item."
@@ -57,6 +57,21 @@ def compare(got, want):
     }
 
 
+async def evaluate_candidates(op, executor, left, right):
+    """Benchmark the same left-major candidate blocks as query execution."""
+    candidates = [(i, j, format_join_candidate(l, r))
+                  for i, l in enumerate(left) for j, r in enumerate(right)]
+    blocks = make_blocks(candidates, op.block_size)
+    results = await asyncio.gather(*(
+        op.evaluate_block(executor, None, [text for _, _, text in block])
+        for block in blocks
+    ))
+    matches = sorted((i, j) for block, result in zip(blocks, results)
+                     for (i, j, _), verdict in zip(block, result.verdicts)
+                     if verdict)
+    return matches, results
+
+
 async def run(args):
     left = load_table(args.left)
     right = load_table(args.right)
@@ -78,16 +93,8 @@ async def run(args):
 
         blk_ex = HTTPExecutor(client, args.base_url, model)
         op = BlockSemJoin(args.condition, left_block_size=args.k, right_block_size=args.j)
-        blocks = make_join_blocks(left, right, args.k, args.j)
         with Timer() as t_blk:
-            blk_results = await asyncio.gather(*(
-                op.evaluate_block_pair(blk_ex, None, lb, rb) for _, lb, _, rb in blocks
-            ))
-        blk_matches = sorted(
-            (lo + a, ro + b)
-            for (lo, _, ro, _), res in zip(blocks, blk_results)
-            for a, b in res.matches
-        )
+            blk_matches, blk_results = await evaluate_candidates(op, blk_ex, left, right)
 
     report = {
         "model": model,

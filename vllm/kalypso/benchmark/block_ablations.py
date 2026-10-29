@@ -20,11 +20,11 @@ from block_filter_standalone import (DEFAULT_DATA as FILTER_DATA,
                                      load_rows)
 from block_join_standalone import (DATA as JOIN_DATA,
                                    DEFAULT_CONDITION as JOIN_PROMPT,
-                                   load_matches, load_table)
+                                   load_matches, load_table, evaluate_candidates)
 from block_ops_common import HTTPExecutor, Timer, resolve_model
 from vllm.kalypso.sem_ops.block_filter import BlockSemFilter
 from vllm.kalypso.sem_ops.block_join import BlockSemJoin
-from vllm.kalypso.sem_ops.block_utils import make_blocks, make_join_blocks
+from vllm.kalypso.sem_ops.block_utils import make_blocks
 
 
 async def peak_rss(pid, stop, samples):
@@ -109,16 +109,10 @@ async def filter_trial(client, args, model, size, rows):
 async def join_trial(client, args, model, k, j, left, right, expected):
     executor = HTTPExecutor(client, args.base_url, model)
     op = BlockSemJoin(args.join_prompt, left_block_size=k, right_block_size=j)
-    blocks = make_join_blocks(left, right, k, j)
 
     async def work():
-        results = await asyncio.gather(*(
-            op.evaluate_block_pair(executor, None, lb, rb)
-            for _, lb, _, rb in blocks
-        ))
-        return {(lo + a, ro + b)
-                for (lo, _, ro, _), result in zip(blocks, results)
-                for a, b in result.matches}
+        matches, _ = await evaluate_candidates(op, executor, left, right)
+        return set(matches)
 
     matches, seconds, rss, kv_usage = await timed_run(
         work, args.server_pid, client, args.base_url)

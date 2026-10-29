@@ -67,8 +67,10 @@ def test_block_task_reserves_once_for_the_whole_block(fake_kv_manager):
     block = rows(["a" * 40] * 4, ex)
     one_block = stage.estimate_budget(Task(ctx=block, stage_index=0))
     per_row = sum(stage.estimate_budget(Task(ctx=r, stage_index=0)) for r in block)
-    # one shared prompt + output cap is cheaper than four separate requests
-    assert 0 < one_block < per_row
+    # Reserve the actual block request, not a sum of singleton requests.
+    # With a short instruction, numbering overhead can make the block larger.
+    assert one_block == stage.operators[0].estimate_tokens(block) * stage.bytes_per_token
+    assert one_block > 0 and per_row > 0
 
 
 def test_block_reservation_is_taken_and_released(fake_kv_manager):

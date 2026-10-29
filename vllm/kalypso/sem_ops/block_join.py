@@ -95,7 +95,7 @@ class BlockSemJoin(BlockSemFilter):
         """Render a Cartesian-product context with explicit pair boundaries."""
         left = _messages_text(ctx.input.data)
         right = _messages_text(getattr(ctx.input, "right_data", None))
-        if not right:
+        if not getattr(ctx.input, "right_data", None):
             raise ValueError("BlockSemJoin requires Cartesian-product pair contexts")
         return format_join_candidate(left, right)
 
