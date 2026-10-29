@@ -160,6 +160,14 @@ class BlockSemFilter(BaseOp):
         self.unpin = False
         self.stats = BlockFilterStats()
 
+    def row_text_for_prompt(self, ctx) -> str:
+        """Render one input row for a block prompt.
+
+        Specialised block filters may override this to preserve structure in
+        a row, such as the left/right boundary of a join candidate.
+        """
+        return row_text(ctx)
+
     # ---- budgeting (Kalypso convention: prompt tokens + max output tokens) --
 
     def block_max_tokens(self, n: int) -> int:
@@ -173,7 +181,9 @@ class BlockSemFilter(BaseOp):
         """
         ctxs = ctxs if isinstance(ctxs, list) else [ctxs]
         msgs = build_block_messages(
-            self.instruction, [row_text(c) for c in ctxs], self.system_prompt
+            self.instruction,
+            [self.row_text_for_prompt(c) for c in ctxs],
+            self.system_prompt,
         )
         if token_length is None:
             from vllm.kalypso.budget import KVMemoryManager
@@ -243,7 +253,10 @@ class BlockSemFilter(BaseOp):
             return []
         executor, raw_request = first_executor(ctxs)
         result = await self.evaluate_block(
-            executor, raw_request, [row_text(c) for c in ctxs], priority
+            executor,
+            raw_request,
+            [self.row_text_for_prompt(c) for c in ctxs],
+            priority,
         )
         if self.LOG:
             print(f"[block-filter] position={self.position} rows={len(ctxs)} "

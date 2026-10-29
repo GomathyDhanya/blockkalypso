@@ -150,41 +150,7 @@ class AsyncPipelineExecutor:
             stage.stage_id: 0
             for stage in stages
         }
-        # A block join can receive rows from several upstream tasks. Gather
-        # them until its left-side block is full, then flush the final partial
-        # block once its upstream stage has drained.
-        pending_join_rows = {
-            index: [] for index, stage in enumerate(stages)
-            if stage.operators and isinstance(stage.operators[0], ops.BlockSemJoin)
-            and index > 0
-        }
         total_retries = 0
-
-        def enqueue_join_rows(index, rows, trackers=()):
-            stage = stages[index]
-            if trackers:
-                # A tracker belongs to an upstream fanout task. Preserve its
-                # completion accounting by not mixing it with other tasks.
-                for row in rows:
-                    stage.enqueue(Task(ctx=[row], stage_index=index,
-                                       trackers=trackers))
-                return
-            pending = pending_join_rows[index]
-            pending.extend(rows)
-            while len(pending) >= stage.block_size:
-                block = pending[:stage.block_size]
-                del pending[:stage.block_size]
-                stage.enqueue(Task(ctx=block, stage_index=index))
-
-        def flush_partial_join_blocks():
-            for index, pending in pending_join_rows.items():
-                if not pending:
-                    continue
-                upstream = stages[index - 1]
-                if upstream.has_waiting_tasks() or upstream.running_count():
-                    continue
-                stages[index].enqueue(Task(ctx=pending[:], stage_index=index))
-                pending.clear()
 
         def add_deferred_parent(stage_id: int, reserved_budget: int) -> None:
             deferred_parent_counts[stage_id] = (
@@ -253,9 +219,7 @@ class AsyncPipelineExecutor:
             stage_stat[stage_id]["output"] += count
 
         def has_pending_work():
-            return any(stage.has_waiting_tasks() for stage in stages) or any(
-                pending_join_rows.values()
-            )
+            return any(stage.has_waiting_tasks() for stage in stages)
 
         async def rebalance_stage_capacity():
             changed = False
@@ -442,11 +406,6 @@ class AsyncPipelineExecutor:
 
             if next_stage_index >= len(stages):
                 out.extend(children)
-            elif next_stage_index in pending_join_rows:
-                enqueue_join_rows(
-                    next_stage_index, children,
-                    downstream_trackers(len(children)),
-                )
             elif stage.fanout_op is None and stages[next_stage_index].block_tasks:
                 groups = stages[next_stage_index].make_blocks(children)
                 trackers = downstream_trackers(len(groups))
@@ -475,7 +434,6 @@ class AsyncPipelineExecutor:
             await rebalance_stage_capacity()
 
         while has_pending_work() or active:
-            flush_partial_join_blocks()
             await rebalance_stage_capacity()
             await launch_ready_tasks()
 
@@ -597,9 +555,6 @@ class AsyncPipelineExecutor:
                         deferred_release = True
 
                     for child_ctx in child_ctxs:
-                        if next_stage_index in pending_join_rows:
-                            enqueue_join_rows(next_stage_index, [child_ctx], trackers)
-                            continue
                         child_task = Task(
                             ctx=([child_ctx] if next_stage_index < len(stages)
                                  and stages[next_stage_index].block_tasks else child_ctx),
@@ -632,8 +587,6 @@ class AsyncPipelineExecutor:
                 if next_stage_index >= len(stages):
                     out.append(result)
                     await finalize_task(next_task)
-                elif next_stage_index in pending_join_rows:
-                    enqueue_join_rows(next_stage_index, [result], task.trackers)
                 else:
                     stages[next_stage_index].enqueue(next_task)
 

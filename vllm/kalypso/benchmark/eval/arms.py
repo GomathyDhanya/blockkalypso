@@ -7,7 +7,8 @@ Arm names:
   kalypso_per_tuple     Kalypso's original one-row (one-pair) operators
   vllm_direct           the same per-row prompts sent straight to vLLM
   kalypso_block:N       BlockSemFilter with block_size N (filter workloads)
-  kalypso_block:KxJ     BlockSemJoin with K left x J right rows (join workloads)
+  kalypso_block:KxJ     Cartesian product plus BlockSemJoin filter over K*J
+                         candidate pairs (join workloads)
 """
 
 import asyncio
