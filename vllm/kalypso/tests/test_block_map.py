@@ -75,6 +75,45 @@ def test_block_map_materializes_logical_per_row_state_not_block_transcript(fake_
     assert [item.output[-1][str(BlockSemMap)] for item in rows] == ["alpha", "beta"]
 
 
+def test_block_output_budget_follows_semmap_ratio_estimator(fake_kv_manager):
+    """Each row's share of max_tokens is what SemMap would plan for that row."""
+    from vllm.kalypso.controller.map_estimator import MapRatioEstimator
+
+    estimator = MapRatioEstimator.instance()
+    estimator.reset()
+    try:
+        texts = ["first review " * 20, "second review " * 20]
+        reply = '{"items": [{"id": 1, "output": "a"}, {"id": 2, "output": "b"}]}'
+
+        op = BlockSemMap("summarize", block_size=2, position=7)
+        semmap = SemMap("summarize", position=7)
+
+        # No ratio learned yet: SemMap plans each row's prompt length.
+        executor = MapExecutor([reply])
+        rows = mapped_rows(texts, executor)
+        unlearned = [semmap._planned_max_tokens(r) for r in rows]
+        run(op.run_block(rows))
+        assert executor.calls[0][1] == op.max_tokens_overhead + sum(unlearned)
+
+        # A learned short-output ratio shrinks the block request exactly as it
+        # shrinks SemMap's per-row request.
+        estimator.reset()
+        estimator.update(7, 100, 10)
+        executor = MapExecutor([reply])
+        rows = mapped_rows(texts, executor)
+        learned = [semmap._planned_max_tokens(r) for r in rows]
+        assert all(after < before for after, before in zip(learned, unlearned))
+        run(op.run_block(rows))
+        assert executor.calls[0][1] == op.max_tokens_overhead + sum(learned)
+
+        # A row's share never exceeds SemMap's MAX_TOKEN_LIMIT.
+        estimator.reset()
+        estimator.update(7, 10, 1000)
+        assert op.row_max_tokens(rows[0]) == SemMap.MAX_TOKEN_LIMIT
+    finally:
+        estimator.reset()
+
+
 def test_missing_block_entries_repair_with_ordinary_semmap(fake_kv_manager):
     executor = MapExecutor([
         '{"items": [{"id": 1, "output": "from block"}]}',

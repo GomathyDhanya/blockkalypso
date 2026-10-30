@@ -114,7 +114,6 @@ class BlockSemMap(SemMap):
         self,
         instruction: str,
         block_size: int = 8,
-        max_tokens_per_row: int = 128,
         max_tokens_overhead: int = 32,
         max_block_tokens: int | None = None,
         position: int = -1,
@@ -133,13 +132,24 @@ class BlockSemMap(SemMap):
         super().__init__(instruction=instruction, position=position, pin=pin, unpin=unpin)
         self.behavior = OpBehavior.TUPLE_INDEPENDENT
         self.block_size = block_size
-        self.max_tokens_per_row = max_tokens_per_row
         self.max_tokens_overhead = max_tokens_overhead
         self.max_block_tokens = max_block_tokens
         self.stats = BlockMapStats()
 
-    def block_max_tokens(self, n: int) -> int:
-        return self.max_tokens_overhead + self.max_tokens_per_row * n
+    def row_max_tokens(self, ctx) -> int:
+        """Output tokens one row may need, by ``SemMap``'s own rule.
+
+        ``SemMap._planned_max_tokens`` scales the row's prompt length by the
+        ratio ``MapRatioEstimator`` has learned for this operator, or uses the
+        prompt length before any row has finished. A row's share is capped at
+        ``SemMap.MAX_TOKEN_LIMIT``, the length ``SemMap`` retries a cut-off
+        row with, so one long prompt cannot inflate the whole block request.
+        """
+        return max(1, min(SemMap.MAX_TOKEN_LIMIT, self._planned_max_tokens(ctx)))
+
+    def block_max_tokens(self, ctxs) -> int:
+        """Output tokens for one block: every row's ``SemMap`` share plus overhead."""
+        return self.max_tokens_overhead + sum(self.row_max_tokens(ctx) for ctx in ctxs)
 
     def estimate_tokens(self, ctxs, token_length=None) -> int:
         """Peak tokens for one block request or its sequential row repairs."""
@@ -152,7 +162,7 @@ class BlockSemMap(SemMap):
             count = lambda messages: manager.token_length(manager.apply_chat_template(messages))
         else:
             count = lambda messages: token_length("\n".join(m["content"] for m in messages))
-        block_peak = count(build_block_map_messages(self.instruction, texts)) + self.block_max_tokens(len(ctxs))
+        block_peak = count(build_block_map_messages(self.instruction, texts)) + self.block_max_tokens(ctxs)
         single_peak = max(
             (SemMap.estimate_tokens(self, ctx) for ctx in ctxs), default=0
         )
@@ -189,7 +199,11 @@ class BlockSemMap(SemMap):
             if result is not RETRY_TASK:
                 return result
 
-    async def evaluate_block(self, executor, raw_request, texts: Sequence[str], priority: int = 0) -> BlockMapResult:
+    async def evaluate_block(
+        self, executor, raw_request, texts: Sequence[str], priority: int = 0,
+        max_tokens: int | None = None,
+    ) -> BlockMapResult:
+        """One block request. ``run_block`` passes ``max_tokens`` from its rows."""
         n = len(texts)
         self.stats.blocks += 1
         self.stats.rows += n
@@ -201,7 +215,8 @@ class BlockSemMap(SemMap):
             executor,
             raw_request,
             build_block_map_messages(self.instruction, texts),
-            self.block_max_tokens(n),
+            max_tokens if max_tokens is not None
+            else self.max_tokens_overhead + SemMap.MAX_TOKEN_LIMIT * n,
             priority,
             sampling=BLOCK_SAMPLING,
         )
@@ -226,7 +241,8 @@ class BlockSemMap(SemMap):
 
         executor, raw_request = first_executor(ctxs)
         result = await self.evaluate_block(
-            executor, raw_request, [row_text(ctx) for ctx in ctxs], priority
+            executor, raw_request, [row_text(ctx) for ctx in ctxs], priority,
+            max_tokens=self.block_max_tokens(ctxs),
         )
         for ctx, output in zip(ctxs, result.outputs):
             if output is not None:
