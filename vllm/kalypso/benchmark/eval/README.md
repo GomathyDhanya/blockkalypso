@@ -13,6 +13,16 @@ and block join. Milestone 1 results are [below](#milestone-1-results).
 | `reviews` | filter | 20 restaurant reviews (`block_filter/reviews_20.csv`) | complains: 10 of 20 |
 | `medec` | filter | 10 MEDEC clinical notes | has a medical error: 7 of 10 |
 | `join5x5` | join | 5 complaints x 5 categories (`block_join/`) | 5 expected matches |
+| `movie_positive` | filter | SemBench movie Q1: 1,865 Rotten Tomatoes reviews, any movie | clearly positive: 1,417 |
+| `movie_taken3` | filter | SemBench movie Q2-Q4/Q8: the 120 *Taken 3* reviews | positive: 14 |
+| `movie_opposite` | join | SemBench movie Q6/Q7: 128 x 128 *Ant-Man* review pairs (`--n` per side) | opposite sentiment: 8,184 |
+
+The `movie_*` workloads download SemBench's movie reviews (scale factor 2000,
+pinned commit, SHA-256 checked) into `benchmark/data/sembench/movie/` on
+first use. Labels are SemBench's ground truth, the reviews' `scoreSentiment`;
+instructions are SemBench's own prompts. Duplicate reviews (same `reviewId`)
+are dropped and HTML entities in the text are unescaped. `--n` keeps the
+first n reviews.
 
 All labeled sets are small: one item moves accuracy by 4-10 points.
 

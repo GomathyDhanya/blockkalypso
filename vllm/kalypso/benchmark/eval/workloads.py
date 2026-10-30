@@ -7,11 +7,18 @@ so the direct-vLLM arm can rebuild byte-identical prompts:
 - a directory of ``*.txt``: sorted by integer stem, text stripped, idx = stem;
 - a CSV: the ``data`` column (else ``Text``), stripped, idx = 0-based row
   position.
+
+SemBench's movie scenario (github.com/skddj/sembench) is downloaded on first
+use, pinned to one commit and checked by SHA-256, into the git-ignored
+``benchmark/data/sembench/movie/``.
 """
 
 import csv
+import hashlib
+import html
 import shutil
 import tempfile
+import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -26,6 +33,16 @@ JOIN_DIR = SAMPLE_DATA / "block_join"
 # Same instructions as the standalone block checks, so results line up.
 REVIEWS_INSTRUCTION = "Does the review complain about the restaurant?"
 JOIN_INSTRUCTION = "The complaint in the left item belongs to the category in the right item."
+
+SEMBENCH_MOVIE = Path(__file__).resolve().parents[1] / "data" / "sembench" / "movie"
+SEMBENCH_COMMIT = "6334161d3865c120674335fd8dc98abcbac173e3"
+SEMBENCH_REVIEWS_URL = (f"https://raw.githubusercontent.com/skddj/sembench/{SEMBENCH_COMMIT}/"
+                        "files/movie/data/sf_2000/Reviews.csv")
+SEMBENCH_REVIEWS_SHA256 = "df231cfb189c9e169aa6afe415e4fa24533b04499179bbd61416c4c6af28ca21"
+# SemBench's own prompts (files/movie/query/bigquery/Q1.sql, Q6.sql).
+MOVIE_POSITIVE_INSTRUCTION = "Determine if the following movie review is clearly positive."
+MOVIE_OPPOSITE_INSTRUCTION = ("These two movie reviews express opposite sentiments - "
+                              "one is positive and the other is negative.")
 
 MAP, FILTER, JOIN = "map", "filter", "join"
 
@@ -151,9 +168,96 @@ def load_join5x5(n: int | None = None) -> Workload:
     )
 
 
+def _sembench_reviews() -> list[dict]:
+    """SemBench movie reviews (scale factor 2000), one row per reviewId.
+
+    The file repeats some reviews verbatim (every Ant-Man review twice), so
+    only the first copy of each reviewId is kept. Review text is HTML-escaped
+    in the source (``&#44;``) and is unescaped here.
+    """
+    path = SEMBENCH_MOVIE / "Reviews.csv"
+    if not path.exists():
+        raw = urllib.request.urlopen(SEMBENCH_REVIEWS_URL, timeout=300).read()
+        digest = hashlib.sha256(raw).hexdigest()
+        if digest != SEMBENCH_REVIEWS_SHA256:
+            raise ValueError(f"{SEMBENCH_REVIEWS_URL} has SHA-256 {digest}, "
+                             f"expected {SEMBENCH_REVIEWS_SHA256}")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(raw)
+    rows, seen = [], set()
+    for record in _read_csv(path):
+        if record["reviewId"] not in seen:
+            seen.add(record["reviewId"])
+            rows.append({**record, "reviewText": html.unescape(record["reviewText"]).strip()})
+    return rows
+
+
+def _movie_csv(name: str, reviews: list[dict]) -> Path:
+    """Write ``reviews`` as a ``data``-column CSV that Kalypso reads."""
+    path = SEMBENCH_MOVIE / f"{name}.csv"
+    with path.open("w", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f)
+        writer.writerow(["data", "reviewId"])
+        writer.writerows([r["reviewText"], r["reviewId"]] for r in reviews)
+    return path.resolve()
+
+
+def _movie_reviews(name: str, movie: str | None, n: int | None) -> list[dict]:
+    reviews = [r for r in _sembench_reviews() if movie is None or r["id"] == movie]
+    return reviews[:_limit(n, len(reviews), name)]
+
+
+def _positive(review: dict) -> bool:
+    return review["scoreSentiment"] == "POSITIVE"
+
+
+def _movie_filter(name: str, movie: str | None, n: int | None) -> Workload:
+    reviews = _movie_reviews(name, movie, n)
+    return Workload(
+        name=name, kind=FILTER,
+        data_path=_movie_csv(f"{name}_{len(reviews)}", reviews),
+        instruction=MOVIE_POSITIVE_INSTRUCTION,
+        rows=[Row(i, r["reviewText"]) for i, r in enumerate(reviews)],
+        positives=frozenset(i for i, r in enumerate(reviews) if _positive(r)),
+    )
+
+
+def load_movie_positive(n: int | None = None) -> Workload:
+    """SemBench movie Q1: clearly positive reviews, any movie (1,865 reviews)."""
+    return _movie_filter("movie_positive", None, n)
+
+
+def load_movie_taken3(n: int | None = None) -> Workload:
+    """SemBench movie Q2-Q4/Q8: positive reviews of Taken 3 (14 of 120)."""
+    return _movie_filter("movie_taken3", "taken_3", n)
+
+
+def load_movie_opposite(n: int | None = None) -> Workload:
+    """SemBench movie Q6/Q7: Ant-Man review pairs of opposite sentiment.
+
+    A self-join of the first ``n`` of the movie's 128 reviews (default all:
+    128 x 128 pairs). SemBench excludes a review paired with itself; here
+    those pairs stay in, labeled negative, since they never differ.
+    """
+    name = "movie_opposite"
+    reviews = _movie_reviews(name, "ant_man_and_the_wasp_quantumania", n)
+    path = _movie_csv(f"{name}_{len(reviews)}", reviews)
+    rows = [Row(i, r["reviewText"]) for i, r in enumerate(reviews)]
+    return Workload(
+        name=name, kind=JOIN, data_path=path, right_path=path,
+        instruction=MOVIE_OPPOSITE_INSTRUCTION,
+        rows=rows, right_rows=rows,
+        positives=frozenset((i, j) for i, a in enumerate(reviews)
+                            for j, b in enumerate(reviews) if _positive(a) != _positive(b)),
+    )
+
+
 WORKLOADS = {
     "biodex": load_biodex,
     "reviews": load_reviews,
     "medec": load_medec,
     "join5x5": load_join5x5,
+    "movie_positive": load_movie_positive,
+    "movie_taken3": load_movie_taken3,
+    "movie_opposite": load_movie_opposite,
 }
