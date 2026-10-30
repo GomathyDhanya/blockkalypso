@@ -378,9 +378,20 @@ class SemanticPlan:
                     else []
                 )
 
-                left_block_size = int(args.get("left_block_size", args.get("block_size", 1)))
-                right_block_size = int(args.get("right_block_size", args.get("block_size", 1)))
-                if left_block_size > 1 or right_block_size > 1 or args.get("pair_block_size") is not None:
+                legacy_block_sizes = {
+                    key for key in ("left_block_size", "right_block_size", "block_size")
+                    if args.get(key) is not None
+                }
+                if legacy_block_sizes:
+                    names = ", ".join(sorted(legacy_block_sizes))
+                    raise ValueError(
+                        f"{names} is no longer supported for join; use pair_block_size"
+                    )
+
+                if args.get("pair_block_size") is not None:
+                    pair_block_size = int(args["pair_block_size"])
+                    if pair_block_size < 1:
+                        raise ValueError("pair_block_size must be >= 1")
                     if icp or args.get("cascade") or args.get("llm_cascade"):
                         raise ValueError("block join does not support ICP or cascade")
                     physical.append(ops.CartesianProduct(
@@ -390,10 +401,7 @@ class SemanticPlan:
                     physical.append(ops.BlockSemJoin(
                         condition=args["instruction"],
                         right_table=right_table,
-                        left_block_size=left_block_size,
-                        right_block_size=right_block_size,
-                        pair_block_size=(int(args["pair_block_size"])
-                                         if args.get("pair_block_size") is not None else None),
+                        pair_block_size=pair_block_size,
                         max_block_tokens=(int(args["max_block_tokens"])
                                           if args.get("max_block_tokens") is not None else None),
                         position=idx,

@@ -16,7 +16,6 @@ from vllm.kalypso.sem_ops.block_utils import (
     first_executor,
     item_line,
     make_blocks,
-    make_join_blocks,
     parse_single_answer,
     row_text,
     strip_context_wrapper,
@@ -58,14 +57,6 @@ def test_make_blocks():
     assert make_blocks([], 3) == []
     with pytest.raises(ValueError):
         make_blocks([1], 0)
-
-
-def test_make_join_blocks_offsets_cover_every_pair():
-    blocks = make_join_blocks(list("abc"), list("xyzw"), 2, 3)
-    assert [(lo, ro) for lo, _, ro, _ in blocks] == [(0, 0), (0, 3), (2, 0), (2, 3)]
-    pairs = {(lo + i, ro + j) for lo, lb, ro, rb in blocks
-             for i in range(len(lb)) for j in range(len(rb))}
-    assert pairs == {(i, j) for i in range(3) for j in range(4)}
 
 
 @pytest.mark.parametrize("text,want", [

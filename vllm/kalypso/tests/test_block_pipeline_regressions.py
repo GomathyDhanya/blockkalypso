@@ -181,7 +181,7 @@ def test_benchmark_uses_global_candidate_blocks(fake_kv_manager, monkeypatch):
     monkeypatch.syspath_prepend(str(Path(__file__).parents[1] / "benchmark"))
     from block_join_standalone import evaluate_candidates
     ex = YesExecutor()
-    op = ops.BlockSemJoin("q", left_block_size=2, right_block_size=2)
+    op = ops.BlockSemJoin("q", pair_block_size=4)
     matches, _ = asyncio.run(evaluate_candidates(op, ex, ["a", "b", "c"], ["x", "y", "z"]))
     assert matches == [(i, j) for i in range(3) for j in range(3)]
     assert op.stats.block_calls == 2 and op.stats.fallback_calls == 1

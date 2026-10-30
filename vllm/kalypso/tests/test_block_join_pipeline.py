@@ -57,10 +57,19 @@ def test_planner_lowers_block_join_to_cartesian_product_then_filter(fake_kv_mana
     plan = SemanticPlan(executor=None)
     physical = plan.parse_ops([{"op": "join", "args": {
         "instruction": "same item", "right_table": "right.csv",
-        "left_block_size": 2, "right_block_size": 3}}])
+        "pair_block_size": 6}}])
     assert isinstance(physical[0], ops.CartesianProduct)
     assert isinstance(physical[1], ops.BlockSemJoin)
     assert physical[1].block_size == 6
+
+
+def test_planner_rejects_legacy_join_grid_sizes(fake_kv_manager, monkeypatch):
+    monkeypatch.setattr("vllm.kalypso.controller.plan.data._data_source",
+                        lambda *args: iter(()))
+    with pytest.raises(ValueError, match="pair_block_size"):
+        SemanticPlan(executor=None).parse_ops([{"op": "join", "args": {
+            "instruction": "same item", "right_table": "right.csv",
+            "left_block_size": 2, "right_block_size": 3}}])
 
 
 @pytest.mark.parametrize("first_block_size", [1, 2])
@@ -79,7 +88,7 @@ def test_filter_cartesian_product_block_join_filter_query(
     physical = plan.parse_ops([
         {"op": "sem_filter", "args": {"prompt": "keep all", "block_size": first_block_size}},
         {"op": "join", "args": {"instruction": "same item", "right_table": "right.csv",
-                                "left_block_size": 2, "right_block_size": 2}},
+                                "pair_block_size": 4}},
         {"op": "sem_filter", "args": {"prompt": "only apple", "block_size": 2}},
     ])
     built = plan.build(left, physical)
@@ -127,7 +136,7 @@ def test_block_join_starts_before_upstream_filter_finishes(fake_kv_manager, monk
         {"op": "sem_filter", "args": {"prompt": "keep all", "block_size": 2}},
         {"op": "join", "args": {"instruction": "same item",
                                 "right_table": "right.csv",
-                                "left_block_size": 2, "right_block_size": 2}},
+                                "pair_block_size": 4}},
     ])
     output, _ = asyncio.run(asyncio.wait_for(
         plan.plan_executor.execute(left, plan.build(left, physical)), timeout=2,
@@ -158,6 +167,6 @@ def test_block_join_fallback_keeps_ordinary_join_ids(fake_kv_manager, monkeypatc
     plan = SemanticPlan(executor=executor)
     physical = plan.parse_ops([{"op": "join", "args": {
         "instruction": "same item", "right_table": "right.csv",
-        "left_block_size": 2, "right_block_size": 2}}])
+        "pair_block_size": 4}}])
     output, _ = asyncio.run(plan.plan_executor.execute(left, plan.build(left, physical)))
     assert sorted((ctx.state.idx, ctx.state.right_idx) for ctx in output) == [(0, 101), (1, 100)]

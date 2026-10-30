@@ -48,17 +48,16 @@ class BlockJoinResult:
 class BlockSemJoin(BlockSemFilter):
     """A join-aware block filter run after ``CartesianProduct``.
 
-    ``left_block_size`` and ``right_block_size`` remain part of the request
-    API. Their product is the candidate-pair count in a block-filter prompt
-    unless ``pair_block_size`` is explicitly supplied.
+    ``pair_block_size`` is the number of already-materialized Cartesian
+    candidates decided by one block-filter request.  It intentionally has no
+    left/right dimensions: candidates arrive asynchronously from the
+    Cartesian-product stage and are packed in their arrival order.
     """
 
     def __init__(
         self,
         condition: str,
-        left_block_size: int = 5,
-        right_block_size: int = 5,
-        pair_block_size: int | None = None,
+        pair_block_size: int = 25,
         max_tokens_per_pair: int = 6,
         max_tokens_overhead: int = 16,
         pair_max_tokens: int = 4,
@@ -67,16 +66,11 @@ class BlockSemJoin(BlockSemFilter):
         position: int = -1,
         max_block_tokens: int | None = None,
     ):
-        if left_block_size < 1 or right_block_size < 1:
-            raise ValueError("block sizes must be >= 1")
-        block_size = (
-            left_block_size * right_block_size
-            if pair_block_size is None
-            else pair_block_size
-        )
+        if pair_block_size < 1:
+            raise ValueError("pair_block_size must be >= 1")
         super().__init__(
             instruction=condition,
-            block_size=block_size,
+            block_size=pair_block_size,
             max_tokens_per_row=max_tokens_per_pair,
             max_tokens_overhead=max_tokens_overhead,
             single_max_tokens=pair_max_tokens,
@@ -85,8 +79,6 @@ class BlockSemJoin(BlockSemFilter):
             max_block_tokens=max_block_tokens,
         )
         self.condition = condition
-        self.left_block_size = left_block_size
-        self.right_block_size = right_block_size
         # Retained for compatibility with direct callers. The planner now
         # materializes this through CartesianProduct before this operator.
         self.right_table = list(right_table or [])

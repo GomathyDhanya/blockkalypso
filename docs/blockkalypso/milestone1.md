@@ -7,7 +7,7 @@ this milestone; every check still reports agreement so it can be studied later.
 
 | Piece | Where | Notes |
 |---|---|---|
-| Shared helpers | `vllm/kalypso/sem_ops/block_utils.py` | Row text, fixed-size and k-by-j blocking, single-answer parsing, LLM call wrapper |
+| Shared helpers | `vllm/kalypso/sem_ops/block_utils.py` | Row text, fixed-size blocking, single-answer parsing, LLM call wrapper |
 | Block filter | `vllm/kalypso/sem_ops/block_filter.py` | One call per block, `<id>: YES/NO` lines, one-row fallback for unusable answers |
 | Block tasks | `vllm/kalypso/controller/stage.py` | A `Task` can hold a list of rows; one KV reservation per block |
 | Block scheduling | `vllm/kalypso/execution/pipeline_execution.py` | Block stages get one task per block; block boundaries kept between block stages |
@@ -47,9 +47,9 @@ Both scripts work against any OpenAI-compatible server.
 python vllm/kalypso/benchmark/block_filter_standalone.py \
   --base-url http://localhost:8003/v1 --block-size 20 --show-raw
 
-# Block join: 5 complaints x 5 categories, 25 pair calls vs one 5x5 block
+# Block join: 5 complaints x 5 categories, 25 pair calls vs one 25-pair block
 python vllm/kalypso/benchmark/block_join_standalone.py \
-  --base-url http://localhost:8003/v1 --k 5 --j 5 --show-raw
+  --base-url http://localhost:8003/v1 --pair-block-size 25 --show-raw
 ```
 
 ## Block filter inside a Kalypso query
@@ -87,8 +87,8 @@ Block join over 5 complaints x 5 categories (25 pairs, 5 expected matches):
 | Mode | LLM calls | Prompt tokens | Latency 1.5B | F1 1.5B |
 |---|---|---|---|---|
 | One call per pair (Kalypso) | 25 | 4,310 | 66.5 s | 0.33 |
-| 2x2 blocks | 9 | 1,219 | 19.4 s | 0.67 |
-| One 5x5 block | 1 | 224 | 6.4 s | 0.60 |
+| 4-pair blocks | 9 | 1,219 | 19.4 s | 0.67 |
+| One 25-pair block | 1 | 224 | 6.4 s | 0.60 |
 
 Blocking is 3-4x faster for the filter and 10x for the join. On long rows
 (MEDEC clinical notes) it gives no speedup. Accuracy cannot be judged yet:

@@ -137,7 +137,7 @@ def test_report_filter_quality_against_labels():
 
 def test_report_join_quality_counts_every_pair():
     meta = _meta(kind="join", rows=2, right_rows=3, positives=[[0, 2], [1, 0]])
-    trial = _trial("kalypso_block:2x3", 1, {}, 1.0, selected=[[0, 2]])
+    trial = _trial("kalypso_block:6", 1, {}, 1.0, selected=[[0, 2]])
     q = report.quality(meta, trial)
     assert (q["tp"], q["fp"], q["fn"], q["tn"]) == (1, 0, 1, 4)
     assert q["recall"] == 0.5 and q["precision"] == 1.0
@@ -158,23 +158,20 @@ def test_filter_and_join_workloads_carry_labels():
 
 def test_parse_and_check_arms():
     assert parse_arm("kalypso_block:10").block == (10,)
-    assert parse_arm("kalypso_block:2x5").block == (2, 5)
-    for bad in ("kalypso_block", "kalypso_block:0", "kalypso_block:axb", "nope"):
+    for bad in ("kalypso_block", "kalypso_block:0", "kalypso_block:2x5", "kalypso_block:axb", "nope"):
         with pytest.raises(ValueError):
             parse_arm(bad)
     with pytest.raises(ValueError):
         check_arm(parse_arm("kalypso_block:5"), load_biodex(1))
-    with pytest.raises(ValueError):
-        check_arm(parse_arm("kalypso_block:5"), load_join5x5())
-    check_arm(parse_arm("kalypso_block:5x5"), load_join5x5())
+    check_arm(parse_arm("kalypso_block:5"), load_join5x5())
 
 
 def test_query_ops_and_join_response_parsing():
     join = load_join5x5()
-    ops = kalypso_ops(join, (2, 5))
+    ops = kalypso_ops(join, (10,))
     assert ops == [{"op": "join", "args": {
         "instruction": join.instruction, "right_table": str(join.right_path),
-        "left_block_size": 2, "right_block_size": 5}}]
+        "pair_block_size": 10}}]
     assert "block_size" not in kalypso_ops(load_reviews())[0]["args"]
     out = parse_query_response(join, {"results": [
         {"idx": 0, "right_idx": 2, "outputs": [{"op": "f", "value": "true"}]}]})

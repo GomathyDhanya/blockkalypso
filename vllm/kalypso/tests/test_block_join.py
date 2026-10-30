@@ -59,7 +59,7 @@ def test_candidate_keeps_left_and_right_labels():
 
 def test_one_block_filter_call_decides_every_pair():
     ex = JoinExecutor(same_letter)
-    op = BlockSemJoin("same category", left_block_size=2, right_block_size=3)
+    op = BlockSemJoin("same category", pair_block_size=6)
     result = run(op.evaluate_block_pair(ex, None, ["a1", "b1"], ["a2", "c2", "b2"]))
     assert sorted(result.matches) == [(0, 0), (1, 2)]
     assert op.block_size == 6
@@ -68,16 +68,15 @@ def test_one_block_filter_call_decides_every_pair():
 
 def test_missing_block_answer_falls_back_for_that_candidate():
     ex = JoinExecutor(same_letter, block_replies=["1: YES\n3: NO\n4: YES"])
-    op = BlockSemJoin("same category", left_block_size=2, right_block_size=2)
+    op = BlockSemJoin("same category", pair_block_size=4)
     result = run(op.evaluate_block_pair(ex, None, ["a", "b"], ["a", "b"]))
     assert sorted(result.matches) == [(0, 0), (1, 1)]
     assert (op.stats.block_calls, op.stats.fallback_calls) == (1, 1)
 
 
-def test_pair_block_size_can_be_smaller_than_the_old_grid_shape():
+def test_pair_block_size_controls_how_candidates_are_packed():
     ex = JoinExecutor(same_letter)
-    op = BlockSemJoin("same category", left_block_size=2, right_block_size=3,
-                      pair_block_size=2)
+    op = BlockSemJoin("same category", pair_block_size=2)
     result = run(op.evaluate_block_pair(ex, None, ["a", "b"], ["a", "b", "c"]))
     assert sorted(result.matches) == [(0, 0), (1, 1)]
     assert op.stats.block_calls == 3
@@ -87,11 +86,11 @@ def test_direct_join_uses_the_same_pair_filter_logic():
     ex = JoinExecutor(same_letter)
     left = [row("a1", 0, ex), row("b1", 1, ex)]
     right = [row("a2", 2), row("c2", 3)]
-    assert run(BlockSemJoin("same category", left_block_size=2, right_block_size=2).join(
+    assert run(BlockSemJoin("same category", pair_block_size=4).join(
         left, right
     )) == [(0, 0)]
 
 
-def test_invalid_block_sizes():
+def test_invalid_pair_block_size():
     with pytest.raises(ValueError):
-        BlockSemJoin("c", left_block_size=0)
+        BlockSemJoin("c", pair_block_size=0)

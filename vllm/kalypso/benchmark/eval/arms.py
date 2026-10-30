@@ -6,9 +6,8 @@ Each arm runs one workload end to end. Arms do not measure anything;
 Arm names:
   kalypso_per_tuple     Kalypso's original one-row (one-pair) operators
   vllm_direct           the same per-row prompts sent straight to vLLM
-  kalypso_block:N       BlockSemFilter with block_size N (filter workloads)
-  kalypso_block:KxJ     Cartesian product plus BlockSemJoin filter over K*J
-                         candidate pairs (join workloads)
+  kalypso_block:N       BlockSemFilter with block_size N (filter workloads),
+                         or BlockSemJoin with pair_block_size N (join workloads)
 """
 
 import asyncio
@@ -64,11 +63,11 @@ def parse_arm(name: str) -> ArmSpec:
             block = tuple(int(part) for part in size.lower().split("x"))
         except ValueError:
             block = ()
-        if len(block) in (1, 2) and all(b >= 1 for b in block):
+        if len(block) == 1 and block[0] >= 1:
             return ArmSpec(name, kind, block)
     raise ValueError(
         f"bad arm {name!r}; use kalypso_per_tuple, vllm_direct, "
-        "kalypso_block:N (filter) or kalypso_block:KxJ (join)")
+        "kalypso_block:N")
 
 
 def check_arm(spec: ArmSpec, workload: Workload) -> None:
@@ -78,8 +77,8 @@ def check_arm(spec: ArmSpec, workload: Workload) -> None:
         raise ValueError(f"{spec.name}: there is no block operator for maps")
     if workload.kind == FILTER and len(spec.block) != 1:
         raise ValueError(f"{spec.name}: filter blocks take one size, e.g. kalypso_block:10")
-    if workload.kind == JOIN and len(spec.block) != 2:
-        raise ValueError(f"{spec.name}: join blocks take KxJ, e.g. kalypso_block:5x5")
+    if workload.kind == JOIN and len(spec.block) != 1:
+        raise ValueError(f"{spec.name}: join blocks take one pair size, e.g. kalypso_block:25")
 
 
 def kalypso_ops(workload: Workload, block: tuple[int, ...] | None = None) -> list[dict]:
@@ -93,7 +92,7 @@ def kalypso_ops(workload: Workload, block: tuple[int, ...] | None = None) -> lis
         return [{"op": OpName.SEM_FILTER, "args": args}]
     args = {"instruction": workload.instruction, "right_table": str(workload.right_path)}
     if block:
-        args["left_block_size"], args["right_block_size"] = block
+        args["pair_block_size"] = block[0]
     return [{"op": OpName.JOIN, "args": args}]
 
 
@@ -196,5 +195,5 @@ DEFAULT_ARMS = {
     MAP: ["kalypso_per_tuple", "vllm_direct"],
     FILTER: ["kalypso_per_tuple", "vllm_direct",
              "kalypso_block:5", "kalypso_block:10", "kalypso_block:20"],
-    JOIN: ["kalypso_per_tuple", "vllm_direct", "kalypso_block:2x2", "kalypso_block:5x5"],
+    JOIN: ["kalypso_per_tuple", "vllm_direct", "kalypso_block:4", "kalypso_block:25"],
 }

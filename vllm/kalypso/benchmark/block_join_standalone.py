@@ -5,13 +5,13 @@ categories) twice against an OpenAI-compatible server, e.g. Kalypso's own
 vLLM server:
 
 * pairwise baseline: one call per (left, right) pair, like Kalypso's join;
-* block join: Cartesian candidates in blocks of ``--k * --j`` pairs.
+* block join: Cartesian candidates in blocks of ``--pair-block-size`` pairs.
 
 Prints LLM calls, tokens, latency, the matches each produced, agreement
 between the two, and agreement with the hand-written expected matches.
 
     python vllm/kalypso/benchmark/block_join_standalone.py \
-        --base-url http://localhost:8003/v1 --k 5 --j 5 --show-raw
+        --base-url http://localhost:8003/v1 --pair-block-size 25 --show-raw
 """
 
 import argparse
@@ -80,7 +80,7 @@ async def run(args):
         model = await resolve_model(client, args.base_url, args.model)
 
         base_ex = HTTPExecutor(client, args.base_url, model)
-        pairwise = BlockSemJoin(args.condition, left_block_size=1, right_block_size=1)
+        pairwise = BlockSemJoin(args.condition, pair_block_size=1)
         with Timer() as t_base:
             results = await asyncio.gather(*(
                 pairwise.evaluate_block_pair(base_ex, None, [l], [r])
@@ -92,7 +92,7 @@ async def run(args):
         )
 
         blk_ex = HTTPExecutor(client, args.base_url, model)
-        op = BlockSemJoin(args.condition, left_block_size=args.k, right_block_size=args.j)
+        op = BlockSemJoin(args.condition, pair_block_size=args.pair_block_size)
         with Timer() as t_blk:
             blk_matches, blk_results = await evaluate_candidates(op, blk_ex, left, right)
 
@@ -100,8 +100,7 @@ async def run(args):
         "model": model,
         "left_rows": len(left),
         "right_rows": len(right),
-        "k": args.k,
-        "j": args.j,
+        "pair_block_size": args.pair_block_size,
         "pairwise": {**base_ex.summary(t_base.seconds), "matches": fmt(base_matches)},
         "block": {**blk_ex.summary(t_blk.seconds), "matches": fmt(blk_matches),
                   "operator_stats": op.stats.as_dict()},
@@ -129,8 +128,8 @@ def main():
     ap.add_argument("--expected", default=str(DATA / "matches_5x5.csv"),
                     help="CSV of left_id,right_id expected matches (optional)")
     ap.add_argument("--condition", default=DEFAULT_CONDITION)
-    ap.add_argument("--k", type=int, default=5, help="left rows per block")
-    ap.add_argument("--j", type=int, default=5, help="right rows per block")
+    ap.add_argument("--pair-block-size", type=int, default=25,
+                    help="Cartesian candidate pairs per block-filter request")
     ap.add_argument("--timeout", type=float, default=600)
     ap.add_argument("--out", default=None, help="also write the JSON report here")
     ap.add_argument("--show-raw", action="store_true")
