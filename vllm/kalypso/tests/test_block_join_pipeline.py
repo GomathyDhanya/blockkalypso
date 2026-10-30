@@ -63,15 +63,6 @@ def test_planner_lowers_block_join_to_cartesian_product_then_filter(fake_kv_mana
     assert physical[1].block_size == 6
 
 
-def test_planner_rejects_legacy_join_grid_sizes(fake_kv_manager, monkeypatch):
-    monkeypatch.setattr("vllm.kalypso.controller.plan.data._data_source",
-                        lambda *args: iter(()))
-    with pytest.raises(ValueError, match="pair_block_size"):
-        SemanticPlan(executor=None).parse_ops([{"op": "join", "args": {
-            "instruction": "same item", "right_table": "right.csv",
-            "left_block_size": 2, "right_block_size": 3}}])
-
-
 @pytest.mark.parametrize("first_block_size", [1, 2])
 def test_filter_cartesian_product_block_join_filter_query(
     fake_kv_manager, monkeypatch, first_block_size

@@ -378,16 +378,6 @@ class SemanticPlan:
                     else []
                 )
 
-                legacy_block_sizes = {
-                    key for key in ("left_block_size", "right_block_size", "block_size")
-                    if args.get(key) is not None
-                }
-                if legacy_block_sizes:
-                    names = ", ".join(sorted(legacy_block_sizes))
-                    raise ValueError(
-                        f"{names} is no longer supported for join; use pair_block_size"
-                    )
-
                 if args.get("pair_block_size") is not None:
                     pair_block_size = int(args["pair_block_size"])
                     if pair_block_size < 1:
