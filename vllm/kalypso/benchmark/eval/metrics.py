@@ -19,6 +19,7 @@ import httpx
 
 _SAMPLE = re.compile(r"^([a-zA-Z_:][a-zA-Z0-9_:]*)(\{[^}]*\})?\s+(\S+)$")
 _REASON = re.compile(r'finished_reason="([^"]*)"')
+_LE = re.compile(r'le="([^"]*)"')
 
 COUNTERS = {
     "vllm:prompt_tokens_total": "prompt_tokens",
@@ -36,6 +37,13 @@ COUNTERS = {
 }
 REQUESTS = "vllm:request_success_total"
 KV_GAUGE = "vllm:kv_cache_usage_perc"
+# Requests by their max_tokens. Block operators send a single-row call (a
+# repair, or a block of one row) with max_tokens <= 4 (BlockSemFilter's
+# single_max_tokens, BlockSemJoin's pair_max_tokens); a block call asks for
+# 16 + 6 per row and the per-tuple filter for 8. The le="5" bucket therefore
+# counts exactly a block arm's single-row calls.
+MAX_TOKENS_BUCKET = "vllm:request_params_max_tokens_bucket"
+SINGLE_ROW_MAX_TOKENS = 5.0
 
 
 def parse_metrics(text: str) -> dict:
@@ -47,6 +55,7 @@ def parse_metrics(text: str) -> dict:
     out = {key: 0.0 for key in COUNTERS.values()}
     out["requests"] = {}
     out["kv_cache_pct"] = None
+    out["single_row_calls"] = 0.0
     for line in text.splitlines():
         if not line or line.startswith("#"):
             continue
@@ -62,6 +71,10 @@ def parse_metrics(text: str) -> dict:
             out["requests"][key] = out["requests"].get(key, 0.0) + value
         elif name == KV_GAUGE:
             out["kv_cache_pct"] = max(out["kv_cache_pct"] or 0.0, value * 100)
+        elif name == MAX_TOKENS_BUCKET:
+            le = _LE.search(labels)
+            if le and le.group(1) != "+Inf" and float(le.group(1)) == SINGLE_ROW_MAX_TOKENS:
+                out["single_row_calls"] += value
     return out
 
 
@@ -86,6 +99,8 @@ def delta(before: dict, after: dict) -> dict:
         "llm_requests": sum(by_reason.values()),
         "requests_by_reason": by_reason,
         "truncated": by_reason.get("length", 0),
+        # Requests with max_tokens <= 5; see MAX_TOKENS_BUCKET.
+        "single_row_calls": int(after["single_row_calls"] - before["single_row_calls"]),
         "prompt_tokens": int(after["prompt_tokens"] - before["prompt_tokens"]),
         "generation_tokens": int(after["generation_tokens"] - before["generation_tokens"]),
         "prefix_cache_hit_rate": round(hits / queries, 4) if queries else None,
