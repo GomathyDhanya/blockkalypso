@@ -190,6 +190,24 @@ def test_sembench_movie_workloads(tmp_path, monkeypatch, fake_kv_manager):
         workloads.load_movie_opposite(4)
 
 
+def test_movie_selectivity_workloads(tmp_path, monkeypatch, fake_kv_manager):
+    monkeypatch.setattr(workloads, "SEMBENCH_MOVIE", tmp_path)
+    monkeypatch.setattr(workloads, "SELECTIVITY_ROWS", 10)
+    rows = ["id,reviewId,reviewText,scoreSentiment"]
+    rows += [f"m,p{i},good {i},POSITIVE" for i in range(12)]
+    rows += [f"m,n{i},bad {i},NEGATIVE" for i in range(12)]
+    (tmp_path / "Reviews.csv").write_text("\n".join(rows) + "\n", encoding="utf-8")
+
+    low, high = workloads.WORKLOADS["movie_sel10"](), workloads.WORKLOADS["movie_sel90"]()
+    assert len(low.rows) == len(high.rows) == 10
+    assert len(low.positives) == 1 and len(high.positives) == 9
+    assert all(("good" in r.text) == (r.idx in high.positives) for r in high.rows)
+    again = workloads.load_movie_selectivity("movie_sel10")
+    assert [r.text for r in again.rows] == [r.text for r in low.rows]  # fixed seed
+    assert len(list(data._data_source(None, str(low.data_path), None))) == 10
+    assert len(workloads.WORKLOADS["movie_sel50"](4).rows) == 4
+
+
 def test_parse_and_check_arms():
     assert parse_arm("kalypso_block:10").block == (10,)
     assert parse_arm("kalypso_block:2x5").block == (2, 5)
