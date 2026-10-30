@@ -6,8 +6,8 @@ Each arm runs one workload end to end. Arms do not measure anything;
 Arm names:
   kalypso_per_tuple     Kalypso's original one-row (one-pair) operators
   vllm_direct           the same per-row prompts sent straight to vLLM
-  kalypso_block:N       BlockSemFilter with block_size N (filter workloads),
-                         or BlockSemJoin with pair_block_size N (join workloads)
+  kalypso_block:N       BlockSemFilter or BlockSemMap with block_size N,
+                         or BlockSemJoin with pair_block_size N
 
 Controls for filter accuracy: ``vllm_direct`` with options joined by ``+``,
 each changing one thing about the per-row call (filter workloads only):
@@ -95,10 +95,11 @@ def check_arm(spec: ArmSpec, workload: Workload) -> None:
         raise ValueError(f"{spec.name}: vllm_direct options are for filter workloads")
     if spec.kind != "kalypso_block":
         return
-    if workload.kind == MAP:
-        raise ValueError(f"{spec.name}: there is no block operator for maps")
-    if workload.kind == FILTER and len(spec.block) != 1:
-        raise ValueError(f"{spec.name}: filter blocks take one size, e.g. kalypso_block:10")
+    if workload.kind in (FILTER, MAP) and len(spec.block) != 1:
+        raise ValueError(
+            f"{spec.name}: {workload.kind} blocks take one size, "
+            "e.g. kalypso_block:10"
+        )
     if workload.kind == JOIN and len(spec.block) != 1:
         raise ValueError(f"{spec.name}: join blocks take one pair size, e.g. kalypso_block:25")
 
@@ -106,7 +107,10 @@ def check_arm(spec: ArmSpec, workload: Workload) -> None:
 def kalypso_ops(workload: Workload, block: tuple[int, ...] | None = None) -> list[dict]:
     """The /v1/semantic/query ops for a workload, per-tuple or blocked."""
     if workload.kind == MAP:
-        return [{"op": OpName.SEM_MAP, "args": {"prompt": workload.instruction}}]
+        args = {"prompt": workload.instruction}
+        if block:
+            args["block_size"] = block[0]
+        return [{"op": OpName.SEM_MAP, "args": args}]
     if workload.kind == FILTER:
         args = {"prompt": workload.instruction}
         if block:

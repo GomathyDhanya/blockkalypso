@@ -213,8 +213,7 @@ def test_parse_and_check_arms():
     for bad in ("kalypso_block", "kalypso_block:0", "kalypso_block:2x5", "kalypso_block:axb", "nope"):
         with pytest.raises(ValueError):
             parse_arm(bad)
-    with pytest.raises(ValueError):
-        check_arm(parse_arm("kalypso_block:5"), load_biodex(1))
+    check_arm(parse_arm("kalypso_block:5"), load_biodex(1))
     check_arm(parse_arm("kalypso_block:5"), load_join5x5())
 
 
@@ -225,6 +224,9 @@ def test_query_ops_and_join_response_parsing():
         "instruction": join.instruction, "right_table": str(join.right_path),
         "pair_block_size": 10}}]
     assert "block_size" not in kalypso_ops(load_reviews())[0]["args"]
+    biodex = load_biodex(1)
+    assert kalypso_ops(biodex, (3,)) == [{"op": "sem_map", "args": {
+        "prompt": biodex.instruction, "block_size": 3}}]
     out = parse_query_response(join, {"results": [
         {"idx": 0, "right_idx": 2, "outputs": [{"op": "f", "value": "true"}]}]})
     assert out.selected == {(0, 2)} and out.outputs == {"0,2": "true"}

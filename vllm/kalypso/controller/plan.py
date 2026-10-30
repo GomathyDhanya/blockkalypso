@@ -337,12 +337,23 @@ class SemanticPlan:
                     )
 
             elif name == OpName.SEM_MAP:
-                physical.append(
-                    ops.SemMap(
-                        instruction=args["prompt"],
-                        position=idx
+                if int(args.get("block_size", 1)) > 1:
+                    physical.append(
+                        ops.BlockSemMap(
+                            instruction=args["prompt"],
+                            block_size=int(args["block_size"]),
+                            max_block_tokens=(int(args["max_block_tokens"])
+                                              if args.get("max_block_tokens") is not None else None),
+                            position=idx,
+                        )
                     )
-                )
+                else:
+                    physical.append(
+                        ops.SemMap(
+                            instruction=args["prompt"],
+                            position=idx
+                        )
+                    )
 
             elif name in (OpName.SEM_CLASSIFY):
                 physical.append(
