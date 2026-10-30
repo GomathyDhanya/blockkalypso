@@ -25,6 +25,14 @@ COUNTERS = {
     "vllm:generation_tokens_total": "generation_tokens",
     "vllm:prefix_cache_hits_total": "prefix_cache_hits",
     "vllm:prefix_cache_queries_total": "prefix_cache_queries",
+    # Histogram _sum/_count pairs: summed like any other counter, then
+    # turned into a mean of (after - before) in delta(). vLLM exposes these
+    # over the same /metrics HTTP endpoint, so they work against a remote
+    # server (e.g. a Modal-hosted one) exactly like the counters above do.
+    "vllm:request_prefill_time_seconds_sum": "prefill_time_sum_s",
+    "vllm:request_prefill_time_seconds_count": "prefill_time_count",
+    "vllm:request_decode_time_seconds_sum": "decode_time_sum_s",
+    "vllm:request_decode_time_seconds_count": "decode_time_count",
 }
 REQUESTS = "vllm:request_success_total"
 KV_GAUGE = "vllm:kv_cache_usage_perc"
@@ -70,6 +78,10 @@ def delta(before: dict, after: dict) -> dict:
     by_reason = {r: n for r, n in by_reason.items() if n}
     queries = after["prefix_cache_queries"] - before["prefix_cache_queries"]
     hits = after["prefix_cache_hits"] - before["prefix_cache_hits"]
+    prefill_n = after["prefill_time_count"] - before["prefill_time_count"]
+    decode_n = after["decode_time_count"] - before["decode_time_count"]
+    prefill_sum = after["prefill_time_sum_s"] - before["prefill_time_sum_s"]
+    decode_sum = after["decode_time_sum_s"] - before["decode_time_sum_s"]
     return {
         "llm_requests": sum(by_reason.values()),
         "requests_by_reason": by_reason,
@@ -77,6 +89,11 @@ def delta(before: dict, after: dict) -> dict:
         "prompt_tokens": int(after["prompt_tokens"] - before["prompt_tokens"]),
         "generation_tokens": int(after["generation_tokens"] - before["generation_tokens"]),
         "prefix_cache_hit_rate": round(hits / queries, 4) if queries else None,
+        # Mean over this trial's requests, from the histogram's _sum/_count
+        # delta -- the standard way to read a mean out of a Prometheus
+        # histogram without needing the bucket boundaries.
+        "mean_prefill_time_s": round(prefill_sum / prefill_n, 4) if prefill_n else None,
+        "mean_decode_time_s": round(decode_sum / decode_n, 4) if decode_n else None,
     }
 
 
