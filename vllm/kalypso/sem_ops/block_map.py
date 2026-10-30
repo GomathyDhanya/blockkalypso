@@ -1,10 +1,12 @@
 """Block semantic map: one LLM request maps a block of Kalypso rows.
 
-Each successful block answer is applied to its row exactly as ``SemMap``
-would apply a one-row answer: the ordinary map prompt plus an assistant turn
-becomes the row's new input.  Missing or malformed entries are repaired with
-the ordinary single-row map path, so a later operator cannot tell whether its
-input was produced by a block request or a per-tuple request.
+Each successful block answer is materialized as ordinary per-row ``SemMap``
+state: the ordinary map prompt plus an assistant turn becomes the row's new
+input.  This is logical row state, not a transcript of the shared JSON block
+request.  Keeping the shared transcript would expose other rows to later
+operators; consequently a later operator cannot reuse the block request's KV
+prefix. Missing or malformed entries are repaired with the ordinary
+single-row map path.
 """
 
 from __future__ import annotations
@@ -157,7 +159,13 @@ class BlockSemMap(SemMap):
         return max(block_peak, single_peak)
 
     async def _apply_block_output(self, ctx, output_text: str) -> None:
-        """Perform the same context mutation as ``SemMap._run_single``."""
+        """Materialize logical per-row state, as ``SemMap._run_single`` does.
+
+        This deliberately differs from the request that produced
+        ``output_text``: the request was one shared block prompt, whereas the
+        stored state must be independent and must not include sibling rows.
+        It therefore cannot reuse that block request as a vLLM KV prefix.
+        """
         previous_pin_req_id = ctx.state.pin_req_id
         prompt = self._build_prompt(ctx)
         prompt_str = KVMemoryManager.get_instance().apply_chat_template(prompt)

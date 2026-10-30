@@ -56,7 +56,7 @@ def test_parse_block_map_requires_unambiguous_string_outputs():
     assert parse_block_map_outputs("not json", 2) == {}
 
 
-def test_valid_block_maps_update_each_row_like_ordinary_semmap(fake_kv_manager):
+def test_block_map_materializes_logical_per_row_state_not_block_transcript(fake_kv_manager):
     executor = MapExecutor([
         '{"items": [{"id": 1, "output": "alpha"}, {"id": 2, "output": "beta"}]}'
     ])
@@ -69,7 +69,9 @@ def test_valid_block_maps_update_each_row_like_ordinary_semmap(fake_kv_manager):
     op = BlockSemMap("summarize", block_size=2)
     assert run(op.run_block(rows)) == rows
     assert len(executor.calls) == 1
+    assert "Contexts (JSON)" in executor.calls[0][0][-1]["content"]
     assert [item.input.data for item in rows] == expected
+    assert all("Contexts (JSON)" not in str(item.input.data) for item in rows)
     assert [item.output[-1][str(BlockSemMap)] for item in rows] == ["alpha", "beta"]
 
 
