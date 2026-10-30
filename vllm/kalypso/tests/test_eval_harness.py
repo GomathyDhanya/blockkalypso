@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from vllm.kalypso.benchmark.eval import metrics, report
+from vllm.kalypso.benchmark.eval import metrics, report, workloads
 from vllm.kalypso.benchmark.eval.arms import (ArmError, check_arm, direct_requests,
                                               kalypso_ops, parse_arm,
                                               parse_query_response)
@@ -156,6 +156,58 @@ def test_filter_and_join_workloads_carry_labels():
     assert all(0 <= l < 5 and 0 <= r < 5 for l, r in join.positives)
 
 
+SEMBENCH_FIXTURE = """\
+id,reviewId,reviewText,scoreSentiment
+taken_3,1,Tense&#44; fun.,POSITIVE
+taken_3,2,Dull.,NEGATIVE
+ant_man_and_the_wasp_quantumania,3,Loved it.,POSITIVE
+ant_man_and_the_wasp_quantumania,3,Loved it.,POSITIVE
+ant_man_and_the_wasp_quantumania,4,A mess.,NEGATIVE
+ant_man_and_the_wasp_quantumania,5,Great fun.,POSITIVE
+"""
+
+
+def test_sembench_movie_workloads(tmp_path, monkeypatch, fake_kv_manager):
+    monkeypatch.setattr(workloads, "SEMBENCH_MOVIE", tmp_path)
+    (tmp_path / "Reviews.csv").write_text(SEMBENCH_FIXTURE, encoding="utf-8")
+
+    taken3 = workloads.load_movie_taken3()
+    assert taken3.kind == FILTER and [r.text for r in taken3.rows] == ["Tense, fun.", "Dull."]
+    assert taken3.positives == {0}
+    ctxs = list(data._data_source(None, str(taken3.data_path), None))
+    assert [c.state.idx for c in ctxs] == [0, 1]
+    assert "Tense, fun." in str(ctxs[0].input.data)
+
+    every = workloads.load_movie_positive()
+    assert len(every.rows) == 5 and every.positives == {0, 2, 4}  # duplicate id 3 dropped
+    assert len(workloads.load_movie_positive(2).rows) == 2
+
+    join = workloads.load_movie_opposite()
+    assert join.kind == JOIN and join.data_path == join.right_path
+    assert len(join.rows) == 3
+    assert join.positives == {(0, 1), (1, 0), (1, 2), (2, 1)}
+    with pytest.raises(ValueError):
+        workloads.load_movie_opposite(4)
+
+
+def test_movie_selectivity_workloads(tmp_path, monkeypatch, fake_kv_manager):
+    monkeypatch.setattr(workloads, "SEMBENCH_MOVIE", tmp_path)
+    monkeypatch.setattr(workloads, "SELECTIVITY_ROWS", 10)
+    rows = ["id,reviewId,reviewText,scoreSentiment"]
+    rows += [f"m,p{i},good {i},POSITIVE" for i in range(12)]
+    rows += [f"m,n{i},bad {i},NEGATIVE" for i in range(12)]
+    (tmp_path / "Reviews.csv").write_text("\n".join(rows) + "\n", encoding="utf-8")
+
+    low, high = workloads.WORKLOADS["movie_sel10"](), workloads.WORKLOADS["movie_sel90"]()
+    assert len(low.rows) == len(high.rows) == 10
+    assert len(low.positives) == 1 and len(high.positives) == 9
+    assert all(("good" in r.text) == (r.idx in high.positives) for r in high.rows)
+    again = workloads.load_movie_selectivity("movie_sel10")
+    assert [r.text for r in again.rows] == [r.text for r in low.rows]  # fixed seed
+    assert len(list(data._data_source(None, str(low.data_path), None))) == 10
+    assert len(workloads.WORKLOADS["movie_sel50"](4).rows) == 4
+
+
 def test_parse_and_check_arms():
     assert parse_arm("kalypso_block:10").block == (10,)
     assert parse_arm("kalypso_block:2x5").block == (2, 5)
@@ -206,6 +258,43 @@ def test_direct_prompts_match_kalypso_operators(fake_kv_manager):
     ctxs = list(data._data_source(None, str(biodex.data_path), None))
     for ctx, (_, messages, _) in zip(ctxs, direct_requests(biodex)):
         assert SemMap(biodex.instruction)._build_prompt(ctx) == messages
+
+
+def test_direct_controls_match_block_filter_one_row():
+    """vllm_direct:block_prompt+no_penalty sends what BlockSemFilter does for one row."""
+    import asyncio
+    from types import SimpleNamespace
+
+    from vllm.kalypso.benchmark.eval.arms import block_prompt_requests, direct_sampling
+    from vllm.kalypso.execution.vllm_executor import VLLMExecutor
+    from vllm.kalypso.sem_ops.block_filter import BlockSemFilter
+
+    sent = []
+
+    class FakeExecutor:
+        async def execute(self, **kwargs):
+            sent.append(kwargs)
+            return SimpleNamespace(text="YES", finish_reason="stop")
+
+    filt = load_reviews()
+    op = BlockSemFilter(filt.instruction, block_size=2)
+    result = asyncio.run(op.evaluate_block(FakeExecutor(), None, [filt.rows[0].text]))
+    assert result.verdicts == [True] and len(sent) == 1
+    key, messages, max_tokens = block_prompt_requests(filt)[0]
+    assert key == "0" and messages == sent[0]["prompt"]
+    assert max_tokens == sent[0]["max_tokens"]
+    assert direct_sampling(frozenset({"no_penalty"})) == {
+        **VLLMExecutor.DEFAULT_SAMPLING, **sent[0]["sampling"]}
+    assert direct_sampling() == VLLMExecutor.DEFAULT_SAMPLING
+
+    spec = parse_arm("vllm_direct:block_prompt+no_penalty")
+    assert spec.kind == "vllm_direct" and spec.options == {"block_prompt", "no_penalty"}
+    check_arm(spec, filt)
+    for bad in ("vllm_direct:nope", "vllm_direct:no_penalty+x"):
+        with pytest.raises(ValueError):
+            parse_arm(bad)
+    with pytest.raises(ValueError):
+        check_arm(parse_arm("vllm_direct:no_penalty"), load_join5x5())
 
 
 def test_report_lists_failed_arms():
