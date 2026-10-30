@@ -16,6 +16,7 @@ and block join. Milestone 1 results are [below](#milestone-1-results).
 | `movie_positive` | filter | SemBench movie Q1: 1,865 Rotten Tomatoes reviews, any movie | clearly positive: 1,417 |
 | `movie_taken3` | filter | SemBench movie Q2-Q4/Q8: the 120 *Taken 3* reviews | positive: 14 |
 | `movie_opposite` | join | SemBench movie Q6/Q7: 128 x 128 *Ant-Man* review pairs (`--n` per side) | opposite sentiment: 8,184 |
+| `movie_sel10` … `movie_sel90` | filter | SemBench movie Q1 at a set selectivity: 400 reviews, s = 0.10, 0.25, 0.50, 0.75, 0.90 | positive: 40 … 360 |
 
 The `movie_*` workloads download SemBench's movie reviews (scale factor 2000,
 pinned commit, SHA-256 checked) into `benchmark/data/sembench/movie/` on
