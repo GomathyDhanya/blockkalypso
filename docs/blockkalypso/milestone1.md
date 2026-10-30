@@ -7,14 +7,14 @@ this milestone; every check still reports agreement so it can be studied later.
 
 | Piece | Where | Notes |
 |---|---|---|
-| Shared helpers | `vllm/kalypso/sem_ops/block_utils.py` | Row text, fixed-size and k-by-j blocking, single-answer parsing, LLM call wrapper |
+| Shared helpers | `vllm/kalypso/sem_ops/block_utils.py` | Row text, fixed-size blocking, single-answer parsing, LLM call wrapper |
 | Block filter | `vllm/kalypso/sem_ops/block_filter.py` | One call per block, `<id>: YES/NO` lines, one-row fallback for unusable answers |
 | Block tasks | `vllm/kalypso/controller/stage.py` | A `Task` can hold a list of rows; one KV reservation per block |
 | Block scheduling | `vllm/kalypso/execution/pipeline_execution.py` | Block stages get one task per block; block boundaries kept between block stages |
 | Planner hook | `vllm/kalypso/controller/plan.py` | `sem_filter` with `"block_size" > 1` becomes a `BlockSemFilter` |
 | Sampling override | `vllm/kalypso/execution/vllm_executor.py` | Block calls turn off Kalypso's repetition penalties |
 | Join id fix | `vllm/kalypso/sem_ops/joins.py` | Join pairs keep the left row id and record the right row id |
-| Block join | `vllm/kalypso/sem_ops/block_join.py` | One call per k-by-j block, `L<i>, R<j>` lines, id validation, per-pair fallback; also callable as a pipeline stage with join block sizes |
+| Block join | `vllm/kalypso/sem_ops/block_join.py` | Cartesian product followed by a join-aware block filter: one YES/NO line per candidate pair, with one-pair fallback for missing or malformed answers |
 
 ## Run the unit tests
 
@@ -47,9 +47,9 @@ Both scripts work against any OpenAI-compatible server.
 python vllm/kalypso/benchmark/block_filter_standalone.py \
   --base-url http://localhost:8003/v1 --block-size 20 --show-raw
 
-# Block join: 5 complaints x 5 categories, 25 pair calls vs one 5x5 block
+# Block join: 5 complaints x 5 categories, 25 pair calls vs one 25-pair block
 python vllm/kalypso/benchmark/block_join_standalone.py \
-  --base-url http://localhost:8003/v1 --k 5 --j 5 --show-raw
+  --base-url http://localhost:8003/v1 --pair-block-size 25 --show-raw
 ```
 
 ## Block filter inside a Kalypso query
@@ -87,8 +87,8 @@ Block join over 5 complaints x 5 categories (25 pairs, 5 expected matches):
 | Mode | LLM calls | Prompt tokens | Latency 1.5B | F1 1.5B |
 |---|---|---|---|---|
 | One call per pair (Kalypso) | 25 | 4,310 | 66.5 s | 0.33 |
-| 2x2 blocks | 9 | 1,219 | 19.4 s | 0.67 |
-| One 5x5 block | 1 | 224 | 6.4 s | 0.60 |
+| 4-pair blocks | 9 | 1,219 | 19.4 s | 0.67 |
+| One 25-pair block | 1 | 224 | 6.4 s | 0.60 |
 
 Blocking is 3-4x faster for the filter and 10x for the join. On long rows
 (MEDEC clinical notes) it gives no speedup. Accuracy cannot be judged yet:
@@ -104,9 +104,9 @@ Measuring the accuracy cost of blocking needs a larger model (Milestone 2).
 - A row containing newlines or `2. ...` text cannot pose as another item.
 - Empty rows are shown as `(empty)` so their number still appears.
 - Truncated outputs (`finish_reason == "length"`) are counted.
-- Join pairs with ids outside the blocks are dropped and counted; repeats too.
-- A join answer with no pairs and no `NONE` falls back to per-pair calls.
-- Blocks of one row, or a 1x1 join block, skip the block prompt.
+- Join candidates retain ordinary join's left and right row ids.
+- Missing or malformed candidate answers fall back to one-pair calls.
+- Blocks of one candidate pair skip the block prompt.
 - Empty inputs make no calls.
 
 ## Not done yet (Milestone 2)

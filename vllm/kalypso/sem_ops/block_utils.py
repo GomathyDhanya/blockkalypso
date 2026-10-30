@@ -61,23 +61,6 @@ def make_blocks(rows: Sequence[Any], block_size: int) -> list[list[Any]]:
     return [list(rows[i : i + block_size]) for i in range(0, len(rows), block_size)]
 
 
-def make_join_blocks(
-    left: Sequence[Any], right: Sequence[Any], k: int, j: int
-) -> list[tuple[int, list[Any], int, list[Any]]]:
-    """Every (left block, right block) pair for a k-by-j block join.
-
-    Returns ``(left_offset, left_block, right_offset, right_block)`` so block-
-    local positions can be mapped back to positions in the full tables.
-    """
-    lefts = make_blocks(left, k)
-    rights = make_blocks(right, j)
-    return [
-        (li * k, lb, ri * j, rb)
-        for li, lb in enumerate(lefts)
-        for ri, rb in enumerate(rights)
-    ]
-
-
 def parse_single_answer(text: str | None) -> bool | None:
     """First YES/NO/TRUE/FALSE word in a one-item answer, or None."""
     m = _VERDICT_RE.search(text or "")

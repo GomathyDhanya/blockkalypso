@@ -20,11 +20,11 @@ from block_filter_standalone import (DEFAULT_DATA as FILTER_DATA,
                                      load_rows)
 from block_join_standalone import (DATA as JOIN_DATA,
                                    DEFAULT_CONDITION as JOIN_PROMPT,
-                                   load_matches, load_table)
+                                   load_matches, load_table, evaluate_candidates)
 from block_ops_common import HTTPExecutor, Timer, resolve_model
 from vllm.kalypso.sem_ops.block_filter import BlockSemFilter
 from vllm.kalypso.sem_ops.block_join import BlockSemJoin
-from vllm.kalypso.sem_ops.block_utils import make_blocks, make_join_blocks
+from vllm.kalypso.sem_ops.block_utils import make_blocks
 
 
 async def peak_rss(pid, stop, samples):
@@ -106,25 +106,19 @@ async def filter_trial(client, args, model, size, rows):
     }
 
 
-async def join_trial(client, args, model, k, j, left, right, expected):
+async def join_trial(client, args, model, pair_block_size, left, right, expected):
     executor = HTTPExecutor(client, args.base_url, model)
-    op = BlockSemJoin(args.join_prompt, left_block_size=k, right_block_size=j)
-    blocks = make_join_blocks(left, right, k, j)
+    op = BlockSemJoin(args.join_prompt, pair_block_size=pair_block_size)
 
     async def work():
-        results = await asyncio.gather(*(
-            op.evaluate_block_pair(executor, None, lb, rb)
-            for _, lb, _, rb in blocks
-        ))
-        return {(lo + a, ro + b)
-                for (lo, _, ro, _), result in zip(blocks, results)
-                for a, b in result.matches}
+        matches, _ = await evaluate_candidates(op, executor, left, right)
+        return set(matches)
 
     matches, seconds, rss, kv_usage = await timed_run(
         work, args.server_pid, client, args.base_url)
     truth = set(expected)
     return {
-        "operator": "join", "left_block_size": k, "right_block_size": j,
+        "operator": "join", "pair_block_size": pair_block_size,
         **executor.summary(seconds), "peak_server_rss_kb": rss,
         "peak_kv_cache_usage_pct": kv_usage,
         "true_positives": len(matches & truth),
@@ -139,16 +133,6 @@ def parse_sizes(value):
     if not sizes or any(size < 1 for size in sizes):
         raise argparse.ArgumentTypeError("sizes must be positive integers")
     return sizes
-
-
-def parse_pairs(value):
-    try:
-        pairs = [tuple(map(int, part.lower().split("x"))) for part in value.split(",")]
-    except ValueError as exc:
-        raise argparse.ArgumentTypeError("use kxj,kxj,...") from exc
-    if not pairs or any(len(pair) != 2 for pair in pairs):
-        raise argparse.ArgumentTypeError("use kxj,kxj,...")
-    return pairs
 
 
 async def run(args):
@@ -169,8 +153,8 @@ async def run(args):
                 if args.out:
                     Path(args.out).write_text(json.dumps(
                         {"model": model, "trials": trials, "complete": False}, indent=2))
-            for k, j in args.join_sizes:
-                trial = await join_trial(client, args, model, k, j, left, right, expected)
+            for size in args.join_sizes:
+                trial = await join_trial(client, args, model, size, left, right, expected)
                 trial["repeat"] = repeat + 1
                 trials.append(trial)
                 print(json.dumps(trial), flush=True)
@@ -180,7 +164,7 @@ async def run(args):
     groups = {}
     for trial in trials:
         key = (trial["operator"], trial.get("block_size"),
-               trial.get("left_block_size"), trial.get("right_block_size"))
+               trial.get("pair_block_size"))
         groups.setdefault(str(key), []).append(trial)
     medians = {key: {
         "latency_s": statistics.median(t["latency_s"] for t in group),
@@ -202,7 +186,7 @@ def main():
     parser.add_argument("--timeout", type=float, default=600)
     parser.add_argument("--repeats", type=int, default=3)
     parser.add_argument("--filter-sizes", type=parse_sizes, default=[1, 2, 5, 10, 20])
-    parser.add_argument("--join-sizes", type=parse_pairs, default=[(1, 1), (1, 5), (5, 1), (5, 5)])
+    parser.add_argument("--join-sizes", type=parse_sizes, default=[1, 5, 25])
     parser.add_argument("--filter-data", default=str(FILTER_DATA))
     parser.add_argument("--filter-prompt", default=FILTER_PROMPT)
     parser.add_argument("--join-left", default=str(JOIN_DATA / "left_5.csv"))
@@ -212,7 +196,7 @@ def main():
     parser.add_argument("--server-pid", type=int, help="optional local server PID for peak RSS sampling")
     parser.add_argument("--out", help="write all trials and medians to JSON")
     args = parser.parse_args()
-    if args.repeats < 1 or any(k < 1 or j < 1 for k, j in args.join_sizes):
+    if args.repeats < 1:
         parser.error("repeat count and join sizes must be positive")
     asyncio.run(run(args))
 

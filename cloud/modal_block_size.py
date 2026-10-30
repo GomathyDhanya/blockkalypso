@@ -8,7 +8,7 @@
 Each run starts Kalypso on vLLM 0.29.0 inside one container and runs
 ``eval.run`` against it on localhost, so no network hop is in the latency
 numbers. Arms are Kalypso's per-tuple operator (always, as the baseline) plus
-``kalypso_block:<k>`` for every ``--blocks`` size (``KxJ`` for joins), or the
+``kalypso_block:<k>`` for every ``--blocks`` size (pairs per call for joins), or the
 arms in ``--arms``. Arms are interleaved over the repeats, with the prefix
 cache reset before every trial, so all block sizes in one run share a
 container and can be compared directly.
@@ -152,10 +152,11 @@ def main(workload: str = "movie_positive", n: int = 0, blocks: str = "", arms: s
     others = ([f"kalypso_block:{b}" for b in blocks.split(",") if b]
               + [a for a in arms.split(",") if a])
     if not others:
-        raise SystemExit("give --blocks (e.g. 4,6,8 or 2x2,4x4), --arms or --controls")
+        raise SystemExit("give --blocks (e.g. 4,6,8; for joins pairs per call, e.g. 4,25), "
+                         "--arms or --controls")
     # Kalypso builds a plain SemFilter for block_size 1, so kalypso_block:1 is
     # just per-tuple; use --controls for a one-row block.
-    if any(b in ("1", "1x1") for b in blocks.split(",")):
+    if "1" in blocks.split(","):
         raise SystemExit("block size 1 is Kalypso's per-tuple path; use --controls")
     all_arms = [BASELINE, *dict.fromkeys(a for a in others if a != BASELINE)]
     sha = _git("rev-parse", "HEAD")

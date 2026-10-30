@@ -5,13 +5,13 @@ categories) twice against an OpenAI-compatible server, e.g. Kalypso's own
 vLLM server:
 
 * pairwise baseline: one call per (left, right) pair, like Kalypso's join;
-* block join: blocks of ``--k`` left rows by ``--j`` right rows, one call each.
+* block join: Cartesian candidates in blocks of ``--pair-block-size`` pairs.
 
 Prints LLM calls, tokens, latency, the matches each produced, agreement
 between the two, and agreement with the hand-written expected matches.
 
     python vllm/kalypso/benchmark/block_join_standalone.py \
-        --base-url http://localhost:8003/v1 --k 5 --j 5 --show-raw
+        --base-url http://localhost:8003/v1 --pair-block-size 25 --show-raw
 """
 
 import argparse
@@ -24,8 +24,8 @@ import httpx
 
 from block_ops_common import SAMPLE_DATA, HTTPExecutor, Timer, resolve_model
 
-from vllm.kalypso.sem_ops.block_join import BlockSemJoin
-from vllm.kalypso.sem_ops.block_utils import make_join_blocks
+from vllm.kalypso.sem_ops.block_join import BlockSemJoin, format_join_candidate
+from vllm.kalypso.sem_ops.block_utils import make_blocks
 
 DATA = SAMPLE_DATA / "block_join"
 DEFAULT_CONDITION = "The complaint in the left item belongs to the category in the right item."
@@ -57,6 +57,21 @@ def compare(got, want):
     }
 
 
+async def evaluate_candidates(op, executor, left, right):
+    """Benchmark the same left-major candidate blocks as query execution."""
+    candidates = [(i, j, format_join_candidate(l, r))
+                  for i, l in enumerate(left) for j, r in enumerate(right)]
+    blocks = make_blocks(candidates, op.block_size)
+    results = await asyncio.gather(*(
+        op.evaluate_block(executor, None, [text for _, _, text in block])
+        for block in blocks
+    ))
+    matches = sorted((i, j) for block, result in zip(blocks, results)
+                     for (i, j, _), verdict in zip(block, result.verdicts)
+                     if verdict)
+    return matches, results
+
+
 async def run(args):
     left = load_table(args.left)
     right = load_table(args.right)
@@ -65,7 +80,7 @@ async def run(args):
         model = await resolve_model(client, args.base_url, args.model)
 
         base_ex = HTTPExecutor(client, args.base_url, model)
-        pairwise = BlockSemJoin(args.condition, left_block_size=1, right_block_size=1)
+        pairwise = BlockSemJoin(args.condition, pair_block_size=1)
         with Timer() as t_base:
             results = await asyncio.gather(*(
                 pairwise.evaluate_block_pair(base_ex, None, [l], [r])
@@ -77,24 +92,15 @@ async def run(args):
         )
 
         blk_ex = HTTPExecutor(client, args.base_url, model)
-        op = BlockSemJoin(args.condition, left_block_size=args.k, right_block_size=args.j)
-        blocks = make_join_blocks(left, right, args.k, args.j)
+        op = BlockSemJoin(args.condition, pair_block_size=args.pair_block_size)
         with Timer() as t_blk:
-            blk_results = await asyncio.gather(*(
-                op.evaluate_block_pair(blk_ex, None, lb, rb) for _, lb, _, rb in blocks
-            ))
-        blk_matches = sorted(
-            (lo + a, ro + b)
-            for (lo, _, ro, _), res in zip(blocks, blk_results)
-            for a, b in res.matches
-        )
+            blk_matches, blk_results = await evaluate_candidates(op, blk_ex, left, right)
 
     report = {
         "model": model,
         "left_rows": len(left),
         "right_rows": len(right),
-        "k": args.k,
-        "j": args.j,
+        "pair_block_size": args.pair_block_size,
         "pairwise": {**base_ex.summary(t_base.seconds), "matches": fmt(base_matches)},
         "block": {**blk_ex.summary(t_blk.seconds), "matches": fmt(blk_matches),
                   "operator_stats": op.stats.as_dict()},
@@ -122,8 +128,8 @@ def main():
     ap.add_argument("--expected", default=str(DATA / "matches_5x5.csv"),
                     help="CSV of left_id,right_id expected matches (optional)")
     ap.add_argument("--condition", default=DEFAULT_CONDITION)
-    ap.add_argument("--k", type=int, default=5, help="left rows per block")
-    ap.add_argument("--j", type=int, default=5, help="right rows per block")
+    ap.add_argument("--pair-block-size", type=int, default=25,
+                    help="Cartesian candidate pairs per block-filter request")
     ap.add_argument("--timeout", type=float, default=600)
     ap.add_argument("--out", default=None, help="also write the JSON report here")
     ap.add_argument("--show-raw", action="store_true")

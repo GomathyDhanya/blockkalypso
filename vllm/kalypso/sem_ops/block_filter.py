@@ -160,6 +160,14 @@ class BlockSemFilter(BaseOp):
         self.unpin = False
         self.stats = BlockFilterStats()
 
+    def row_text_for_prompt(self, ctx) -> str:
+        """Render one input row for a block prompt.
+
+        Specialised block filters may override this to preserve structure in
+        a row, such as the left/right boundary of a join candidate.
+        """
+        return row_text(ctx)
+
     # ---- budgeting (Kalypso convention: prompt tokens + max output tokens) --
 
     def block_max_tokens(self, n: int) -> int:
@@ -172,18 +180,23 @@ class BlockSemFilter(BaseOp):
         KVMemoryManager tokenizer is used (it must be initialised).
         """
         ctxs = ctxs if isinstance(ctxs, list) else [ctxs]
-        msgs = build_block_messages(
-            self.instruction, [row_text(c) for c in ctxs], self.system_prompt
-        )
+        texts = [self.row_text_for_prompt(c) for c in ctxs]
         if token_length is None:
             from vllm.kalypso.budget import KVMemoryManager
 
             mgr = KVMemoryManager.get_instance()
-            prompt_tokens = mgr.token_length(mgr.apply_chat_template(msgs))
+            count = lambda msgs: mgr.token_length(mgr.apply_chat_template(msgs))
         else:
-            prompt_tokens = token_length("\n".join(m["content"] for m in msgs))
-        out = self.block_max_tokens(len(ctxs)) if len(ctxs) > 1 else self.single_max_tokens
-        return prompt_tokens + out
+            count = lambda msgs: token_length("\n".join(m["content"] for m in msgs))
+        single_peak = max((count(build_single_messages(
+            self.instruction, text, self.system_prompt
+        )) + self.single_max_tokens for text in texts), default=0)
+        if len(texts) <= 1:
+            return single_peak
+        block_peak = count(build_block_messages(
+            self.instruction, texts, self.system_prompt
+        )) + self.block_max_tokens(len(texts))
+        return max(block_peak, single_peak)
 
     # ---- execution ---------------------------------------------------------
 
@@ -211,14 +224,16 @@ class BlockSemFilter(BaseOp):
 
         verdicts: list[bool | None] = [answers.get(i) for i in range(1, n + 1)]
         missing = [i for i, v in enumerate(verdicts) if v is None]
-        replies = await asyncio.gather(*(
-            call_llm(
+        # One task reserves one request's peak KV usage. Concurrent repairs
+        # would multiply the shared instruction and exceed that reservation.
+        replies = [
+            await call_llm(
                 executor, raw_request,
                 build_single_messages(self.instruction, texts[i], self.system_prompt),
                 self.single_max_tokens, priority,
             )
             for i in missing
-        ))
+        ]
         self.stats.fallback_calls += len(missing)
         for i, (text, _) in zip(missing, replies):
             raw.append(text)
@@ -243,7 +258,10 @@ class BlockSemFilter(BaseOp):
             return []
         executor, raw_request = first_executor(ctxs)
         result = await self.evaluate_block(
-            executor, raw_request, [row_text(c) for c in ctxs], priority
+            executor,
+            raw_request,
+            [self.row_text_for_prompt(c) for c in ctxs],
+            priority,
         )
         if self.LOG:
             print(f"[block-filter] position={self.position} rows={len(ctxs)} "
@@ -251,8 +269,17 @@ class BlockSemFilter(BaseOp):
         label = {True: "true", False: "false", None: "undecided"}
         passed = []
         for ctx, v in zip(ctxs, result.verdicts):
+            # Match ordinary SemFilter's joined-input transition. Subsequent
+            # maps and Cartesian products read data, not right_data.
+            if getattr(ctx.input, "right_data", None):
+                ctx.input.data = list(ctx.input.data) + list(ctx.input.right_data)
+                ctx.input.right_data = []
             ctx.output.append({str(self.__class__): label[v]})
-            if v:
+            keep = v is True
+            if (self.unpin or not keep) and ctx.state.pin_req_id is not None:
+                await ctx.state.executor.unpin(ctx.state.raw_request, ctx.state.pin_req_id)
+                ctx.state.pin_req_id = None
+            if keep or not self.predicate:
                 passed.append(ctx)
         return passed
 
