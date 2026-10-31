@@ -79,6 +79,7 @@ def run_metadata(args, model: str, workload, server_pid: int | None) -> dict:
         "right_path": str(workload.right_path) if workload.right_path else None,
         "positives": _jsonable(workload.positives),
         "instruction": workload.instruction,
+        "stages": list(workload.stages) if workload.stages else None,
         "arms": args.arms,
         "warmup": args.warmup,
         "repeats": args.repeats,
@@ -135,13 +136,18 @@ async def trial(client, args, spec, workload, model, server_pid) -> dict:
         "selected": _jsonable(result.selected),
         "outputs": dict(sorted(result.outputs.items())),
     }
-    if spec.kind == "kalypso_block":
+    if spec.kind in ("kalypso_block", "kalypso_pipe"):
         # A block operator answers a block in one call and falls back to one
         # call per row for rows the block answer missed (or a block of one).
+        # Counted by max_tokens <= 5, so a block map's repairs (ordinary
+        # SemMap calls) are not included.
         fallbacks = measured["single_row_calls"]
         record["fallback_calls"] = fallbacks
-        record["block_calls"] = measured["llm_requests"] - fallbacks
-    if workload.kind == "map":
+        if not workload.stages:
+            # In a pipeline other stages' calls are in llm_requests too; see
+            # requests_by_max_tokens for a per-stage split.
+            record["block_calls"] = measured["llm_requests"] - fallbacks
+    if workload.kind == "map" and not workload.stages:
         record["missing_rows"] = sorted({str(r.idx) for r in workload.rows} - set(result.outputs))
     return record
 
