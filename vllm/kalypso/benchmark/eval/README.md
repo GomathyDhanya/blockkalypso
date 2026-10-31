@@ -33,11 +33,12 @@ All labeled sets are small: one item moves accuracy by 4-10 points.
 |---|---|---|
 | `kalypso_per_tuple` | Kalypso's original operators: one call per row (`sem_map`, `sem_filter`) or per pair (`join`) | all |
 | `vllm_direct` | The same per-row prompts sent concurrently to `/v1/chat/completions`, no Kalypso | all |
-| `kalypso_block:N` | `sem_filter` with `block_size: N` (BlockSemFilter), or `join` with `pair_block_size: N` (BlockSemJoin) | filter, join |
+| `kalypso_block:N` | `sem_filter` or `sem_map` with `block_size: N` (BlockSemFilter / BlockSemMap), or `join` with `pair_block_size: N` (BlockSemJoin) | filter, map, join |
 
-There is no block map operator: map outputs are long free text, so one call
-would decode every row's answer in sequence, and answers are hard to separate
-reliably.
+Block map asks for a JSON object containing one output per row. It materializes
+each result as independent ordinary-map row state for later operators; that
+prevents sibling rows from leaking into a row's prompt, but a later operator
+cannot reuse the shared block request as a vLLM prefix-cache entry.
 
 `vllm_direct` sends exactly what Kalypso's per-tuple path sends: same messages
 (Kalypso's `get_data_prompt` / `get_prompt`), `VLLMExecutor.DEFAULT_SAMPLING`

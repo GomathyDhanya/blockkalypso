@@ -150,24 +150,24 @@ class AsyncPipelineExecutor:
             stage.stage_id: 0
             for stage in stages
         }
-        # Both block filters and joins accumulate rows across producer tasks.
+        # Downstream block stages accumulate rows across producer tasks.
         # No top-level materialization barrier is needed.
-        pending_join_rows = {
+        pending_block_rows = {
             index: [] for index, stage in enumerate(stages)
             if index > 0 and stage.block_tasks
         }
         total_retries = 0
 
-        def enqueue_join_rows(index, rows, trackers=()):
-            """Accumulate Cartesian candidates into one join-filter task.
+        def enqueue_block_rows(index, rows, trackers=()):
+            """Accumulate rows into one task for a downstream block stage.
 
-            ``trackers`` belongs to each candidate, not to a whole incoming
-            batch: a Cartesian product can emit several children for one
-            pinned parent. Keeping one tracker tuple per row lets a mixed
-            block release every upstream parent exactly once per candidate.
+            ``trackers`` belongs to each row, not to a whole incoming batch:
+            a Cartesian product can emit several children for one pinned
+            parent. Keeping one tracker tuple per row lets a mixed block
+            release every upstream parent exactly once per child.
             """
             stage = stages[index]
-            pending = pending_join_rows[index]
+            pending = pending_block_rows[index]
             def emit(entries):
                 stage.enqueue(Task(
                     ctx=[row for row, _ in entries],
@@ -189,9 +189,9 @@ class AsyncPipelineExecutor:
                     emit(pending[:])
                     pending.clear()
 
-        def flush_partial_join_blocks():
-            """Run the final incomplete candidate block after its producer drains."""
-            for index, pending in pending_join_rows.items():
+        def flush_partial_block_tasks():
+            """Run each final incomplete block after its producer drains."""
+            for index, pending in pending_block_rows.items():
                 if not pending:
                     continue
                 upstream = stages[index - 1]
@@ -276,7 +276,7 @@ class AsyncPipelineExecutor:
 
         def has_pending_work():
             return any(stage.has_waiting_tasks() for stage in stages) or any(
-                pending_join_rows.values()
+                pending_block_rows.values()
             )
 
         async def rebalance_stage_capacity():
@@ -464,8 +464,8 @@ class AsyncPipelineExecutor:
 
             if next_stage_index >= len(stages):
                 out.extend(children)
-            elif next_stage_index in pending_join_rows:
-                enqueue_join_rows(
+            elif next_stage_index in pending_block_rows:
+                enqueue_block_rows(
                     next_stage_index, children,
                     downstream_trackers(len(children)),
                 )
@@ -497,7 +497,7 @@ class AsyncPipelineExecutor:
             await rebalance_stage_capacity()
 
         while has_pending_work() or active:
-            flush_partial_join_blocks()
+            flush_partial_block_tasks()
             await rebalance_stage_capacity()
             await launch_ready_tasks()
 
@@ -622,8 +622,8 @@ class AsyncPipelineExecutor:
                         deferred_release = True
 
                     for child_ctx in child_ctxs:
-                        if next_stage_index in pending_join_rows:
-                            enqueue_join_rows(next_stage_index, [child_ctx], trackers)
+                        if next_stage_index in pending_block_rows:
+                            enqueue_block_rows(next_stage_index, [child_ctx], trackers)
                             continue
                         child_task = Task(
                             ctx=([child_ctx] if next_stage_index < len(stages)
@@ -657,8 +657,8 @@ class AsyncPipelineExecutor:
                 if next_stage_index >= len(stages):
                     out.append(result)
                     await finalize_task(next_task)
-                elif next_stage_index in pending_join_rows:
-                    enqueue_join_rows(next_stage_index, [result], task.trackers)
+                elif next_stage_index in pending_block_rows:
+                    enqueue_block_rows(next_stage_index, [result], task.trackers)
                 else:
                     stages[next_stage_index].enqueue(next_task)
 
