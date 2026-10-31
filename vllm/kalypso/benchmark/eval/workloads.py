@@ -295,8 +295,8 @@ def load_movie_selectivity(name: str, n: int | None = None) -> Workload:
 CONTRACTNLI_DIR = Path(__file__).resolve().parents[1] / "data" / "contract-nli"
 CONTRACTNLI_URL = "https://stanfordnlp.github.io/contract-nli/resources/contract-nli.zip"
 # Longer contracts are left out so a block of 8 rows still fits a 32k context
-# (12,000 characters is about 3k tokens).
-CNLI_MAX_CHARS = 12000
+# (12,500 characters is about 3k tokens).
+CNLI_MAX_CHARS = 12500
 CONTRACTNLI_ENTAILMENT = ("Does the contract entail the hypothesis? Answer yes only if "
                           "the contract clearly supports the hypothesis.")
 
