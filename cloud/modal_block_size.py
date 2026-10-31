@@ -374,4 +374,4 @@ def pull(phase: str = "", only: str = ""):
                     f.write(chunk)
             fetched += 1
         print(f"{exp['id']}: {fetched} new file(s)")
-    print("Analyze: python3 -m vllm.kalypso.benchmark.eval.analyze")
+    print("Analyze: .venv/bin/python -m vllm.kalypso.benchmark.eval.analyze")

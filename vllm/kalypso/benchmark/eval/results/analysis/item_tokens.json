@@ -1,0 +1,428 @@
+{
+  "cnli_join_high:": {
+    "left_max": 2523,
+    "left_mean": 1599.79,
+    "left_rows": 24,
+    "max": 2551,
+    "mean": 1615.42,
+    "right_max": 28,
+    "right_mean": 15.62,
+    "right_rows": 8
+  },
+  "cnli_join_high:24": {
+    "max": 2551,
+    "mean": 1615.42
+  },
+  "cnli_join_low:": {
+    "left_max": 2523,
+    "left_mean": 1599.79,
+    "left_rows": 24,
+    "max": 2541,
+    "mean": 1614.54,
+    "right_max": 18,
+    "right_mean": 14.75,
+    "right_rows": 8
+  },
+  "cnli_join_low:24": {
+    "max": 2541,
+    "mean": 1614.54
+  },
+  "cnli_sel10:": {
+    "left_max": 2643,
+    "left_mean": 1495.89,
+    "left_rows": 400,
+    "max": 2643,
+    "mean": 1495.89,
+    "right_max": 0,
+    "right_mean": 0.0,
+    "right_rows": 0
+  },
+  "cnli_sel10:400": {
+    "max": 2643,
+    "mean": 1495.89
+  },
+  "cnli_sel50:": {
+    "left_max": 2643,
+    "left_mean": 1496.26,
+    "left_rows": 400,
+    "max": 2643,
+    "mean": 1496.26,
+    "right_max": 0,
+    "right_mean": 0.0,
+    "right_rows": 0
+  },
+  "cnli_sel50:400": {
+    "max": 2643,
+    "mean": 1496.26
+  },
+  "cnli_sel90:": {
+    "left_max": 2644,
+    "left_mean": 1496.66,
+    "left_rows": 400,
+    "max": 2644,
+    "mean": 1496.66,
+    "right_max": 0,
+    "right_mean": 0.0,
+    "right_rows": 0
+  },
+  "cnli_sel90:400": {
+    "max": 2644,
+    "mean": 1496.66
+  },
+  "movie_fanout10:": {
+    "left_max": 52,
+    "left_mean": 32.91,
+    "left_rows": 32,
+    "max": 114,
+    "mean": 66.41,
+    "right_max": 62,
+    "right_mean": 33.5,
+    "right_rows": 32
+  },
+  "movie_fanout10:32": {
+    "max": 114,
+    "mean": 66.41
+  },
+  "movie_fanout25:": {
+    "left_max": 52,
+    "left_mean": 32.91,
+    "left_rows": 32,
+    "max": 114,
+    "mean": 65.47,
+    "right_max": 62,
+    "right_mean": 32.56,
+    "right_rows": 32
+  },
+  "movie_fanout25:32": {
+    "max": 114,
+    "mean": 65.47
+  },
+  "movie_fanout50:": {
+    "left_max": 52,
+    "left_mean": 32.91,
+    "left_rows": 32,
+    "max": 103,
+    "mean": 62.0,
+    "right_max": 51,
+    "right_mean": 29.09,
+    "right_rows": 32
+  },
+  "movie_fanout50:32": {
+    "max": 103,
+    "mean": 62.0
+  },
+  "movie_fanout75:": {
+    "left_max": 52,
+    "left_mean": 32.91,
+    "left_rows": 32,
+    "max": 111,
+    "mean": 62.0,
+    "right_max": 59,
+    "right_mean": 29.09,
+    "right_rows": 32
+  },
+  "movie_fanout75:32": {
+    "max": 111,
+    "mean": 62.0
+  },
+  "movie_fanout90:": {
+    "left_max": 52,
+    "left_mean": 32.91,
+    "left_rows": 32,
+    "max": 111,
+    "mean": 62.81,
+    "right_max": 59,
+    "right_mean": 29.91,
+    "right_rows": 32
+  },
+  "movie_fanout90:32": {
+    "max": 111,
+    "mean": 62.81
+  },
+  "movie_map:100": {
+    "left_max": 61,
+    "left_mean": 30.27,
+    "left_rows": 100,
+    "max": 61,
+    "mean": 30.27,
+    "right_max": 0,
+    "right_mean": 0.0,
+    "right_rows": 0
+  },
+  "movie_map:500": {
+    "left_max": 64,
+    "left_mean": 31.47,
+    "left_rows": 500,
+    "max": 64,
+    "mean": 31.47,
+    "right_max": 0,
+    "right_mean": 0.0,
+    "right_rows": 0
+  },
+  "movie_opposite:16": {
+    "left_max": 61,
+    "left_mean": 35.75,
+    "left_rows": 16,
+    "max": 122,
+    "mean": 71.5,
+    "right_max": 61,
+    "right_mean": 35.75,
+    "right_rows": 16
+  },
+  "movie_opposite:32": {
+    "left_max": 62,
+    "left_mean": 38.72,
+    "left_rows": 32,
+    "max": 124,
+    "mean": 77.44,
+    "right_max": 62,
+    "right_mean": 38.72,
+    "right_rows": 32
+  },
+  "movie_opposite:48": {
+    "left_max": 62,
+    "left_mean": 38.46,
+    "left_rows": 48,
+    "max": 124,
+    "mean": 76.92,
+    "right_max": 62,
+    "right_mean": 38.46,
+    "right_rows": 48
+  },
+  "movie_opposite:64": {
+    "left_max": 62,
+    "left_mean": 37.36,
+    "left_rows": 64,
+    "max": 124,
+    "mean": 74.72,
+    "right_max": 62,
+    "right_mean": 37.36,
+    "right_rows": 64
+  },
+  "movie_positive:": {
+    "left_max": 65,
+    "left_mean": 31.39,
+    "left_rows": 1865,
+    "max": 65,
+    "mean": 31.39,
+    "right_max": 0,
+    "right_mean": 0.0,
+    "right_rows": 0
+  },
+  "movie_positive:100": {
+    "left_max": 61,
+    "left_mean": 30.27,
+    "left_rows": 100,
+    "max": 61,
+    "mean": 30.27,
+    "right_max": 0,
+    "right_mean": 0.0,
+    "right_rows": 0
+  },
+  "movie_positive:1000": {
+    "left_max": 64,
+    "left_mean": 31.19,
+    "left_rows": 1000,
+    "max": 64,
+    "mean": 31.19,
+    "right_max": 0,
+    "right_mean": 0.0,
+    "right_rows": 0
+  },
+  "movie_positive:1865": {
+    "max": 65,
+    "mean": 31.39
+  },
+  "movie_positive:250": {
+    "left_max": 64,
+    "left_mean": 31.87,
+    "left_rows": 250,
+    "max": 64,
+    "mean": 31.87,
+    "right_max": 0,
+    "right_mean": 0.0,
+    "right_rows": 0
+  },
+  "movie_positive:500": {
+    "left_max": 64,
+    "left_mean": 31.47,
+    "left_rows": 500,
+    "max": 64,
+    "mean": 31.47,
+    "right_max": 0,
+    "right_mean": 0.0,
+    "right_rows": 0
+  },
+  "movie_sel10:100": {
+    "left_max": 59,
+    "left_mean": 29.68,
+    "left_rows": 100,
+    "max": 59,
+    "mean": 29.68,
+    "right_max": 0,
+    "right_mean": 0.0,
+    "right_rows": 0
+  },
+  "movie_sel10:400": {
+    "left_max": 62,
+    "left_mean": 31.19,
+    "left_rows": 400,
+    "max": 62,
+    "mean": 31.19,
+    "right_max": 0,
+    "right_mean": 0.0,
+    "right_rows": 0
+  },
+  "movie_sel25:400": {
+    "left_max": 62,
+    "left_mean": 31.68,
+    "left_rows": 400,
+    "max": 62,
+    "mean": 31.68,
+    "right_max": 0,
+    "right_mean": 0.0,
+    "right_rows": 0
+  },
+  "movie_sel50:100": {
+    "left_max": 59,
+    "left_mean": 32.01,
+    "left_rows": 100,
+    "max": 59,
+    "mean": 32.01,
+    "right_max": 0,
+    "right_mean": 0.0,
+    "right_rows": 0
+  },
+  "movie_sel50:400": {
+    "left_max": 62,
+    "left_mean": 31.86,
+    "left_rows": 400,
+    "max": 62,
+    "mean": 31.86,
+    "right_max": 0,
+    "right_mean": 0.0,
+    "right_rows": 0
+  },
+  "movie_sel75:400": {
+    "left_max": 60,
+    "left_mean": 30.98,
+    "left_rows": 400,
+    "max": 60,
+    "mean": 30.98,
+    "right_max": 0,
+    "right_mean": 0.0,
+    "right_rows": 0
+  },
+  "movie_sel90:100": {
+    "left_max": 59,
+    "left_mean": 31.75,
+    "left_rows": 100,
+    "max": 59,
+    "mean": 31.75,
+    "right_max": 0,
+    "right_mean": 0.0,
+    "right_rows": 0
+  },
+  "movie_sel90:400": {
+    "left_max": 59,
+    "left_mean": 31.06,
+    "left_rows": 400,
+    "max": 59,
+    "mean": 31.06,
+    "right_max": 0,
+    "right_mean": 0.0,
+    "right_rows": 0
+  },
+  "pipe_filter_join_s10:": {
+    "left_max": 59,
+    "left_mean": 29.68,
+    "left_rows": 100,
+    "max": 121,
+    "mean": 68.4,
+    "right_max": 62,
+    "right_mean": 38.72,
+    "right_rows": 32
+  },
+  "pipe_filter_join_s10_join:": {
+    "left_max": 50,
+    "left_mean": 32.71,
+    "left_rows": 7,
+    "max": 112,
+    "mean": 71.43,
+    "right_max": 62,
+    "right_mean": 38.72,
+    "right_rows": 32
+  },
+  "pipe_filter_join_s50:": {
+    "left_max": 59,
+    "left_mean": 32.01,
+    "left_rows": 100,
+    "max": 121,
+    "mean": 70.73,
+    "right_max": 62,
+    "right_mean": 38.72,
+    "right_rows": 32
+  },
+  "pipe_filter_join_s50_join:": {
+    "left_max": 59,
+    "left_mean": 32.21,
+    "left_rows": 48,
+    "max": 121,
+    "mean": 70.93,
+    "right_max": 62,
+    "right_mean": 38.72,
+    "right_rows": 32
+  },
+  "pipe_filter_join_s50_join:48": {
+    "max": 121,
+    "mean": 70.18
+  },
+  "pipe_filter_join_s90:": {
+    "left_max": 59,
+    "left_mean": 31.75,
+    "left_rows": 100,
+    "max": 121,
+    "mean": 70.47,
+    "right_max": 62,
+    "right_mean": 38.72,
+    "right_rows": 32
+  },
+  "pipe_filter_join_s90_join:": {
+    "left_max": 59,
+    "left_mean": 32.07,
+    "left_rows": 92,
+    "max": 121,
+    "mean": 70.78,
+    "right_max": 62,
+    "right_mean": 38.72,
+    "right_rows": 32
+  },
+  "pipe_filter_join_s90_join:92": {
+    "max": 121,
+    "mean": 70.57
+  },
+  "pipe_filter_map:": {
+    "left_max": 64,
+    "left_mean": 31.47,
+    "left_rows": 500,
+    "max": 64,
+    "mean": 31.47,
+    "right_max": 0,
+    "right_mean": 0.0,
+    "right_rows": 0
+  },
+  "pipe_filter_map_map:": {
+    "left_max": 64,
+    "left_mean": 31.35,
+    "left_rows": 373,
+    "max": 64,
+    "mean": 31.35,
+    "right_max": 0,
+    "right_mean": 0.0,
+    "right_rows": 0
+  },
+  "pipe_filter_map_map:373": {
+    "max": 64,
+    "mean": 31.59
+  }
+}

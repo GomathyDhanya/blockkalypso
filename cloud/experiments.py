@@ -185,7 +185,8 @@ def arms_for(exp, part_) -> list[str]:
     arms = list(part_["arms"])
     if exp["phase"] == "validate" and ALGORITHM_CHOICES.exists():
         picks = json.loads(ALGORITHM_CHOICES.read_text(encoding="utf-8")).get(exp["id"], {})
-        arms += [picks[k] for k in ("algorithm", "best_in_isolation") if picks.get(k)]
+        arms += [picks[k] for k in ("algorithm", "algorithm_latency", "best_in_isolation")
+                 if picks.get(k)]
         arms += picks.get("grid", [])
     return list(dict.fromkeys(arms))
 
