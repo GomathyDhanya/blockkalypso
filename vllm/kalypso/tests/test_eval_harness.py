@@ -483,22 +483,27 @@ def test_experiment_manifest_is_consistent():
 
 def _cost_rows():
     """Synthetic single-operator arms that follow the cost model exactly."""
-    g, alpha, beta = 0.1, 1e-4, 0.03
+    g, alpha, beta, gamma, delta = 0.1, 1e-4, 0.03, 2e-4, 2e-6
     rows = []
-    for run, (n, tokens) in enumerate(((400, 30.0), (800, 30.0), (400, 60.0))):
+    for run, (n, tokens) in enumerate(((400, 30.0), (800, 30.0), (400, 60.0), (300, 45.0))):
         for k in (1, 2, 4, 8):
             calls = n if k == 1 else math.ceil(n / k)
             decode = 3.0 if k == 1 else 1.0 + 4.0 * k
             computed = n * (tokens + 80) if k == 1 else n * (tokens + 3) + calls * 40
+            per_call = tokens + 130 if k == 1 else 70 + k * (tokens + 3)
             waves = math.ceil(calls / 256)
             rows.append({
                 "source": f"run{run}", "workload": f"w{run}", "kind": "filter", "stages": "",
                 "arm": "kalypso_per_tuple" if k == 1 else f"kalypso_block:{k}", "k": k,
                 "items": n, "rows": n, "item_tokens": tokens, "item_tokens_max": 2 * tokens,
+                "left_tokens": 0.0, "left_rows": 0,
                 "llm_requests": calls, "computed_prompt_tokens": computed,
+                "prompt_tokens_per_call": per_call,
                 "gen_tokens_per_call": decode, "waves": waves, "max_num_seqs": 256,
-                "latency_s": g + alpha * computed + beta * waves * decode,
+                "latency_s": (g + alpha * computed + beta * waves * decode + gamma * calls * decode
+                              + delta * calls * per_call ** 2 / 1e3),
                 "f1_delta": -0.1 if k == 8 else 0.0, "speedup": None,
+                "selected_count": 100 if k == 1 else 125,
             })
     return rows
 
@@ -508,19 +513,52 @@ def test_cost_model_recovers_parameters_and_choice():
 
     rows = _cost_rows()
     model = costmodel.fit(rows)
-    assert model.alpha == pytest.approx(1e-4) and model.beta == pytest.approx(0.03)
+    assert (model.g, model.alpha, model.beta, model.gamma, model.delta) == pytest.approx(
+        (0.1, 1e-4, 0.03, 2e-4, 2e-6), rel=1e-6, abs=1e-9)
     p = model.kinds["filter"]
-    assert (p.e, p.o, p.d0, p.d1) == pytest.approx((3, 40, 1, 4))
-    assert p.a_pt == pytest.approx(80) and p.k_acc == 4   # k=8 lost F1
+    assert (p.e, p.o, p.q, p.d0, p.d1) == pytest.approx((3, 40, 70, 1, 4))
+    assert p.a_pt == pytest.approx(80) and p.q_pt == pytest.approx(130)
+    assert p.cap("short") == 4 and p.cap("long") == 1   # k=8 lost F1; long rows unmeasured
+    assert p.pass_ratio("short", 4) == pytest.approx(1.25)
+    assert p.pass_ratio("short", 1) == 1.0
     for r in costmodel.evaluate(model, rows):
         assert r["pred_full"] == pytest.approx(r["latency_s"])
-    pick = model.choose_k("filter", 400, 30.0, 60)
+    items = costmodel.Items(400, 30.0, 60)
+    pick = model.choose_k("filter", items)
     assert pick["k"] <= 4 and pick["k_max"] == 4
-    # The square-root rule: more items push the best size up.
-    free = costmodel.Model(model.g, model.alpha, model.beta,
-                           {"filter": costmodel.KindParams(**{**p.__dict__, "k_acc": 64})})
-    small = free.choose_k("filter", 100, 30.0, 60, tie=0)["k"]
-    large = free.choose_k("filter", 6400, 30.0, 60, max_num_seqs=10**6, tie=0)["k"]
+    assert model.choose_k("filter", items, quality=False)["k_max"] > 4
+    # More items push the best size up.
+    small = model.choose_k("filter", costmodel.Items(100, 30.0, 60), tie=0, quality=False)["k"]
+    large = model.choose_k("filter", costmodel.Items(6400, 30.0, 60), max_num_seqs=10**6,
+                           tie=0, quality=False)["k"]
     assert large > small
     picks = costmodel.choices_per_run(model, costmodel.evaluate(model, rows))
-    assert all(c["regret"] == pytest.approx(0) or c["capped"] for c in picks)
+    assert all(c["regret"] == pytest.approx(0) for c in picks)
+
+
+def test_cost_model_pipeline_composition():
+    from vllm.kalypso.benchmark.eval import costmodel
+
+    model = costmodel.fit(_cost_rows())
+    model.kinds["map"] = model.kinds["filter"]
+    pipe = costmodel.Pipeline(("filter", "map"), 400, 30.0, 60, pass_share=0.5)
+    pred = model.predict_pipeline(pipe, (4, 1))
+    alone = model.predict("filter", costmodel.Items(400, 30.0, 60), 4)
+    # The map sees per-tuple's share times rho(4) of the rows.
+    after = model.predict("map", costmodel.Items(400 * 0.5 * 1.25, 30.0, 60), 1)
+    assert pred["latency_s"] == pytest.approx(alone["latency_s"] + after["latency_s"] - model.g)
+    pick = model.choose_pipeline(pipe)
+    assert all(b <= 4 for b in pick["blocks"])   # within each stage's accuracy cap
+    assert costmodel.arm_name(pick["blocks"]).startswith("kalypso_")
+    assert costmodel.arm_name((1, 1)) == "kalypso_per_tuple"
+    assert costmodel.arm_name((6, 1)) == "kalypso_pipe:6,1"
+
+
+def test_map_similarity():
+    from vllm.kalypso.benchmark.eval import analyze
+
+    assert analyze.rouge1("The acting is great", "the acting is great.") == 1.0
+    assert analyze.rouge1("great acting", "weak plot") == 0.0
+    base = [{"repeat": 1, "outputs": {"0": "great acting", "1": "weak plot"}}]
+    arm = [{"repeat": 1, "outputs": {"0": "great acting", "1": "plot"}}]
+    assert analyze.similarity(arm, base) == pytest.approx((1 + 2 / 3) / 2, abs=1e-4)
