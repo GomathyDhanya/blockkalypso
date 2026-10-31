@@ -1,6 +1,7 @@
 """Server-free parts of the evaluation harness (benchmark/eval)."""
 
 import json
+import math
 
 import pytest
 
@@ -478,3 +479,48 @@ def test_experiment_manifest_is_consistent():
     assert m.select("single") and all(e["phase"] == "single" for e in m.select("single"))
     with pytest.raises(SystemExit):
         m.select("nope")
+
+
+def _cost_rows():
+    """Synthetic single-operator arms that follow the cost model exactly."""
+    g, alpha, beta = 0.1, 1e-4, 0.03
+    rows = []
+    for run, (n, tokens) in enumerate(((400, 30.0), (800, 30.0), (400, 60.0))):
+        for k in (1, 2, 4, 8):
+            calls = n if k == 1 else math.ceil(n / k)
+            decode = 3.0 if k == 1 else 1.0 + 4.0 * k
+            computed = n * (tokens + 80) if k == 1 else n * (tokens + 3) + calls * 40
+            waves = math.ceil(calls / 256)
+            rows.append({
+                "source": f"run{run}", "workload": f"w{run}", "kind": "filter", "stages": "",
+                "arm": "kalypso_per_tuple" if k == 1 else f"kalypso_block:{k}", "k": k,
+                "items": n, "rows": n, "item_tokens": tokens, "item_tokens_max": 2 * tokens,
+                "llm_requests": calls, "computed_prompt_tokens": computed,
+                "gen_tokens_per_call": decode, "waves": waves, "max_num_seqs": 256,
+                "latency_s": g + alpha * computed + beta * waves * decode,
+                "f1_delta": -0.1 if k == 8 else 0.0, "speedup": None,
+            })
+    return rows
+
+
+def test_cost_model_recovers_parameters_and_choice():
+    from vllm.kalypso.benchmark.eval import costmodel
+
+    rows = _cost_rows()
+    model = costmodel.fit(rows)
+    assert model.alpha == pytest.approx(1e-4) and model.beta == pytest.approx(0.03)
+    p = model.kinds["filter"]
+    assert (p.e, p.o, p.d0, p.d1) == pytest.approx((3, 40, 1, 4))
+    assert p.a_pt == pytest.approx(80) and p.k_acc == 4   # k=8 lost F1
+    for r in costmodel.evaluate(model, rows):
+        assert r["pred_full"] == pytest.approx(r["latency_s"])
+    pick = model.choose_k("filter", 400, 30.0, 60)
+    assert pick["k"] <= 4 and pick["k_max"] == 4
+    # The square-root rule: more items push the best size up.
+    free = costmodel.Model(model.g, model.alpha, model.beta,
+                           {"filter": costmodel.KindParams(**{**p.__dict__, "k_acc": 64})})
+    small = free.choose_k("filter", 100, 30.0, 60, tie=0)["k"]
+    large = free.choose_k("filter", 6400, 30.0, 60, max_num_seqs=10**6, tie=0)["k"]
+    assert large > small
+    picks = costmodel.choices_per_run(model, costmodel.evaluate(model, rows))
+    assert all(c["regret"] == pytest.approx(0) or c["capped"] for c in picks)

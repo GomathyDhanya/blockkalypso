@@ -210,6 +210,18 @@ def _git(*args: str) -> str:
                           text=True).stdout.strip()
 
 
+def _split_arms(text: str) -> list[str]:
+    # Same as eval.arms.split_arms (not importable here without vllm): a
+    # pipeline arm's sizes stay together, "kalypso_pipe:4,1" is one arm.
+    arms = []
+    for part in text.split(","):
+        if part.isdigit() and arms and arms[-1].startswith("kalypso_pipe:"):
+            arms[-1] += "," + part
+        elif part:
+            arms.append(part)
+    return arms
+
+
 def _clean(text: str) -> str:
     # Terminals wrap long lines and the break can be pasted along: drop all
     # whitespace, so "vllm_direct:\n  block_prompt" still names one arm.
@@ -223,7 +235,7 @@ def main(workload: str = "movie_positive", n: int = 0, blocks: str = "", arms: s
          out: str = ""):
     blocks, arms = _clean(blocks), _clean(CONTROLS if controls else arms)
     others = ([f"kalypso_block:{b}" for b in blocks.split(",") if b]
-              + [a for a in arms.split(",") if a])
+              + _split_arms(arms))
     if not others:
         raise SystemExit("give --blocks (e.g. 4,6,8; for joins pairs per call, e.g. 4,25), "
                          "--arms or --controls")
