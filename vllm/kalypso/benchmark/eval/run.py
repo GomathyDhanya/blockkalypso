@@ -135,6 +135,12 @@ async def trial(client, args, spec, workload, model, server_pid) -> dict:
         "selected": _jsonable(result.selected),
         "outputs": dict(sorted(result.outputs.items())),
     }
+    if spec.kind == "kalypso_block":
+        # A block operator answers a block in one call and falls back to one
+        # call per row for rows the block answer missed (or a block of one).
+        fallbacks = measured["single_row_calls"]
+        record["fallback_calls"] = fallbacks
+        record["block_calls"] = measured["llm_requests"] - fallbacks
     if workload.kind == "map":
         record["missing_rows"] = sorted({str(r.idx) for r in workload.rows} - set(result.outputs))
     return record
