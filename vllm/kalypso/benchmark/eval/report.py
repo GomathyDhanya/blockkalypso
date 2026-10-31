@@ -17,6 +17,8 @@ from pathlib import Path
 SYSTEM_COLUMNS = (
     ("latency_s", "Latency (s)"),
     ("llm_requests", "LLM requests"),
+    ("block_calls", "Block calls"),
+    ("fallback_calls", "Fallback calls"),
     ("prompt_tokens", "Prompt tokens"),
     ("generation_tokens", "Gen tokens"),
     ("prefix_cache_hit_rate", "Prefix hit rate"),
