@@ -8,9 +8,8 @@ Arm names:
   vllm_direct           the same per-row prompts sent straight to vLLM
   kalypso_block:N       BlockSemFilter with block_size N (filter workloads),
                          BlockSemJoin with pair_block_size N (join workloads),
-                         BlockSemMap with block_size N (map workloads, once
-                         sem_ops/block_map.py exists), or N for every stage
-                         of a pipeline workload
+                         BlockSemMap with block_size N (map workloads), or N
+                         for every stage of a pipeline workload
   kalypso_pipe:A,B,...  pipeline workloads: one size per stage in order, 1
                          for the stage's per-tuple operator
 
@@ -26,7 +25,6 @@ each changing one thing about the per-row call (filter workloads only):
 """
 
 import asyncio
-import importlib.util
 from dataclasses import dataclass
 
 import httpx
@@ -50,9 +48,6 @@ DIRECT_MAP_MAX_TOKENS = 512
 DIRECT_PREDICATE_MAX_TOKENS = 8
 
 _PREDICATE = SemFilter(instruction="")
-
-# BlockSemMap lives on its own branch until merged; map blocks need it.
-HAS_BLOCK_MAP = importlib.util.find_spec("vllm.kalypso.sem_ops.block_map") is not None
 
 
 @dataclass
@@ -127,21 +122,16 @@ def check_arm(spec: ArmSpec, workload: Workload) -> None:
         if len(blocks) != len(workload.stages):
             raise ValueError(f"{spec.name}: {workload.name} has {len(workload.stages)} "
                              f"stages, so give that many sizes")
-        for stage, k in zip(workload.stages, blocks):
-            if stage["op"] == MAP and k > 1 and not HAS_BLOCK_MAP:
-                raise ValueError(f"{spec.name}: map blocks need sem_ops/block_map.py "
-                                 "(the map branch)")
         return
     if spec.kind == "kalypso_pipe":
         raise ValueError(f"{spec.name}: kalypso_pipe is for pipeline workloads")
     if spec.kind != "kalypso_block":
         return
-    if workload.kind == MAP and not HAS_BLOCK_MAP:
-        raise ValueError(f"{spec.name}: map blocks need sem_ops/block_map.py (the map branch)")
-    if workload.kind == MAP and len(spec.block) != 1:
-        raise ValueError(f"{spec.name}: map blocks take one size, e.g. kalypso_block:10")
-    if workload.kind == FILTER and len(spec.block) != 1:
-        raise ValueError(f"{spec.name}: filter blocks take one size, e.g. kalypso_block:10")
+    if workload.kind in (FILTER, MAP) and len(spec.block) != 1:
+        raise ValueError(
+            f"{spec.name}: {workload.kind} blocks take one size, "
+            "e.g. kalypso_block:10"
+        )
     if workload.kind == JOIN and len(spec.block) != 1:
         raise ValueError(f"{spec.name}: join blocks take one pair size, e.g. kalypso_block:25")
 

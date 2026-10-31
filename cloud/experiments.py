@@ -53,7 +53,7 @@ def experiment(id, phase, parts, purpose, requires=()):
 # What an experiment needs that may not be in this checkout yet.
 REQUIREMENTS = {
     "block_map": ("vllm/kalypso/sem_ops/block_map.py",
-                  "block map (merge the map branch, origin/map)"),
+                  "block map (sem_ops/block_map.py, PR #17)"),
     "contractnli": ("vllm/kalypso/benchmark/eval/workloads.py",
                     "the ContractNLI workloads (cnli_sel*, cnli_join_*; PR #18)"),
     "algorithm": (str(ALGORITHM_CHOICES.relative_to(REPO)),

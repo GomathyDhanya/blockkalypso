@@ -256,8 +256,7 @@ def test_parse_and_check_arms():
     for bad in ("kalypso_block", "kalypso_block:0", "kalypso_block:2x5", "kalypso_block:axb", "nope"):
         with pytest.raises(ValueError):
             parse_arm(bad)
-    with pytest.raises(ValueError):
-        check_arm(parse_arm("kalypso_block:5"), load_biodex(1))
+    check_arm(parse_arm("kalypso_block:5"), load_biodex(1))
     check_arm(parse_arm("kalypso_block:5"), load_join5x5())
 
 
@@ -268,6 +267,9 @@ def test_query_ops_and_join_response_parsing():
         "instruction": join.instruction, "right_table": str(join.right_path),
         "pair_block_size": 10}}]
     assert "block_size" not in kalypso_ops(load_reviews())[0]["args"]
+    biodex = load_biodex(1)
+    assert kalypso_ops(biodex, (3,)) == [{"op": "sem_map", "args": {
+        "prompt": biodex.instruction, "block_size": 3}}]
     out = parse_query_response(join, {"results": [
         {"idx": 0, "right_idx": 2, "outputs": [{"op": "f", "value": "true"}]}]})
     assert out.selected == {(0, 2)} and out.outputs == {"0,2": "true"}
@@ -418,9 +420,9 @@ def test_pipeline_workloads_ops_and_arms(tmp_path, monkeypatch, fake_kv_manager)
     fm = workloads.WORKLOADS["pipe_filter_map"](20)
     assert fm.kind == "map" and fm.positives and [s["op"] for s in fm.stages] == [FILTER, "map"]
     check_arm(parse_arm("kalypso_pipe:6,1"), fm)
-    if not arms.HAS_BLOCK_MAP:
-        with pytest.raises(ValueError, match="block_map"):
-            check_arm(parse_arm("kalypso_pipe:6,4"), fm)
+    check_arm(parse_arm("kalypso_pipe:6,4"), fm)
+    assert kalypso_ops(fm, (6, 4))[1] == {"op": "sem_map", "args": {
+        "prompt": fm.stages[1]["instruction"], "block_size": 4}}
     # A filtered map's rows are a selection, scored against the filter labels.
     out = parse_query_response(fm, {"results": [
         {"idx": 0, "outputs": [{"op": "f", "value": "true"}, {"op": "m", "value": "x"}]}]})

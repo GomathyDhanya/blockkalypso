@@ -16,10 +16,13 @@ use, pinned to one commit and checked by SHA-256, into the git-ignored
 import csv
 import hashlib
 import html
+import io
+import json
 import random
 import shutil
 import tempfile
 import urllib.request
+import zipfile
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -456,6 +459,130 @@ def load_pipe_filter_join_join(name: str, n: int | None = None) -> Workload:
     )
 
 
+# ContractNLI (Stanford, CC BY 4.0): long rows (NDAs, ~1.9k tokens on
+# average). Downloaded on first use into the git-ignored benchmark/data/.
+CONTRACTNLI_DIR = Path(__file__).resolve().parents[1] / "data" / "contract-nli"
+CONTRACTNLI_URL = "https://stanfordnlp.github.io/contract-nli/resources/contract-nli.zip"
+# Longer contracts are left out so a block of 8 rows still fits a 32k context
+# (12,500 characters is about 3k tokens).
+CNLI_MAX_CHARS = 12500
+CONTRACTNLI_ENTAILMENT = ("Does the contract entail the hypothesis? Answer yes only if "
+                          "the contract clearly supports the hypothesis.")
+
+
+def _contractnli() -> tuple[list[dict], dict[str, str]]:
+    """ContractNLI documents (train, dev, test; at most CNLI_MAX_CHARS) and
+    the 17 hypotheses.
+
+    Each document is ``{"id", "text", "choices": {label_id: choice}}`` with
+    choice Entailment, Contradiction or NotMentioned.
+    """
+    path = CONTRACTNLI_DIR / "contract-nli.zip"
+    if not path.exists():
+        raw = urllib.request.urlopen(CONTRACTNLI_URL, timeout=300).read()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(raw)
+    docs, hypotheses = [], {}
+    with zipfile.ZipFile(io.BytesIO(path.read_bytes())) as archive:
+        for split in ("train", "dev", "test"):
+            data = json.loads(archive.read(f"contract-nli/{split}.json"))
+            hypotheses.update({k: v["hypothesis"] for k, v in data["labels"].items()})
+            for doc in data["documents"]:
+                if len(doc["text"]) > CNLI_MAX_CHARS:
+                    continue
+                annotations = doc["annotation_sets"][0]["annotations"]
+                docs.append({"id": f"{split}-{doc['id']}", "text": doc["text"].strip(),
+                             "choices": {k: a["choice"] for k, a in annotations.items()}})
+    return docs, hypotheses
+
+
+def _cnli_csv(name: str, texts: list[str]) -> Path:
+    path = CONTRACTNLI_DIR / f"{name}.csv"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f)
+        writer.writerow(["data"])
+        writer.writerows([t] for t in texts)
+    return path.resolve()
+
+
+# Fixed-selectivity ContractNLI filter, the long-row counterpart of
+# movie_sel*: SELECTIVITY_ROWS rows, a share s of them entailed. A row is one
+# distinct contract plus one of its hypotheses (an entailed one for a
+# positive row, a contradicted or not-mentioned one for a negative row), so no
+# two rows share a contract and the prefix cache cannot help across rows.
+CNLI_SELECTIVITIES = {"cnli_sel10": 0.10, "cnli_sel25": 0.25, "cnli_sel50": 0.50,
+                      "cnli_sel75": 0.75, "cnli_sel90": 0.90}
+
+
+def _cnli_row(text: str, hypothesis: str) -> str:
+    return f"Contract:\n{text}\n\nHypothesis: {hypothesis}"
+
+
+def load_cnli_selectivity(name: str, n: int | None = None) -> Workload:
+    """ContractNLI entailment filter with a set share of entailed rows.
+
+    ``--n`` keeps the first n of the shuffled rows, so s holds only roughly.
+    """
+    docs, hypotheses = _contractnli()
+    rng = random.Random(SELECTIVITY_SEED)
+    docs = rng.sample(docs, len(docs))
+    want = round(CNLI_SELECTIVITIES[name] * SELECTIVITY_ROWS)
+    rows = []  # (text, is_positive)
+    for doc in docs:
+        positive = len([r for r in rows if r[1]]) < want
+        negative = len(rows) - len([r for r in rows if r[1]]) < SELECTIVITY_ROWS - want
+        if not (positive or negative):
+            break
+        entailed = sorted(k for k, c in doc["choices"].items() if c == "Entailment")
+        other = sorted(k for k, c in doc["choices"].items() if c != "Entailment")
+        if positive and entailed:
+            rows.append((_cnli_row(doc["text"], hypotheses[rng.choice(entailed)]), True))
+        elif negative and other:
+            rows.append((_cnli_row(doc["text"], hypotheses[rng.choice(other)]), False))
+    if len(rows) < SELECTIVITY_ROWS:
+        raise ValueError(f"{name}: only {len(rows)} usable contracts for {SELECTIVITY_ROWS} rows")
+    rng.shuffle(rows)
+    rows = rows[:_limit(n, len(rows), name)]
+    return Workload(
+        name=name, kind=FILTER,
+        data_path=_cnli_csv(f"{name}_{len(rows)}", [t for t, _ in rows]),
+        instruction=CONTRACTNLI_ENTAILMENT,
+        rows=[Row(i, t) for i, (t, _) in enumerate(rows)],
+        positives=frozenset(i for i, (_, p) in enumerate(rows) if p),
+    )
+
+
+# ContractNLI join: contracts x hypotheses, matched when the contract entails
+# the hypothesis. Selectivity is set by which hypotheses form the right table:
+# the CNLI_JOIN_RIGHT hypotheses entailed least often (low) or most often
+# (high) across the dataset. ``--n`` is the number of contracts (left rows).
+CNLI_JOIN_LEFT = 24
+CNLI_JOIN_RIGHT = 8
+CNLI_JOINS = ("cnli_join_low", "cnli_join_high")
+
+
+def load_cnli_join(name: str, n: int | None = None) -> Workload:
+    docs, hypotheses = _contractnli()
+    rate = {k: sum(d["choices"].get(k) == "Entailment" for d in docs) / len(docs)
+            for k in hypotheses}
+    ranked = sorted(hypotheses, key=lambda k: (rate[k], k))
+    right = ranked[:CNLI_JOIN_RIGHT] if name == "cnli_join_low" else ranked[-CNLI_JOIN_RIGHT:]
+    left = random.Random(SELECTIVITY_SEED).sample(docs, len(docs))
+    left = left[:_limit(CNLI_JOIN_LEFT if n is None else n, len(left), name)]
+    positives = frozenset((i, j) for i, d in enumerate(left) for j, k in enumerate(right)
+                          if d["choices"].get(k) == "Entailment")
+    return Workload(
+        name=name, kind=JOIN,
+        data_path=_cnli_csv(f"{name}_left_{len(left)}", [d["text"] for d in left]),
+        right_path=_cnli_csv(f"{name}_right", [hypotheses[k] for k in right]),
+        instruction=scenarios.CONTRACT_NLI_ENTAILMENT_JOIN,
+        rows=[Row(i, d["text"]) for i, d in enumerate(left)],
+        right_rows=[Row(j, hypotheses[k]) for j, k in enumerate(right)],
+        positives=positives,
+    )
+
+
 WORKLOADS = {
     "biodex": load_biodex,
     "reviews": load_reviews,
@@ -476,4 +603,7 @@ WORKLOADS = {
     "pipe_filter_map_map": load_pipe_filter_map_map,
     **{f"{name}_join": (lambda n=None, name=name: load_pipe_filter_join_join(f"{name}_join", n))
        for name in PIPE_FILTER_JOIN},
+    **{name: (lambda n=None, name=name: load_cnli_selectivity(name, n))
+       for name in CNLI_SELECTIVITIES},
+    **{name: (lambda n=None, name=name: load_cnli_join(name, n)) for name in CNLI_JOINS},
 }

@@ -9,6 +9,7 @@ this milestone; every check still reports agreement so it can be studied later.
 |---|---|---|
 | Shared helpers | `vllm/kalypso/sem_ops/block_utils.py` | Row text, fixed-size blocking, single-answer parsing, LLM call wrapper |
 | Block filter | `vllm/kalypso/sem_ops/block_filter.py` | One call per block, `<id>: YES/NO` lines, one-row fallback for unusable answers |
+| Block map | `vllm/kalypso/sem_ops/block_map.py` | One call per block, JSON `id`/`output` entries, ordinary `SemMap` repair for missing or malformed entries |
 | Block tasks | `vllm/kalypso/controller/stage.py` | A `Task` can hold a list of rows; one KV reservation per block |
 | Block scheduling | `vllm/kalypso/execution/pipeline_execution.py` | Block stages get one task per block; block boundaries kept between block stages |
 | Planner hook | `vllm/kalypso/controller/plan.py` | `sem_filter` with `"block_size" > 1` becomes a `BlockSemFilter` |
@@ -63,6 +64,22 @@ Add `block_size` to a `sem_filter` op and post the query to
   "ops": [
     {"op": "sem_filter", "args": {"prompt": "Does the review complain about the restaurant?", "block_size": 5}},
     {"op": "sem_filter", "args": {"prompt": "Is the complaint about the staff or the service?", "block_size": 5}}
+  ]
+}
+```
+
+## Block map inside a Kalypso query
+
+Add `block_size` to `sem_map`. Each row still receives the same downstream
+context that ordinary `SemMap` would produce: its normal map prompt followed
+by that row's mapped answer as an assistant turn. A malformed or partial block
+answer repairs only the affected rows with ordinary one-row map calls.
+
+```json
+{
+  "data_path": "vllm/kalypso/benchmark/sample_data/block_filter/reviews_20.csv",
+  "ops": [
+    {"op": "sem_map", "args": {"prompt": "Summarize this review in one sentence.", "block_size": 5}}
   ]
 }
 ```
