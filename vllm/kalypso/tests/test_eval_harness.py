@@ -144,6 +144,23 @@ def test_report_join_quality_counts_every_pair():
     assert report.quality(meta, _trial("x", 1, {}, 1.0, selected=[]))["f1"] is None
 
 
+def test_single_row_calls_from_max_tokens_histogram():
+    """Block arms' fallback calls are the requests with max_tokens <= 5."""
+    def text(small, total):
+        lines = []
+        for engine, share in (("0", small // 2), ("1", small - small // 2)):
+            for le, count in (("1.0", 0), ("2.0", 0), ("5.0", share), ("10.0", share),
+                              ("20.0", share), ("50.0", share + total), ("+Inf", share + total)):
+                lines.append(f'vllm:request_params_max_tokens_bucket{{engine="{engine}",'
+                             f'le="{le}",model_name="m"}} {count}.0')
+        return METRICS_TEXT + "\n".join(lines) + "\n"
+
+    before, after = metrics.parse_metrics(text(2, 10)), metrics.parse_metrics(text(7, 40))
+    assert before["single_row_calls"] == 2 and after["single_row_calls"] == 7
+    assert metrics.delta(before, after)["single_row_calls"] == 5
+    assert metrics.parse_metrics(METRICS_TEXT)["single_row_calls"] == 0
+
+
 def test_filter_and_join_workloads_carry_labels():
     reviews = load_reviews()
     assert reviews.kind == FILTER and len(reviews.rows) == 20
@@ -206,6 +223,32 @@ def test_movie_selectivity_workloads(tmp_path, monkeypatch, fake_kv_manager):
     assert [r.text for r in again.rows] == [r.text for r in low.rows]  # fixed seed
     assert len(list(data._data_source(None, str(low.data_path), None))) == 10
     assert len(workloads.WORKLOADS["movie_sel50"](4).rows) == 4
+
+
+def test_movie_fanout_workloads(tmp_path, monkeypatch, fake_kv_manager):
+    monkeypatch.setattr(workloads, "SEMBENCH_MOVIE", tmp_path)
+    monkeypatch.setattr(workloads, "FANOUT_SIDE", 10)
+    rows = ["id,reviewId,reviewText,scoreSentiment"]
+    rows += [f"m,p{i},good {i},POSITIVE" for i in range(20)]
+    rows += [f"m,n{i},bad {i},NEGATIVE" for i in range(10)]
+    (tmp_path / "Reviews.csv").write_text("\n".join(rows) + "\n", encoding="utf-8")
+
+    for name, fanout in (("movie_fanout10", 1), ("movie_fanout90", 9)):
+        join = workloads.WORKLOADS[name]()
+        assert join.kind == JOIN and len(join.rows) == len(join.right_rows) == 10
+        assert all("good" in r.text for r in join.rows)
+        assert len(join.positives) == 10 * fanout
+        for left in join.rows:  # every left row matches the same right rows
+            assert {j for i, j in join.positives if i == left.idx} == {
+                r.idx for r in join.right_rows if "bad" in r.text}
+        assert not {r.text for r in join.rows} & {r.text for r in join.right_rows}
+        right = list(data._data_source(None, str(join.right_path), None))
+        assert len(right) == 10 and join.data_path != join.right_path
+    again = workloads.load_movie_fanout("movie_fanout90")
+    assert [r.text for r in again.right_rows] == [r.text for r in join.right_rows]  # fixed seed
+    assert len(workloads.WORKLOADS["movie_fanout50"](4).positives) == 4 * 2
+    with pytest.raises(ValueError):
+        workloads.WORKLOADS["movie_fanout90"](12)  # needs 11 negatives, has 10
 
 
 def test_parse_and_check_arms():
@@ -310,3 +353,128 @@ def test_report_lists_failed_arms():
                                "kalypso_per_tuple", failed)
     assert "| `kalypso_block:10` | failed in all 1 trials |" in table
     assert "returned 500" in table
+
+
+def test_requests_by_max_tokens_and_gauges():
+    def text(buckets, running=0):
+        lines = [f'vllm:request_params_max_tokens_bucket{{engine="0",le="{le}",model_name="m"}} '
+                 f'{count}.0' for le, count in buckets]
+        lines.append(f'vllm:num_requests_running{{engine="0",model_name="m"}} {running}.0')
+        lines.append('vllm:num_preemptions_total{engine="0",model_name="m"} 1.0')
+        return METRICS_TEXT + "\n".join(lines) + "\n"
+
+    before = metrics.parse_metrics(text([("5.0", 1), ("10.0", 1), ("50.0", 1), ("+Inf", 1)]))
+    after = metrics.parse_metrics(text([("5.0", 4), ("10.0", 504), ("50.0", 530),
+                                        ("+Inf", 532)], running=7))
+    assert after["running"] == 7
+    assert metrics.requests_by_max_tokens(before, after) == {
+        "<=5": 3, "6-10": 500, "11-50": 26, ">50": 2}
+    d = metrics.delta(before, after)
+    assert d["single_row_calls"] == 3 and d["preemptions"] == 0
+
+
+def _movie_fixture(tmp_path, monkeypatch, positives=12, negatives=12):
+    monkeypatch.setattr(workloads, "SEMBENCH_MOVIE", tmp_path)
+    rows = ["id,reviewId,reviewText,scoreSentiment"]
+    rows += [f"m,p{i},good {i},POSITIVE" for i in range(positives)]
+    rows += [f"m,n{i},bad {i},NEGATIVE" for i in range(negatives)]
+    rows += [f"ant_man_and_the_wasp_quantumania,a{i},ant {i},"
+             f"{'POSITIVE' if i % 2 else 'NEGATIVE'}" for i in range(6)]
+    (tmp_path / "Reviews.csv").write_text("\n".join(rows) + "\n", encoding="utf-8")
+
+
+def test_pipeline_workloads_ops_and_arms(tmp_path, monkeypatch, fake_kv_manager):
+    from vllm.kalypso.benchmark.eval import arms
+
+    _movie_fixture(tmp_path, monkeypatch)
+    monkeypatch.setattr(workloads, "SELECTIVITY_ROWS", 10)
+    monkeypatch.setattr(workloads, "PIPELINE_RIGHT_ROWS", 6)
+
+    fj = workloads.WORKLOADS["pipe_filter_join_s50"](10)
+    assert [s["op"] for s in fj.stages] == [FILTER, JOIN] and fj.kind == JOIN
+    left_pos = {i for i, _ in fj.positives}
+    assert left_pos == workloads.load_movie_selectivity("movie_sel50", 10).positives
+    assert {j for _, j in fj.positives} == {r.idx for r in fj.right_rows if "ant" in r.text
+                                            and int(r.text.split()[1]) % 2 == 0}
+    alone = workloads.WORKLOADS["pipe_filter_join_s50_join"](10)
+    assert len(alone.rows) == len(left_pos) and not alone.stages
+    assert len(alone.positives) == len(fj.positives)
+
+    spec = parse_arm("kalypso_pipe:6,4")
+    check_arm(spec, fj)
+    ops = kalypso_ops(fj, arms.stage_blocks(spec, fj))
+    assert ops[0] == {"op": "sem_filter", "args": {"prompt": fj.stages[0]["instruction"],
+                                                   "block_size": 6}}
+    assert ops[1]["op"] == "join" and ops[1]["args"]["pair_block_size"] == 4
+    per_tuple = kalypso_ops(fj, arms.stage_blocks(parse_arm("kalypso_per_tuple"), fj))
+    assert "block_size" not in per_tuple[0]["args"]
+    assert "pair_block_size" not in per_tuple[1]["args"]
+    assert arms.stage_blocks(parse_arm("kalypso_block:16"), fj) == (16, 16)
+    with pytest.raises(ValueError):
+        check_arm(parse_arm("kalypso_pipe:6"), fj)          # one size for two stages
+    with pytest.raises(ValueError):
+        check_arm(parse_arm("vllm_direct"), fj)
+    with pytest.raises(ValueError):
+        check_arm(parse_arm("kalypso_pipe:6,4"), load_reviews())
+
+    fm = workloads.WORKLOADS["pipe_filter_map"](20)
+    assert fm.kind == "map" and fm.positives and [s["op"] for s in fm.stages] == [FILTER, "map"]
+    check_arm(parse_arm("kalypso_pipe:6,1"), fm)
+    check_arm(parse_arm("kalypso_pipe:6,4"), fm)
+    assert kalypso_ops(fm, (6, 4))[1] == {"op": "sem_map", "args": {
+        "prompt": fm.stages[1]["instruction"], "block_size": 4}}
+    # A filtered map's rows are a selection, scored against the filter labels.
+    out = parse_query_response(fm, {"results": [
+        {"idx": 0, "outputs": [{"op": "f", "value": "true"}, {"op": "m", "value": "x"}]}]})
+    assert out.selected == {0} and out.outputs == {"0": "x"}
+    assert parse_query_response(workloads.WORKLOADS["movie_map"](3), {"results": [
+        {"idx": 0, "outputs": [{"op": "m", "value": "x"}]}]}).selected is None
+
+
+def test_analyze_rows_and_best_arm(tmp_path):
+    from vllm.kalypso.benchmark.eval import analyze
+
+    meta = _meta(kind="filter", positives=[0], arms=["kalypso_per_tuple", "kalypso_block:4"],
+                 max_num_seqs=2)
+    trials = [{**_trial("kalypso_per_tuple", r, {}, 4.0, selected=[0]),
+               "prefix_cache_hit_rate": 0.5, "mean_decode_time_s": 0.2} for r in (1, 2)]
+    trials += [{**_trial("kalypso_block:4", r, {}, 2.0, selected=[0, 1]),
+                "llm_requests": 1, "mean_decode_time_s": 1.0} for r in (1, 2)]
+    run = tmp_path / "experiments" / "single" / "x" / "part"
+    run.mkdir(parents=True)
+    (run / "run.jsonl").write_text("\n".join(json.dumps(x) for x in [meta, *trials]) + "\n")
+
+    rows = analyze.collect(tmp_path)
+    base, block = rows
+    assert block["speedup"] == 2.0 and block["blocks"] == "4"
+    assert base["computed_prompt_tokens"] == 5 and base["waves"] == 1
+    assert block["gen_tokens_per_call"] == 4.0 and block["decode_s_per_gen_token"] == 0.25
+    assert block["f1_delta"] < 0          # a false positive
+    assert analyze.best_arm(rows, 0.02, 0.9)["arm"] == "kalypso_per_tuple"
+    assert analyze.best_arm(rows, 1.0, 0.9)["arm"] == "kalypso_block:4"
+    assert "### " in analyze.summary(rows, 0.02, 0.9)
+
+
+def test_experiment_manifest_is_consistent():
+    import importlib.util
+    from pathlib import Path
+
+    from vllm.kalypso.benchmark.eval.arms import check_arm as check
+    path = Path(__file__).resolve().parents[3] / "cloud" / "experiments.py"
+    spec = importlib.util.spec_from_file_location("experiments", path)
+    m = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(m)
+    ids = [e["id"] for e in m.EXPERIMENTS]
+    assert len(ids) == len(set(ids)) and {e["phase"] for e in m.EXPERIMENTS} == set(m.PHASES)
+    for exp in m.EXPERIMENTS:
+        names = [p["name"] for p in exp["parts"]]
+        assert len(names) == len(set(names)), exp["id"]
+        if m.missing(exp):
+            continue  # its workload or operator is not in this checkout yet
+        for p in exp["parts"]:
+            assert p["workload"] in workloads.WORKLOADS, (exp["id"], p["workload"])
+            for arm in m.arms_for(exp, p):
+                parse_arm(arm)
+    assert m.select("single") and all(e["phase"] == "single" for e in m.select("single"))
+    with pytest.raises(SystemExit):
+        m.select("nope")

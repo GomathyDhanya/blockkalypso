@@ -47,6 +47,9 @@ SEMBENCH_REVIEWS_SHA256 = "df231cfb189c9e169aa6afe415e4fa24533b04499179bbd61416c
 MOVIE_POSITIVE_INSTRUCTION = "Determine if the following movie review is clearly positive."
 MOVIE_OPPOSITE_INSTRUCTION = ("These two movie reviews express opposite sentiments - "
                               "one is positive and the other is negative.")
+# Map prompts for the batching study; SemBench's movie queries have no map.
+MOVIE_REASON_INSTRUCTION = ("In one short sentence, state the main reason for the "
+                            "reviewer's opinion of the movie.")
 
 MAP, FILTER, JOIN = "map", "filter", "join"
 
@@ -67,8 +70,13 @@ class Workload:
     right_path: Path | None = None  # JOIN only
     right_rows: list[Row] | None = None
     # FILTER: idxs that should pass; JOIN: (left idx, right idx) matches;
-    # None when the workload has no labels.
+    # MAP: idxs that should reach the output (a pipeline's filter); None when
+    # the workload has no labels.
     positives: frozenset | None = None
+    # Pipelines only: the operators in order, each {"op": FILTER, MAP or JOIN,
+    # "instruction": ...}; a JOIN stage joins with right_path. ``kind`` is then
+    # the kind of the last stage's output. None for single-operator workloads.
+    stages: tuple[dict, ...] | None = None
 
 
 def _txt_files(directory: Path) -> list[Path]:
@@ -290,6 +298,167 @@ def load_movie_selectivity(name: str, n: int | None = None) -> Workload:
     )
 
 
+# Fixed-fanout versions of movie_opposite: FANOUT_SIDE positive reviews on the
+# left, FANOUT_SIDE reviews on the right of which a share f is negative, so
+# every left row matches exactly round(f * FANOUT_SIDE) right rows. Reviews
+# come from every movie (Ant-Man alone has too few negatives), drawn with a
+# fixed seed; the right side is shuffled so matches mix inside every block.
+FANOUT_SIDE = 32
+FANOUT_SEED = 0
+FANOUTS = {"movie_fanout10": 0.10, "movie_fanout25": 0.25, "movie_fanout50": 0.50,
+           "movie_fanout75": 0.75, "movie_fanout90": 0.90}
+
+
+def load_movie_fanout(name: str, n: int | None = None) -> Workload:
+    """SemBench movie Q6 with a set fanout (``FANOUTS``): n x n pairs, n = FANOUT_SIDE."""
+    side = FANOUT_SIDE if n is None else n
+    if side < 1:
+        raise ValueError(f"{name}: --n must be at least 1")
+    reviews = _sembench_reviews()
+    positives = [r for r in reviews if _positive(r)]
+    negatives = [r for r in reviews if not _positive(r)]
+    want = round(FANOUTS[name] * side)
+    if 2 * side - want > len(positives) or want > len(negatives):
+        raise ValueError(f"{name}: not enough reviews for {side} x {side} pairs")
+    rng = random.Random(FANOUT_SEED)
+    pool = rng.sample(positives, 2 * side - want)
+    left, right = pool[:side], pool[side:] + rng.sample(negatives, want)
+    rng.shuffle(right)
+    return Workload(
+        name=name, kind=JOIN,
+        data_path=_movie_csv(f"{name}_{side}_left", left),
+        right_path=_movie_csv(f"{name}_{side}_right", right),
+        instruction=MOVIE_OPPOSITE_INSTRUCTION,
+        rows=[Row(i, r["reviewText"]) for i, r in enumerate(left)],
+        right_rows=[Row(j, r["reviewText"]) for j, r in enumerate(right)],
+        positives=frozenset((i, j) for i in range(side)
+                            for j, r in enumerate(right) if not _positive(r)),
+    )
+
+
+def load_movie_map(n: int | None = 500) -> Workload:
+    """Map over SemBench movie reviews: the reviewer's main reason, one sentence.
+
+    No labels; arms are compared by agreement with the per-tuple output.
+    Default 500 reviews, the size of the filter block-size search.
+    """
+    name = "movie_map"
+    reviews = _movie_reviews(name, None, 500 if n is None else n)
+    return Workload(
+        name=name, kind=MAP,
+        data_path=_movie_csv(f"{name}_{len(reviews)}", reviews),
+        instruction=MOVIE_REASON_INSTRUCTION,
+        rows=[Row(i, r["reviewText"]) for i, r in enumerate(reviews)],
+    )
+
+
+# Pipelines for the batching study. Each runs as one Kalypso query, so its
+# operators stream into each other; the labels are those of the whole query.
+PIPELINE_ROWS = 500       # filter -> map and map -> filter
+PIPELINE_LEFT_ROWS = 100  # filter -> join: left rows before the filter
+PIPELINE_RIGHT_ROWS = 32  # filter -> join: right rows (movie_opposite's first 32)
+
+
+def load_pipe_filter_map(n: int | None = None) -> Workload:
+    """Positive reviews (filter), then the main reason for each (map)."""
+    name = "pipe_filter_map"
+    reviews = _movie_reviews(name, None, PIPELINE_ROWS if n is None else n)
+    return Workload(
+        name=name, kind=MAP,
+        data_path=_movie_csv(f"{name}_{len(reviews)}", reviews),
+        instruction=MOVIE_REASON_INSTRUCTION,
+        rows=[Row(i, r["reviewText"]) for i, r in enumerate(reviews)],
+        positives=frozenset(i for i, r in enumerate(reviews) if _positive(r)),
+        stages=({"op": FILTER, "instruction": MOVIE_POSITIVE_INSTRUCTION},
+                {"op": MAP, "instruction": MOVIE_REASON_INSTRUCTION}),
+    )
+
+
+def load_pipe_map_filter(n: int | None = None) -> Workload:
+    """The main reason for each review (map), then positive reviews (filter).
+
+    The filter sees each row with its map output, as Kalypso passes it on.
+    """
+    name = "pipe_map_filter"
+    reviews = _movie_reviews(name, None, PIPELINE_ROWS if n is None else n)
+    return Workload(
+        name=name, kind=FILTER,
+        data_path=_movie_csv(f"{name}_{len(reviews)}", reviews),
+        instruction=MOVIE_POSITIVE_INSTRUCTION,
+        rows=[Row(i, r["reviewText"]) for i, r in enumerate(reviews)],
+        positives=frozenset(i for i, r in enumerate(reviews) if _positive(r)),
+        stages=({"op": MAP, "instruction": MOVIE_REASON_INSTRUCTION},
+                {"op": FILTER, "instruction": MOVIE_POSITIVE_INSTRUCTION}),
+    )
+
+
+def load_pipe_filter_map_map(n: int | None = None) -> Workload:
+    """pipe_filter_map's map alone, on the rows a perfect filter would pass.
+
+    Run beside the pipeline to compare it with its operators run separately.
+    """
+    name = "pipe_filter_map_map"
+    reviews = _movie_reviews(name, None, PIPELINE_ROWS if n is None else n)
+    kept = [r for r in reviews if _positive(r)]
+    return Workload(
+        name=name, kind=MAP,
+        data_path=_movie_csv(f"{name}_{len(kept)}", kept),
+        instruction=MOVIE_REASON_INSTRUCTION,
+        rows=[Row(i, r["reviewText"]) for i, r in enumerate(kept)],
+    )
+
+
+PIPE_FILTER_JOIN = {"pipe_filter_join_s10": "movie_sel10", "pipe_filter_join_s25": "movie_sel25",
+                    "pipe_filter_join_s50": "movie_sel50", "pipe_filter_join_s90": "movie_sel90"}
+
+
+def load_pipe_filter_join(name: str, n: int | None = None) -> Workload:
+    """Positive reviews (filter, selectivity set by ``name``), then opposite-sentiment
+    pairs with movie_opposite's first PIPELINE_RIGHT_ROWS reviews (join).
+
+    Left rows are the first n (default PIPELINE_LEFT_ROWS) of the matching
+    movie_sel workload. A pair is a match when its left review is positive (it
+    passes the filter) and its right review is negative.
+    """
+    left = load_movie_selectivity(PIPE_FILTER_JOIN[name], PIPELINE_LEFT_ROWS if n is None else n)
+    right = _movie_reviews(name, "ant_man_and_the_wasp_quantumania", PIPELINE_RIGHT_ROWS)
+    negative_right = [j for j, r in enumerate(right) if not _positive(r)]
+    return Workload(
+        name=name, kind=JOIN,
+        data_path=left.data_path,
+        right_path=_movie_csv(f"{name}_right_{len(right)}", right),
+        instruction=MOVIE_OPPOSITE_INSTRUCTION,
+        rows=left.rows,
+        right_rows=[Row(j, r["reviewText"]) for j, r in enumerate(right)],
+        positives=frozenset((i, j) for i in left.positives for j in negative_right),
+        stages=({"op": FILTER, "instruction": MOVIE_POSITIVE_INSTRUCTION},
+                {"op": JOIN, "instruction": MOVIE_OPPOSITE_INSTRUCTION}),
+    )
+
+
+def load_pipe_filter_join_join(name: str, n: int | None = None) -> Workload:
+    """A pipe_filter_join_s* join alone, on the left rows a perfect filter would pass.
+
+    ``name`` is the pipeline's name plus ``_join``. Run beside the pipeline to
+    compare it with its operators run separately.
+    """
+    pipeline = load_pipe_filter_join(name.removesuffix("_join"), n)
+    left = load_movie_selectivity(PIPE_FILTER_JOIN[pipeline.name],
+                                  PIPELINE_LEFT_ROWS if n is None else n)
+    kept = [r.text for r in left.rows if r.idx in left.positives]
+    negative_right = {j for _, j in pipeline.positives}
+    return Workload(
+        name=name, kind=JOIN,
+        data_path=_movie_csv(f"{name}_left_{len(kept)}",
+                             [{"reviewText": t, "reviewId": ""} for t in kept]),
+        right_path=pipeline.right_path,
+        instruction=MOVIE_OPPOSITE_INSTRUCTION,
+        rows=[Row(i, t) for i, t in enumerate(kept)],
+        right_rows=pipeline.right_rows,
+        positives=frozenset((i, j) for i in range(len(kept)) for j in negative_right),
+    )
+
+
 # ContractNLI (Stanford, CC BY 4.0): long rows (NDAs, ~1.9k tokens on
 # average). Downloaded on first use into the git-ignored benchmark/data/.
 CONTRACTNLI_DIR = Path(__file__).resolve().parents[1] / "data" / "contract-nli"
@@ -424,6 +593,16 @@ WORKLOADS = {
     "movie_opposite": load_movie_opposite,
     **{name: (lambda n=None, name=name: load_movie_selectivity(name, n))
        for name in SELECTIVITIES},
+    **{name: (lambda n=None, name=name: load_movie_fanout(name, n))
+       for name in FANOUTS},
+    "movie_map": load_movie_map,
+    "pipe_filter_map": load_pipe_filter_map,
+    "pipe_map_filter": load_pipe_map_filter,
+    **{name: (lambda n=None, name=name: load_pipe_filter_join(name, n))
+       for name in PIPE_FILTER_JOIN},
+    "pipe_filter_map_map": load_pipe_filter_map_map,
+    **{f"{name}_join": (lambda n=None, name=name: load_pipe_filter_join_join(f"{name}_join", n))
+       for name in PIPE_FILTER_JOIN},
     **{name: (lambda n=None, name=name: load_cnli_selectivity(name, n))
        for name in CNLI_SELECTIVITIES},
     **{name: (lambda n=None, name=name: load_cnli_join(name, n)) for name in CNLI_JOINS},

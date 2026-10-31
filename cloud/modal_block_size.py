@@ -5,6 +5,12 @@
     modal run cloud/modal_block_size.py --workload movie_positive --n 500 --controls
     modal volume get blockkalypso-results block-size/<out> ./vllm/kalypso/benchmark/eval/results/block-size/
 
+The batching study's experiments (cloud/experiments.py) run from here too:
+
+    modal run cloud/modal_block_size.py::status
+    modal run --detach cloud/modal_block_size.py::experiments --phase single
+    modal run cloud/modal_block_size.py::pull
+
 Each run starts Kalypso on vLLM 0.29.0 inside one container and runs
 ``eval.run`` against it on localhost, so no network hop is in the latency
 numbers. Arms are Kalypso's per-tuple operator (always, as the baseline) plus
@@ -20,6 +26,8 @@ are cached in ``blockkalypso-hf-cache``. Any workload in eval/workloads.py
 works; the harness takes rows from this checkout.
 """
 
+import contextlib
+import importlib.util
 import json
 import os
 import subprocess
@@ -35,6 +43,10 @@ VLLM_PKG = ("$(python3 -c 'import importlib.util; print(next(iter(importlib.util
 DEFAULT_MODEL = "Qwen/Qwen2.5-7B-Instruct"
 DEFAULT_GPU = "L40S"
 PORT = 8000
+# vLLM 0.29.0's own defaults for an API server on a GPU under 70 GiB (L40S):
+# set explicitly so the batch limits are known and fixed across GPUs.
+MAX_NUM_SEQS = 256
+MAX_NUM_BATCHED_TOKENS = 2048
 BASELINE = "kalypso_per_tuple"
 # One-row accuracy controls (eval/arms.py): prompt x sampling, no blocking.
 CONTROLS = ("vllm_direct,vllm_direct:no_penalty,vllm_direct:block_prompt,"
@@ -64,13 +76,16 @@ results = modal.Volume.from_name("blockkalypso-results", create_if_missing=True)
 hf_cache = modal.Volume.from_name("blockkalypso-hf-cache", create_if_missing=True)
 
 
-def _start_server(model: str, max_model_len: int) -> subprocess.Popen:
+def _start_server(model: str, max_model_len: int, max_num_seqs: int = MAX_NUM_SEQS,
+                  max_num_batched_tokens: int = MAX_NUM_BATCHED_TOKENS) -> subprocess.Popen:
     # Flags Kalypso's container init requires (docker/kalypso/init_api.py).
     return subprocess.Popen([
         "python3", "-m", "vllm.entrypoints.cli.main", "serve", model,
         "--host", "127.0.0.1", "--port", str(PORT),
         "--enable-prefix-caching", "--no-async-scheduling", "--api-server-count", "1",
         "--max-model-len", str(max_model_len),
+        "--max-num-seqs", str(max_num_seqs),
+        "--max-num-batched-tokens", str(max_num_batched_tokens),
     ])
 
 
@@ -88,48 +103,106 @@ def _wait_ready(server: subprocess.Popen, timeout_s: float = 1800) -> None:
     raise TimeoutError("server did not become ready")
 
 
-def _stamp_git(path: Path, sha: str, dirty: bool) -> None:
-    """The container has no .git, so record the local checkout's commit."""
+def _stamp(path: Path, **fields) -> None:
+    """Add to the run's metadata line what the container cannot see itself:
+    the local checkout's commit (there is no .git here), GPU and server limits."""
     lines = path.read_text(encoding="utf-8").splitlines()
     meta = json.loads(lines[0])
-    meta.update(git_sha=sha, git_dirty=dirty)
+    meta.update(fields)
     path.write_text("\n".join([json.dumps(meta), *lines[1:]]) + "\n", encoding="utf-8")
 
 
-@app.function(gpu=DEFAULT_GPU, timeout=6 * 3600,
-              volumes={"/results": results, "/cache": hf_cache})
-def run(arms: list[str], workload: str, n: int, warmup: int, repeats: int, model: str,
-        max_model_len: int, out: str, git_sha: str, git_dirty: bool) -> str:
-    out_dir = Path("/results") / out
-    out_dir.mkdir(parents=True, exist_ok=True)
-    jsonl = out_dir / "run.jsonl"
-    server = _start_server(model, max_model_len)
+def _gpu_name() -> str | None:
+    try:
+        return subprocess.check_output(
+            ["nvidia-smi", "--query-gpu=name,memory.total", "--format=csv,noheader"],
+            text=True).strip()
+    except (OSError, subprocess.CalledProcessError):
+        return None
+
+
+@contextlib.contextmanager
+def _server(model: str, max_model_len: int, max_num_seqs: int, max_num_batched_tokens: int):
+    server = _start_server(model, max_model_len, max_num_seqs, max_num_batched_tokens)
     try:
         _wait_ready(server)
         hf_cache.commit()  # keep downloaded weights for the next run
-        try:
-            subprocess.run([
-                "python3", "-m", "vllm.kalypso.benchmark.eval.run",
-                "--base-url", f"http://127.0.0.1:{PORT}", "--server-pid", str(server.pid),
-                "--workload", workload, *(["--n", str(n)] if n else []),
-                "--arms", ",".join(arms),
-                "--warmup", str(warmup), "--repeats", str(repeats), "--out", str(jsonl),
-            ], check=True, env=os.environ.copy())
-            _stamp_git(jsonl, git_sha, git_dirty)
-            table = subprocess.run(
-                ["python3", "-m", "vllm.kalypso.benchmark.eval.report", str(jsonl),
-                 "--reference", BASELINE],
-                check=True, capture_output=True, text=True).stdout
-            (out_dir / "summary.md").write_text(table, encoding="utf-8")
-            return table
-        finally:
-            results.commit()  # keep whatever finished
+        yield server
     finally:
         server.terminate()
         try:
             server.wait(timeout=60)
         except subprocess.TimeoutExpired:
             server.kill()
+
+
+def _bench(server, arms: list[str], workload: str, n: int, warmup: int, repeats: int,
+           out_dir: Path, stamp: dict) -> str:
+    """Run eval.run against the local server; write run.jsonl and summary.md."""
+    out_dir.mkdir(parents=True, exist_ok=True)
+    jsonl = out_dir / "run.jsonl"
+    try:
+        subprocess.run([
+            "python3", "-m", "vllm.kalypso.benchmark.eval.run",
+            "--base-url", f"http://127.0.0.1:{PORT}", "--server-pid", str(server.pid),
+            "--workload", workload, *(["--n", str(n)] if n else []),
+            "--arms", ",".join(arms),
+            "--warmup", str(warmup), "--repeats", str(repeats), "--out", str(jsonl),
+        ], check=True, env=os.environ.copy())
+        _stamp(jsonl, **stamp)
+        table = subprocess.run(
+            ["python3", "-m", "vllm.kalypso.benchmark.eval.report", str(jsonl),
+             "--reference", BASELINE],
+            check=True, capture_output=True, text=True).stdout
+        (out_dir / "summary.md").write_text(table, encoding="utf-8")
+        return table
+    finally:
+        results.commit()  # keep whatever finished
+
+
+@app.function(gpu=DEFAULT_GPU, timeout=6 * 3600,
+              volumes={"/results": results, "/cache": hf_cache})
+def run(arms: list[str], workload: str, n: int, warmup: int, repeats: int, model: str,
+        max_model_len: int, out: str, git_sha: str, git_dirty: bool,
+        max_num_seqs: int = MAX_NUM_SEQS,
+        max_num_batched_tokens: int = MAX_NUM_BATCHED_TOKENS) -> str:
+    stamp = dict(git_sha=git_sha, git_dirty=git_dirty, gpu=_gpu_name(),
+                 max_num_seqs=max_num_seqs, max_num_batched_tokens=max_num_batched_tokens,
+                 max_model_len=max_model_len)
+    with _server(model, max_model_len, max_num_seqs, max_num_batched_tokens) as server:
+        return _bench(server, arms, workload, n, warmup, repeats, Path("/results") / out, stamp)
+
+
+@app.function(gpu=DEFAULT_GPU, timeout=6 * 3600,
+              volumes={"/results": results, "/cache": hf_cache})
+def run_experiment(exp: dict, warmup: int, repeats: int, model: str, max_model_len: int,
+                   git_sha: str, git_dirty: bool, max_num_seqs: int = MAX_NUM_SEQS,
+                   max_num_batched_tokens: int = MAX_NUM_BATCHED_TOKENS) -> dict:
+    """One experiment from cloud/experiments.py: its parts in turn on one server.
+
+    A part that fails is recorded in the experiment's status.json and the
+    next part still runs.
+    """
+    root = Path("/results") / "experiments" / exp["id"]
+    stamp = dict(git_sha=git_sha, git_dirty=git_dirty, gpu=_gpu_name(),
+                 max_num_seqs=max_num_seqs, max_num_batched_tokens=max_num_batched_tokens,
+                 max_model_len=max_model_len, experiment=exp["id"], phase=exp["phase"],
+                 purpose=exp["purpose"])
+    status = {"id": exp["id"], "started": time.strftime("%Y-%m-%dT%H:%M:%S%z"), "parts": {}}
+    with _server(model, max_model_len, max_num_seqs, max_num_batched_tokens) as server:
+        for p in exp["parts"]:
+            arms = [BASELINE, *[a for a in p["arms"] if a != BASELINE]]
+            try:
+                _bench(server, arms, p["workload"], p["n"], warmup, repeats,
+                       root / p["name"], {**stamp, "part": p["name"]})
+                status["parts"][p["name"]] = "done"
+            except subprocess.CalledProcessError as exc:
+                status["parts"][p["name"]] = f"failed: {exc}"
+    status["finished"] = time.strftime("%Y-%m-%dT%H:%M:%S%z")
+    root.mkdir(parents=True, exist_ok=True)
+    (root / "status.json").write_text(json.dumps(status, indent=2), encoding="utf-8")
+    results.commit()
+    return status
 
 
 def _git(*args: str) -> str:
@@ -171,3 +244,106 @@ def main(workload: str = "movie_positive", n: int = 0, blocks: str = "", arms: s
                           out, sha, dirty))
     print(f"Download: modal volume get blockkalypso-results {out} "
           f"./vllm/kalypso/benchmark/eval/results/block-size/")
+
+
+# --- The batching study: every experiment in cloud/experiments.py ------------
+
+def _manifest():
+    """cloud/experiments.py, loaded by path (it needs neither vllm nor modal)."""
+    spec = importlib.util.spec_from_file_location("experiments", REPO / "cloud/experiments.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _remote_files(path: str) -> list[str]:
+    """Files under ``path`` on the results volume; [] when it does not exist."""
+    try:
+        return [e.path for e in results.listdir(path, recursive=True)
+                if e.type == modal.volume.FileEntryType.FILE]
+    except Exception:  # noqa: BLE001 -- a missing path raises; treat it as empty
+        return []
+
+
+def _state(m, exp) -> tuple[str, str]:
+    """(state, detail): blocked, done, partial or pending, from the volume."""
+    reasons = m.missing(exp)
+    if reasons:
+        return "blocked", "needs " + "; ".join(reasons)
+    files = _remote_files(f"experiments/{exp['id']}")
+    if any(f.endswith("status.json") for f in files):
+        local = all((m.RESULTS / "experiments" / exp["id"] / p["name"] / "summary.md").exists()
+                    for p in exp["parts"])
+        return "done", "downloaded" if local else "on the volume; run ::pull"
+    if files:
+        return "partial", "started (running, or stopped part-way)"
+    return "pending", ""
+
+
+@app.local_entrypoint()
+def status(phase: str = ""):
+    """What has run, what can run now, and what is blocked and why."""
+    m = _manifest()
+    for exp in m.select(phase):
+        state, detail = _state(m, exp)
+        parts = ", ".join(p["name"] for p in exp["parts"])
+        print(f"{state:8} {exp['id']:34} [{parts}] {detail}")
+
+
+@app.local_entrypoint()
+def experiments(phase: str = "", only: str = "", rerun: bool = False, parallel: int = 8,
+                warmup: int = 1, repeats: int = 3, model: str = DEFAULT_MODEL,
+                gpu: str = DEFAULT_GPU, max_model_len: int = 32768):
+    """Run every runnable experiment in ``--phase`` (all phases when empty) or
+    the ids in ``--only``, ``--parallel`` containers at a time. Finished ones
+    are skipped unless ``--rerun``; blocked ones are listed with the reason."""
+    m = _manifest()
+    todo = []
+    for exp in m.select(phase, only):
+        state, detail = _state(m, exp)
+        if state == "blocked" or (state == "done" and not rerun):
+            print(f"skip {exp['id']}: {state} {detail}")
+            continue
+        exp = {**exp, "parts": [{**p, "arms": m.arms_for(exp, p)} for p in exp["parts"]]}
+        todo.append(exp)
+    if not todo:
+        print("nothing to run")
+        return
+    sha = _git("rev-parse", "HEAD")
+    dirty = bool(_git("status", "--porcelain", "--untracked-files=no"))
+    function = run_experiment if gpu == DEFAULT_GPU else run_experiment.with_options(gpu=gpu)
+    print(f"running {len(todo)} experiment(s), {parallel} at a time, on {gpu}, "
+          f"git={sha[:9]}{' (dirty)' if dirty else ''}")
+    for start in range(0, len(todo), parallel):
+        batch = todo[start:start + parallel]
+        calls = [(exp, function.spawn(exp, warmup, repeats, model, max_model_len, sha, dirty))
+                 for exp in batch]
+        for exp, call in calls:
+            try:
+                done = call.get()
+                print(f"{exp['id']}: {done['parts']}")
+            except Exception as exc:  # noqa: BLE001 -- report and keep going
+                print(f"{exp['id']}: FAILED {type(exc).__name__}: {exc}")
+    print("Download: modal run cloud/modal_block_size.py::pull")
+
+
+@app.local_entrypoint()
+def pull(phase: str = "", only: str = ""):
+    """Download finished experiments into eval/results/experiments/."""
+    m = _manifest()
+    for exp in m.select(phase, only):
+        files = _remote_files(f"experiments/{exp['id']}")
+        if not files:
+            continue
+        fetched = 0
+        for path in files:
+            local = m.RESULTS / path
+            if local.exists() and not path.endswith("status.json"):
+                continue
+            local.parent.mkdir(parents=True, exist_ok=True)
+            with local.open("wb") as f:
+                for chunk in results.read_file(path):
+                    f.write(chunk)
+            fetched += 1
+        print(f"{exp['id']}: {fetched} new file(s)")
+    print("Analyze: python3 -m vllm.kalypso.benchmark.eval.analyze")
