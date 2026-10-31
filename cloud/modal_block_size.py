@@ -188,7 +188,10 @@ def run_experiment(exp: dict, warmup: int, repeats: int, model: str, max_model_l
                  max_num_seqs=max_num_seqs, max_num_batched_tokens=max_num_batched_tokens,
                  max_model_len=max_model_len, experiment=exp["id"], phase=exp["phase"],
                  purpose=exp["purpose"])
-    status = {"id": exp["id"], "started": time.strftime("%Y-%m-%dT%H:%M:%S%z"), "parts": {}}
+    previous = root / "status.json"
+    earlier = json.loads(previous.read_text())["parts"] if previous.exists() else {}
+    status = {"id": exp["id"], "started": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+              "parts": dict(earlier)}
     with _server(model, max_model_len, max_num_seqs, max_num_batched_tokens) as server:
         for p in exp["parts"]:
             arms = [BASELINE, *[a for a in p["arms"] if a != BASELINE]]
@@ -277,6 +280,12 @@ def _remote_files(path: str) -> list[str]:
         return []
 
 
+def _failed_parts(exp, files) -> list[str]:
+    """Parts of a finished experiment with no summary on the volume."""
+    done = {f.rsplit("/", 2)[-2] for f in files if f.endswith("summary.md")}
+    return [p["name"] for p in exp["parts"] if p["name"] not in done]
+
+
 def _state(m, exp) -> tuple[str, str]:
     """(state, detail): blocked, done, partial or pending, from the volume."""
     reasons = m.missing(exp)
@@ -284,6 +293,9 @@ def _state(m, exp) -> tuple[str, str]:
         return "blocked", "needs " + "; ".join(reasons)
     files = _remote_files(f"experiments/{exp['id']}")
     if any(f.endswith("status.json") for f in files):
+        failed = _failed_parts(exp, files)
+        if failed:
+            return "failed", "parts " + ", ".join(failed) + " failed; they rerun"
         local = all((m.RESULTS / "experiments" / exp["id"] / p["name"] / "summary.md").exists()
                     for p in exp["parts"])
         return "done", "downloaded" if local else "on the volume; run ::pull"
@@ -316,7 +328,11 @@ def experiments(phase: str = "", only: str = "", rerun: bool = False, parallel: 
         if state == "blocked" or (state == "done" and not rerun):
             print(f"skip {exp['id']}: {state} {detail}")
             continue
-        exp = {**exp, "parts": [{**p, "arms": m.arms_for(exp, p)} for p in exp["parts"]]}
+        parts = exp["parts"]
+        if state == "failed" and not rerun:
+            failed = detail.removeprefix("parts ").split(" failed")[0].split(", ")
+            parts = [p for p in parts if p["name"] in failed]
+        exp = {**exp, "parts": [{**p, "arms": m.arms_for(exp, p)} for p in parts]}
         todo.append(exp)
     if not todo:
         print("nothing to run")
