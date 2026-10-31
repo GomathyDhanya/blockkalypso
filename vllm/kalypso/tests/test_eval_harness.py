@@ -144,6 +144,23 @@ def test_report_join_quality_counts_every_pair():
     assert report.quality(meta, _trial("x", 1, {}, 1.0, selected=[]))["f1"] is None
 
 
+def test_single_row_calls_from_max_tokens_histogram():
+    """Block arms' fallback calls are the requests with max_tokens <= 5."""
+    def text(small, total):
+        lines = []
+        for engine, share in (("0", small // 2), ("1", small - small // 2)):
+            for le, count in (("1.0", 0), ("2.0", 0), ("5.0", share), ("10.0", share),
+                              ("20.0", share), ("50.0", share + total), ("+Inf", share + total)):
+                lines.append(f'vllm:request_params_max_tokens_bucket{{engine="{engine}",'
+                             f'le="{le}",model_name="m"}} {count}.0')
+        return METRICS_TEXT + "\n".join(lines) + "\n"
+
+    before, after = metrics.parse_metrics(text(2, 10)), metrics.parse_metrics(text(7, 40))
+    assert before["single_row_calls"] == 2 and after["single_row_calls"] == 7
+    assert metrics.delta(before, after)["single_row_calls"] == 5
+    assert metrics.parse_metrics(METRICS_TEXT)["single_row_calls"] == 0
+
+
 def test_filter_and_join_workloads_carry_labels():
     reviews = load_reviews()
     assert reviews.kind == FILTER and len(reviews.rows) == 20
