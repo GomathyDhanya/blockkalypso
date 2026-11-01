@@ -151,5 +151,132 @@
       ],
       "latency_only_s": 25.069
     }
+  },
+  "validate3/filter-n1500": {
+    "model": "v3",
+    "algorithm": "kalypso_block:6",
+    "algorithm_latency": "kalypso_block:6",
+    "algorithm_guarded": "kalypso_block:6",
+    "best_in_isolation": "kalypso_block:4",
+    "grid": [
+      "kalypso_block:3",
+      "kalypso_block:5",
+      "kalypso_block:7",
+      "kalypso_block:12"
+    ],
+    "predicted": {
+      "items": 1500,
+      "item_tokens": 31.38,
+      "regime": "short",
+      "blocks": [
+        6
+      ],
+      "latency_s": 6.125,
+      "guarded": [
+        6
+      ],
+      "guarded_s": 6.125
+    }
+  },
+  "validate3/join-n48": {
+    "model": "v3",
+    "algorithm": "kalypso_block:2",
+    "algorithm_latency": "kalypso_block:2",
+    "algorithm_guarded": "kalypso_per_tuple",
+    "best_in_isolation": "kalypso_block:5",
+    "grid": [
+      "kalypso_block:3",
+      "kalypso_block:4"
+    ],
+    "predicted": {
+      "items": 2304,
+      "item_tokens": 65.48,
+      "regime": "short",
+      "blocks": [
+        2
+      ],
+      "latency_s": 15.911,
+      "guarded": [
+        1
+      ],
+      "guarded_s": 24.891
+    }
+  },
+  "validate3/filter-join-s75": {
+    "model": "v3",
+    "algorithm": "kalypso_pipe:1,2",
+    "algorithm_latency": "kalypso_pipe:1,2",
+    "algorithm_guarded": "kalypso_per_tuple",
+    "best_in_isolation": "kalypso_pipe:4,5",
+    "grid": [
+      "kalypso_pipe:1,3",
+      "kalypso_pipe:1,4",
+      "kalypso_pipe:2,1",
+      "kalypso_pipe:2,2"
+    ],
+    "predicted": {
+      "selectivity": 0.68,
+      "rows": 100,
+      "blocks": [
+        1,
+        2
+      ],
+      "latency_s": 10.878,
+      "guarded": [
+        1,
+        1
+      ],
+      "guarded_s": 16.258
+    }
+  },
+  "validate3/filter-map-n250": {
+    "model": "v3",
+    "algorithm": "kalypso_per_tuple",
+    "algorithm_latency": "kalypso_per_tuple",
+    "algorithm_guarded": "kalypso_per_tuple",
+    "best_in_isolation": "kalypso_pipe:4,1",
+    "grid": [
+      "kalypso_pipe:1,2",
+      "kalypso_pipe:2,1"
+    ],
+    "predicted": {
+      "selectivity": 0.744,
+      "rows": 250,
+      "blocks": [
+        1,
+        1
+      ],
+      "latency_s": 4.611,
+      "guarded": [
+        1,
+        1
+      ],
+      "guarded_s": 4.611
+    }
+  },
+  "validate3/map-filter-n200": {
+    "model": "v3",
+    "algorithm": "kalypso_per_tuple",
+    "algorithm_latency": "kalypso_per_tuple",
+    "algorithm_guarded": "kalypso_per_tuple",
+    "best_in_isolation": "kalypso_pipe:1,4",
+    "grid": [
+      "kalypso_pipe:1,2",
+      "kalypso_pipe:2,1"
+    ],
+    "predicted": {
+      "selectivity": 1.0,
+      "rows": 200,
+      "blocks": [
+        1,
+        1
+      ],
+      "latency_s": 5.309,
+      "guarded": [
+        1,
+        1
+      ],
+      "guarded_s": 5.309
+    }
   }
 }
