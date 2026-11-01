@@ -1,0 +1,8 @@
+{
+  "id": "validate/join-fanout25-n64",
+  "started": "2026-10-31T21:11:45+0000",
+  "parts": {
+    "movie_fanout25-n64": "done"
+  },
+  "finished": "2026-10-31T21:32:44+0000"
+}

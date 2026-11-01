@@ -12,7 +12,9 @@ directly. Results go to the volume under ``experiments/<id>/<part>/``.
 
 Phases follow the study's steps: single operators (``single``, ``map``,
 ``longrows``), pipelines (``pipeline``) and validation of the block-size
-algorithm against static batching and tuple-wise execution (``validate``).
+algorithm against static batching and tuple-wise execution (``validate``,
+chosen by cost model v2; ``validate3``, held out from v3, which is fitted on
+everything before it).
 An experiment whose code is not in this checkout yet is listed as blocked
 with the reason; it runs once that lands.
 
@@ -27,7 +29,8 @@ REPO = Path(__file__).resolve().parents[1]
 EVAL = REPO / "vllm/kalypso/benchmark/eval"
 RESULTS = EVAL / "results"
 # Written by the cost model (eval/costmodel.py): per validation experiment,
-# {"algorithm": arm, "best_in_isolation": arm, "grid": [arms]}.
+# {"algorithm": arm, "algorithm_guarded": arm, "best_in_isolation": arm,
+#  "grid": [arms]} (v2 choices: "algorithm" guarded, "algorithm_latency").
 ALGORITHM_CHOICES = RESULTS / "analysis" / "algorithm_choices.json"
 
 
@@ -155,8 +158,8 @@ PIPELINE = [
 STATIC = blocks(4, 16, 32)
 
 
-def validation(id, workload, n, purpose, requires=()):
-    return experiment(f"validate/{id}", "validate", [part(workload, STATIC, n=n)],
+def validation(id, workload, n, purpose, requires=(), phase="validate"):
+    return experiment(f"{phase}/{id}", phase, [part(workload, STATIC, n=n)],
                       purpose, requires=["algorithm", *requires])
 
 
@@ -176,17 +179,37 @@ VALIDATE = [
                requires=["contractnli"]),
 ]
 
-EXPERIMENTS = SINGLE + MAP + LONGROWS + PIPELINE + VALIDATE
-PHASES = ("single", "map", "longrows", "pipeline", "validate")
+# --- Step 5: validation of cost model v3 ------------------------------------
+# v3 is fitted on everything above, VALIDATE included; these sizes,
+# selectivities and shapes are new to it, and include cases where blocking
+# should pay (short-row filter at large N, short-row join).
+
+VALIDATE3 = [
+    validation("filter-n1500", "movie_positive", 1500,
+               "Short-row filter at an unseen size: the case blocking should win.",
+               phase="validate3"),
+    validation("join-n48", "movie_fanout50", 48,
+               "Short-row join, 48x48 at fanout 50%: unseen size.", phase="validate3"),
+    validation("filter-join-s75", "pipe_filter_join_s75", 0,
+               "Filter -> join at an unseen selectivity.", phase="validate3"),
+    validation("filter-map-n250", "pipe_filter_map", 250,
+               "Filter -> map at an unseen size.", requires=["block_map"], phase="validate3"),
+    validation("map-filter-n200", "pipe_map_filter", 200,
+               "Map -> filter at an unseen size: the per-tuple map reruns cut-off rows "
+               "when the filter is blocked.", requires=["block_map"], phase="validate3"),
+]
+
+EXPERIMENTS = SINGLE + MAP + LONGROWS + PIPELINE + VALIDATE + VALIDATE3
+PHASES = ("single", "map", "longrows", "pipeline", "validate", "validate3")
 
 
 def arms_for(exp, part_) -> list[str]:
     """The part's arms, plus the cost model's picks for a validation experiment."""
     arms = list(part_["arms"])
-    if exp["phase"] == "validate" and ALGORITHM_CHOICES.exists():
+    if exp["phase"].startswith("validate") and ALGORITHM_CHOICES.exists():
         picks = json.loads(ALGORITHM_CHOICES.read_text(encoding="utf-8")).get(exp["id"], {})
-        arms += [picks[k] for k in ("algorithm", "algorithm_latency", "best_in_isolation")
-                 if picks.get(k)]
+        arms += [picks[k] for k in ("algorithm", "algorithm_latency", "algorithm_guarded",
+                                    "best_in_isolation") if picks.get(k)]
         arms += picks.get("grid", [])
     return list(dict.fromkeys(arms))
 

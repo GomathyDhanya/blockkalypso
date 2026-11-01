@@ -409,7 +409,8 @@ def load_pipe_filter_map_map(n: int | None = None) -> Workload:
 
 
 PIPE_FILTER_JOIN = {"pipe_filter_join_s10": "movie_sel10", "pipe_filter_join_s25": "movie_sel25",
-                    "pipe_filter_join_s50": "movie_sel50", "pipe_filter_join_s90": "movie_sel90"}
+                    "pipe_filter_join_s50": "movie_sel50", "pipe_filter_join_s75": "movie_sel75",
+                    "pipe_filter_join_s90": "movie_sel90"}
 
 
 def load_pipe_filter_join(name: str, n: int | None = None) -> Workload:
