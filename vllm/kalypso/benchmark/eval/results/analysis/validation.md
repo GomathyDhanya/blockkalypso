@@ -18,6 +18,19 @@ Each phase is scored with the choices made before it ran. `validate` was chosen 
 | Current model, among measured arms | 6 | 3/6 | 0 | 1.16x | 2.8% | 15.7% | 9.7% |
 | Oracle (fastest measured) | 6 | 3/6 | 0 | 1.19x | 0.0% | 0.0% | 9.3% |
 
+## Summary: `validate3` (chosen by v3; held out)
+
+| Strategy | Experiments | Kept quality | Failed | Speedup (geomean) | Regret (mean) | Regret (max) | Prediction error (mean) |
+|---|---|---|---|---|---|---|---|
+| Tuple-wise | 5 | 5/5 | 0 | 1.00x | 50.6% | 126.0% | 7.9% |
+| Static 4 | 5 | 2/5 | 0 | 1.08x | 39.0% | 89.4% | 6.8% |
+| Static 16 | 5 | 1/5 | 0 | 0.69x | 162.8% | 437.7% | 16.6% |
+| Static 32 | 5 | 1/5 | 0 | 0.47x | 346.4% | 857.7% | 22.1% |
+| Best in isolation | 5 | 3/5 | 0 | 1.31x | 11.6% | 32.9% | 5.3% |
+| Algorithm | 5 | 3/5 | 0 | 1.38x | 6.1% | 23.8% | 8.9% |
+| Algorithm with accuracy guard | 5 | 5/5 | 0 | 1.17x | 25.6% | 53.8% | 9.1% |
+| Oracle (fastest measured) | 5 | 3/5 | 0 | 1.45x | 0.0% | 0.0% | 7.4% |
+
 ## validate/filter-join-s25
 
 | Strategy | Arm | Latency (s) | Speedup | Regret | ΔF1 | Sim | Kept quality | Predicted (s) |
@@ -101,3 +114,68 @@ Each phase is scored with the choices made before it ran. `validate` was chosen 
 | Algorithm with accuracy guard | `kalypso_per_tuple` | 24.03 | 1.00x | 0.0% | +0.00 | – | yes | 25.26 |
 | Current model, among measured arms | `kalypso_per_tuple` | 24.03 | 1.00x | 0.0% | +0.00 | – | yes | 25.26 |
 | Oracle (fastest measured) | `kalypso_per_tuple` | 24.03 | 1.00x | 0.0% | +0.00 | – | yes | 25.26 |
+
+## validate3/filter-n1500
+
+| Strategy | Arm | Latency (s) | Speedup | Regret | ΔF1 | Sim | Kept quality | Predicted (s) |
+|---|---|---|---|---|---|---|---|---|
+| Tuple-wise | `kalypso_per_tuple` | 14.64 | 1.00x | 126.0% | +0.00 | – | yes | 14.61 |
+| Static 4 | `kalypso_block:4` | 6.80 | 2.15x | 5.0% | +0.11 | – | yes | 6.64 |
+| Static 16 | `kalypso_block:16` | 7.23 | 2.03x | 11.6% | +0.10 | – | yes | 6.82 |
+| Static 32 | `kalypso_block:32` | 9.37 | 1.56x | 44.6% | +0.09 | – | yes | 8.51 |
+| Best in isolation | `kalypso_block:4` | 6.80 | 2.15x | 5.0% | +0.11 | – | yes | 6.64 |
+| Algorithm | `kalypso_block:6` | 6.55 | 2.23x | 1.1% | +0.11 | – | yes | 6.12 |
+| Algorithm with accuracy guard | `kalypso_block:6` | 6.55 | 2.23x | 1.1% | +0.11 | – | yes | 6.12 |
+| Oracle (fastest measured) | `kalypso_block:7` | 6.48 | 2.26x | 0.0% | +0.10 | – | yes | 6.14 |
+
+## validate3/join-n48
+
+| Strategy | Arm | Latency (s) | Speedup | Regret | ΔF1 | Sim | Kept quality | Predicted (s) |
+|---|---|---|---|---|---|---|---|---|
+| Tuple-wise | `kalypso_per_tuple` | 25.49 | 1.00x | 53.8% | +0.00 | – | yes | 24.89 |
+| Static 4 | `kalypso_block:4` | 16.78 | 1.52x | 1.3% | -0.10 | – | no | 16.09 |
+| Static 16 | `kalypso_block:16` | 19.14 | 1.33x | 15.5% | -0.45 | – | no | 16.78 |
+| Static 32 | `kalypso_block:32` | 22.23 | 1.15x | 34.1% | -0.46 | – | no | 18.93 |
+| Best in isolation | `kalypso_block:5` | 16.78 | 1.52x | 1.2% | -0.07 | – | no | 15.91 |
+| Algorithm | `kalypso_block:2` | 16.73 | 1.52x | 0.9% | -0.18 | – | no | 15.91 |
+| Algorithm with accuracy guard | `kalypso_per_tuple` | 25.49 | 1.00x | 53.8% | +0.00 | – | yes | 24.89 |
+| Oracle (fastest measured) | `kalypso_block:3` | 16.57 | 1.54x | 0.0% | -0.07 | – | no | 15.80 |
+
+## validate3/filter-join-s75
+
+| Strategy | Arm | Latency (s) | Speedup | Regret | ΔF1 | Sim | Kept quality | Predicted (s) |
+|---|---|---|---|---|---|---|---|---|
+| Tuple-wise | `kalypso_per_tuple` | 15.04 | 1.00x | 44.7% | +0.00 | – | yes | 16.26 |
+| Static 4 | `kalypso_block:4` | 13.74 | 1.10x | 32.1% | -0.02 | – | no | 13.31 |
+| Static 16 | `kalypso_block:16` | 15.93 | 0.94x | 53.2% | -0.15 | – | no | 14.98 |
+| Static 32 | `kalypso_block:32` | 21.05 | 0.71x | 102.5% | -0.27 | – | no | 19.34 |
+| Best in isolation | `kalypso_pipe:4,5` | 13.82 | 1.09x | 32.9% | -0.03 | – | no | 13.51 |
+| Algorithm | `kalypso_pipe:1,2` | 10.40 | 1.45x | 0.0% | -0.13 | – | no | 10.88 |
+| Algorithm with accuracy guard | `kalypso_per_tuple` | 15.04 | 1.00x | 44.7% | +0.00 | – | yes | 16.26 |
+| Oracle (fastest measured) | `kalypso_pipe:1,2` | 10.40 | 1.45x | 0.0% | -0.13 | – | no | 10.88 |
+
+## validate3/filter-map-n250
+
+| Strategy | Arm | Latency (s) | Speedup | Regret | ΔF1 | Sim | Kept quality | Predicted (s) |
+|---|---|---|---|---|---|---|---|---|
+| Tuple-wise | `kalypso_per_tuple` | 4.45 | 1.00x | 4.7% | +0.00 | 1.00 | yes | 4.61 |
+| Static 4 | `kalypso_block:4` | 7.10 | 0.63x | 67.1% | +0.10 | 0.41 | no | 7.72 |
+| Static 16 | `kalypso_block:16` | 16.84 | 0.26x | 296.3% | +0.08 | 0.36 | no | 14.81 |
+| Static 32 | `kalypso_block:32` | 33.69 | 0.13x | 692.9% | +0.11 | 0.35 | no | 24.86 |
+| Best in isolation | `kalypso_pipe:4,1` | 4.28 | 1.04x | 0.6% | +0.10 | 0.93 | yes | 4.79 |
+| Algorithm | `kalypso_per_tuple` | 4.45 | 1.00x | 4.7% | +0.00 | 1.00 | yes | 4.61 |
+| Algorithm with accuracy guard | `kalypso_per_tuple` | 4.45 | 1.00x | 4.7% | +0.00 | 1.00 | yes | 4.61 |
+| Oracle (fastest measured) | `kalypso_pipe:2,1` | 4.25 | 1.05x | 0.0% | +0.07 | 0.93 | yes | 4.74 |
+
+## validate3/map-filter-n200
+
+| Strategy | Arm | Latency (s) | Speedup | Regret | ΔF1 | Sim | Kept quality | Predicted (s) |
+|---|---|---|---|---|---|---|---|---|
+| Tuple-wise | `kalypso_per_tuple` | 7.08 | 1.00x | 23.8% | +0.00 | – | yes | 5.31 |
+| Static 4 | `kalypso_block:4` | 10.84 | 0.65x | 89.4% | +0.03 | – | yes | 9.14 |
+| Static 16 | `kalypso_block:16` | 30.76 | 0.23x | 437.7% | -0.08 | – | no | 16.24 |
+| Static 32 | `kalypso_block:32` | 54.78 | 0.13x | 857.7% | -0.04 | – | no | 26.28 |
+| Best in isolation | `kalypso_pipe:1,4` | 6.76 | 1.05x | 18.2% | +0.05 | – | yes | 6.43 |
+| Algorithm | `kalypso_per_tuple` | 7.08 | 1.00x | 23.8% | +0.00 | – | yes | 5.31 |
+| Algorithm with accuracy guard | `kalypso_per_tuple` | 7.08 | 1.00x | 23.8% | +0.00 | – | yes | 5.31 |
+| Oracle (fastest measured) | `kalypso_pipe:1,2` | 5.72 | 1.24x | 0.0% | +0.05 | – | yes | 6.35 |

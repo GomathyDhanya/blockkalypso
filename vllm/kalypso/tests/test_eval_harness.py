@@ -503,7 +503,11 @@ def _cost_rows():
                 "latency_s": (g + alpha * computed + beta * waves * decode + gamma * calls * decode
                               + delta * calls * per_call ** 2 / 1e3),
                 "f1_delta": -0.1 if k == 8 else 0.0, "speedup": None,
-                "selected_count": 100 if k == 1 else 125,
+                # Half the rows match; block filters have higher recall and
+                # more false positives than per-tuple.
+                "positives": n // 2, "recall": 0.6 if k == 1 else 0.8,
+                "selected_count": (0.6 if k == 1 else 0.8) * (n // 2)
+                + (0.01 if k == 1 else 0.03) * (n - n // 2),
             })
     return rows
 
@@ -513,27 +517,30 @@ def test_cost_model_recovers_parameters_and_choice():
 
     rows = _cost_rows()
     model = costmodel.fit(rows)
-    assert (model.g, model.alpha, model.beta, model.gamma, model.delta) == pytest.approx(
+    assert (model.g["filter"], model.alpha, model.beta, model.gamma, model.delta) == pytest.approx(
         (0.1, 1e-4, 0.03, 2e-4, 2e-6), rel=1e-6, abs=1e-9)
     p = model.kinds["filter"]
     assert (p.e, p.o, p.q, p.d0, p.d1) == pytest.approx((3, 40, 70, 1, 4))
     assert p.a_pt == pytest.approx(80) and p.q_pt == pytest.approx(130)
     assert p.cap("short") == 4 and p.cap("long") == 1   # k=8 lost F1; long rows unmeasured
-    assert p.pass_ratio("short", 4) == pytest.approx(1.25)
-    assert p.pass_ratio("short", 1) == 1.0
+    assert p.pass_share("short", 1, 0.5) == pytest.approx(0.6 * 0.5 + 0.01 * 0.5)
+    assert p.pass_share("short", 4, 0.5) == pytest.approx(0.8 * 0.5 + 0.03 * 0.5)
+    # k = 2 behaves like the smallest measured block size, not a blend with k = 1.
+    assert p.pass_share("short", 2, 0.5) == pytest.approx(p.pass_share("short", 4, 0.5))
     for r in costmodel.evaluate(model, rows):
         assert r["pred_full"] == pytest.approx(r["latency_s"])
     items = costmodel.Items(400, 30.0, 60)
-    pick = model.choose_k("filter", items)
+    pick = model.choose_k("filter", items, quality=True)
     assert pick["k"] <= 4 and pick["k_max"] == 4
-    assert model.choose_k("filter", items, quality=False)["k_max"] > 4
+    assert model.choose_k("filter", items)["k_max"] > 4   # latency first: no accuracy cap
     # More items push the best size up.
     small = model.choose_k("filter", costmodel.Items(100, 30.0, 60), tie=0, quality=False)["k"]
     large = model.choose_k("filter", costmodel.Items(6400, 30.0, 60), max_num_seqs=10**6,
                            tie=0, quality=False)["k"]
     assert large > small
     picks = costmodel.choices_per_run(model, costmodel.evaluate(model, rows))
-    assert all(c["regret"] == pytest.approx(0) for c in picks)
+    assert all(c["latency_regret"] == pytest.approx(0, abs=0.02) for c in picks)
+    assert all(c["regret"] == pytest.approx(0, abs=0.02) for c in picks)
 
 
 def test_cost_model_pipeline_composition():
@@ -541,13 +548,28 @@ def test_cost_model_pipeline_composition():
 
     model = costmodel.fit(_cost_rows())
     model.kinds["map"] = model.kinds["filter"]
-    pipe = costmodel.Pipeline(("filter", "map"), 400, 30.0, 60, pass_share=0.5)
+    model.g["map"] = 0.3
+    pipe = costmodel.Pipeline(("filter", "map"), 400, 30.0, 60, selectivity=0.5)
     pred = model.predict_pipeline(pipe, (4, 1))
     alone = model.predict("filter", costmodel.Items(400, 30.0, 60), 4)
-    # The map sees per-tuple's share times rho(4) of the rows.
-    after = model.predict("map", costmodel.Items(400 * 0.5 * 1.25, 30.0, 60), 1)
-    assert pred["latency_s"] == pytest.approx(alone["latency_s"] + after["latency_s"] - model.g)
-    pick = model.choose_pipeline(pipe)
+    # The map sees the rows the block filter passes: recall * s + fpr * (1 - s).
+    passed = 400 * (0.8 * 0.5 + 0.03 * 0.5)
+    after = model.predict("map", costmodel.Items(passed, 30.0, 60), 1)
+    assert pred["latency_s"] == pytest.approx(alone["latency_s"] + after["latency_s"])
+    # A per-tuple map behind a blocked filter reruns a share of its rows; the
+    # reruns pay their work again but not the map's fixed cost.
+    model.retry = {"after:1": 0.1}
+    rerun = model.predict("map", costmodel.Items(0.1 * passed, 30.0, 60), 1)
+    assert model.predict_pipeline(pipe, (4, 1))["latency_s"] == pytest.approx(
+        pred["latency_s"] + rerun["latency_s"] - 0.3)
+    assert model.predict_pipeline(pipe, (1, 1))["latency_s"] == pytest.approx(
+        model.predict("filter", costmodel.Items(400, 30.0, 60), 1)["latency_s"]
+        + model.predict("map", costmodel.Items(400 * (0.6 * 0.5 + 0.01 * 0.5), 30.0, 60),
+                        1)["latency_s"])
+    assert costmodel.retry_key(("map", "filter"), (1, 4), 0) == "first:1"
+    assert costmodel.retry_key(("map", "filter"), (4, 4), 0) == "first:block"
+    assert costmodel.retry_key(("filter", "map"), (1, 1), 1) is None
+    pick = model.choose_pipeline(pipe, quality=True)
     assert all(b <= 4 for b in pick["blocks"])   # within each stage's accuracy cap
     assert costmodel.arm_name(pick["blocks"]).startswith("kalypso_")
     assert costmodel.arm_name((1, 1)) == "kalypso_per_tuple"
@@ -562,3 +584,23 @@ def test_map_similarity():
     base = [{"repeat": 1, "outputs": {"0": "great acting", "1": "weak plot"}}]
     arm = [{"repeat": 1, "outputs": {"0": "great acting", "1": "plot"}}]
     assert analyze.similarity(arm, base) == pytest.approx((1 + 2 / 3) / 2, abs=1e-4)
+
+
+def test_quality_needs_f1_and_map_similarity():
+    from vllm.kalypso.benchmark.eval import costmodel
+
+    # A filter -> map pipeline whose filter kept F1 but whose map drifted.
+    assert costmodel.quality_ok({"f1_delta": 0.05, "similarity": 0.4}, 0.02) is False
+    assert costmodel.quality_ok({"f1_delta": 0.05, "similarity": 0.93}, 0.02) is True
+    assert costmodel.quality_ok({"f1_delta": -0.1, "similarity": None}, 0.02) is False
+    assert costmodel.quality_ok({"similarity": 0.9}, 0.02) is True
+    assert costmodel.quality_ok({}, 0.02) is None
+
+
+def test_validation_strategy_blocks():
+    from vllm.kalypso.benchmark.eval import costmodel
+
+    assert costmodel._blocks_of("kalypso_per_tuple", 2) == (1, 1)
+    assert costmodel._blocks_of("kalypso_block:4", 2) == (4, 4)
+    assert costmodel._blocks_of("kalypso_pipe:3,1", 2) == (3, 1)
+    assert costmodel._blocks_of("kalypso_block:16", 1) == (16,)
