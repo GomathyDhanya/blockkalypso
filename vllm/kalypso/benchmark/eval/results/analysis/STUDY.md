@@ -1,0 +1,226 @@
+# Choosing block sizes for semantic operators: batching study and cost model v3
+
+Kalypso can answer a semantic operator (filter, join or map) one row per LLM
+call (per-tuple), or put k rows in one prompt and answer them together (a block
+of size k). This study measures when blocking pays, builds a cost model that
+predicts latency for any block size, and uses it to pick a block size for every
+stage of a pipeline. The model was then tested on five experiments it had never
+seen.
+
+**Result:** on the five new experiments the algorithm ran 1.38x faster than
+per-tuple. The fastest arm we measured ran 1.45x, so the algorithm was 6%
+slower than that on average. Every fixed block size, and tuning each operator
+on its own, did worse.
+
+The choice is latency first. Accuracy is measured and reported, but it doesn't
+drive the choice. An accuracy-guarded variant is reported alongside.
+
+## Setup
+
+| | |
+|---|---|
+| GPU | NVIDIA L40S (48 GB), one per experiment, on Modal |
+| Server | vLLM OpenAI server, prefix caching on, `max_num_seqs` 256, `max_num_batched_tokens` 2048, `max_model_len` 32768 |
+| Model | Qwen2.5-7B-Instruct |
+| Measurement | 1 warmup, 3 repeats, median; prefix cache reset before every trial; arms interleaved (A, B, A, B) so drift hits all arms alike |
+| Arms | `kalypso_per_tuple`, `kalypso_block:k` (same k for every stage), `kalypso_pipe:k1,k2` (a size per stage) |
+
+| Workload | Operator | Rows | Row size (tokens) |
+|---|---|---|---|
+| `movie_positive`, `movie_sel10…90` | filter (SemBench movie reviews; selectivity 10–90%) | 100–1865 | ~31 (short) |
+| `movie_opposite`, `movie_fanout10…90` | join (pairs of reviews) | 16×16 – 64×64 pairs | ~31 per side (short) |
+| `movie_map` | map (rewrite a review) | 100–500 | ~31 (short) |
+| `cnli_sel10…90` | filter (ContractNLI contracts) | 400 | ~1500 (long) |
+| `cnli_join_high/low` | join (contract × clause) | 24 × 8 | ~1600 left, ~15 right (long) |
+| `pipe_filter_join_*`, `pipe_filter_map`, `pipe_map_filter` | 2-stage pipelines | 50–1000 | short |
+
+Rows over 512 tokens count as **long**. The model keeps separate numbers for
+short and long rows.
+
+## What we learned from the experiments
+
+| Finding | Evidence |
+|---|---|
+| Blocking pays most for short-row filters with many rows | 1500-row filter: 2.2x at block 6–7 |
+| Short-row joins gain about 1.5x, but lose accuracy | join, 48×48 pairs: 1.52x at block 2–4, ΔF1 −0.07 to −0.18 |
+| Long rows: blocking can't help | Reading the rows (prefill) dominates. Blocking only saves the per-call instructions and answer, so the ceiling is about (row + 96) / (row + 96/k) ≈ 1.05x for 1.6k-token rows |
+| Maps: blocking hurts | A block map writes all k answers in one call, one after another, so that call takes much longer. Map alone: 0.5–0.9x at block 4, 0.37x at block 16. Block 2 on 500 rows was 1.14x, but its outputs didn't match per-tuple's (similarity below 0.8) |
+| Block joins repeat the left row in every pair | About 3.3x the prompt tokens for long left rows. Per-tuple gets the left row from the prefix cache |
+| The best size differs by operator, row length and N | Short filter: 6–8. Join: 2–4. Long rows and maps: 1 (no blocking) |
+| In a pipeline, the best size for a stage isn't its best size alone | Filter → join: the filter runs fastest blocked when measured alone, but the pipeline was fastest with the filter **not** blocked and the join at block 2. Picking each stage's best-alone size gave 0.95x on `validate` |
+| Blocking one stage can make a per-tuple map retry | Kalypso's `MapRatioEstimator` learns answer length from the earliest (shortest) answers. When the map's rows arrive in waves, later rows get 11–20 max tokens, get cut off, and rerun at 512 (up to 56% of map rows) |
+
+## Why the model needs fitting
+
+No fixed rule picks the block size well, as the validation shows: block 4
+gives 0.91x–1.08x, block 16 gives 0.55x–0.69x and block 32 0.34x–0.47x. The
+right size depends on quantities that can only be measured:
+
+| Depends on | Why it can't be derived on paper |
+|---|---|
+| Prefill speed, decode-step time, attention cost | Set by the GPU, the model, vLLM's scheduler and its batch limits. They change if any of these change |
+| How many tokens a block prompt and a block answer take | Depends on the prompt template and on how much the LLM actually writes per row (a block filter writes ~4.5 tokens per row, a map ~15) |
+| Fixed cost of starting an operator | Kalypso overhead. It matters for small inputs |
+| Filter recall and false-positive rate at each k | Decides how many rows reach the next stage. Blocked filters keep more rows on short rows (recall 0.79 vs 0.63) and fewer on long rows (0.45 vs 0.70) |
+| How stages overlap in a pipeline | They share one GPU, so their costs add up. That has to be checked against measured runs |
+| How often a map retries | A side effect of Kalypso's output-length estimator. It can only be counted |
+
+So the model has a fixed shape, below, and its constants are fitted by least
+squares on measured runs. Moving to new hardware or a new model means
+refitting, not rewriting.
+
+## What the model was fitted on
+
+| Phase | Experiments | What it covers |
+|---|---|---|
+| `block-size` | 15 runs | Short-row filter (`movie_positive` n500, `movie_sel*`) and join (`movie_opposite`) at k = 2–20 |
+| `single` | 12 runs | Filter at n = 100, 250, 1000, 1865; joins at fanout 10–90%, 16–64 rows per side |
+| `map` | 2 runs | Map at n = 100, 500 |
+| `longrows` | 5 runs | ContractNLI filters (selectivity 10/50/90%) and joins |
+| `pipeline` | 5 runs | Filter → join at selectivity 10/50/90%, filter → map, filter → block map; each stage also run alone |
+| `validate` | 6 runs | Chosen by the previous model (v2); folded into v3's fit once measured |
+| **Total** | **45 runs** | **173 single-operator arms, 75 pipeline arms** |
+| `validate3` | 5 runs | **Held out:** chosen by v3 before running, not used in any fit |
+
+## What the cost model computes
+
+### Latency of one operator
+
+`L = g[kind] + α·P + (β + tail[kind])·W·D + γ·C·D + δ·C·p²`
+
+| Term | Meaning | Fitted value |
+|---|---|---|
+| `g[kind]` | Fixed cost per operator | filter −0.057 s, join −0.048 s, map 0.286 s |
+| `α·P` | Prefill: P = prompt tokens actually computed (not served from the prefix cache) | 0.792 s per 10k tokens (12.6k tokens/s) |
+| `β·W·D` | Decode: W waves of calls (256 calls per wave), each lasting D decode steps | 24.8 ms per step |
+| `tail[map]·W·D` | Maps only: a wave lasts as long as its longest answer, not its average | +11.0 ms per step |
+| `γ·C·D` | Extra cost per generated token from a bigger running batch | 0.100 ms per token |
+| `δ·C·p²` | Attention, quadratic in prompt length (shows up on long rows) | 1.77 ms per call per (1k tokens)² |
+
+### Tokens for a block size
+
+| | Per-tuple (k = 1) | Block (k > 1) |
+|---|---|---|
+| Calls C | N | ⌈N / k⌉ |
+| Decode steps per call D | fitted per kind | d0 + d1·k (answer grows with k) |
+| Prompt per call p | row + instructions | instructions + k·(row + separator) |
+| Computed prompt P | N·(row + instructions); joins compute each left row once (prefix cache) | rows + per-call overhead; joins pay the left row on almost every call |
+| Block-size limit | – | Whatever fits in the context window, and no larger than the largest size measured for that operator and row length |
+
+Per-kind token constants (fitted):
+
+| Kind | Instruction tokens (per-tuple) | Answer tokens (per-tuple) | Block instructions | Answer: base + per row |
+|---|---|---|---|---|
+| filter | 133 | 3.0 | 52 | −2.6 + 4.5·k |
+| join | 157 | 2.3 | 90 | −2.6 + 4.6·k |
+| map | 128 | 20.1 | 72 | 63 + 14.7·k |
+
+### Pipelines
+
+| Feature | Rule | Fitted value |
+|---|---|---|
+| Stages share one GPU | L = λ · Σ stage latencies | λ = 0.98 |
+| Rows a filter passes on | rows · (recall(k)·s + fpr(k)·(1 − s)), s = the workload's true selectivity | recall/fpr per k, short vs long rows (below) |
+| Map retries | Extra map calls when another stage is blocked. They redo the work but don't pay the fixed cost again | map first, per-tuple 56%; map first, blocked 46%; map after a filter, per-tuple 12%; after a filter, blocked 0% |
+
+Filter recall and false-positive rate by block size (fitted on the single-filter runs):
+
+| Rows | k = 1 | Blocked (k ≥ 2) |
+|---|---|---|
+| Short | recall 0.63, fpr 0.013 | recall ~0.79, fpr ~0.03 |
+| Long | recall 0.70, fpr 0.35 | recall ~0.45, fpr ~0.2 |
+
+### The choice
+
+| Step | Rule |
+|---|---|
+| Candidates | Every combination of k per stage, from 1 up to the stage's block-size limit |
+| Pick | Lowest predicted pipeline latency |
+| Tie-break | Among predictions within 2% of the best (about the model's error), the smallest blocks |
+| Guarded variant (reported) | Also caps each k at the largest measured size whose mean F1 stayed within 0.02 of per-tuple (maps: ROUGE-1 ≥ 0.8) |
+
+### How accurate the model is
+
+| Prediction error | Mean | Max |
+|---|---|---|
+| Single operator, given measured tokens | 3.4% | 33% |
+| Single operator, full model | 4.3% | 36% |
+| Single operator, leave one workload out | 4.8% | 61% |
+| Pipelines, given measured filter output and retries | 10.9% | 58% |
+| Pipelines, full model | 13.2% | 87% |
+| Held-out `validate3`, the arm the algorithm picked | 8.9% | 25% |
+
+## Validation
+
+Each validation experiment ran per-tuple, static block sizes 4, 16 and 32,
+"best in isolation" (each stage at the size that was fastest when that operator
+ran alone), the algorithm's pick, the guarded pick and a grid of nearby sizes.
+**Oracle** = the fastest arm measured. **Regret** = how much slower than the
+oracle. **Speedup** is the geometric mean against per-tuple.
+
+### Held out: `validate3` (picked by v3 before running)
+
+| Strategy | Speedup | Regret (mean) | Regret (max) | Kept accuracy |
+|---|---|---|---|---|
+| Per-tuple | 1.00x | 50.6% | 126.0% | 5/5 |
+| Static block 4 | 1.08x | 39.0% | 89.4% | 2/5 |
+| Static block 16 | 0.69x | 162.8% | 437.7% | 1/5 |
+| Static block 32 | 0.47x | 346.4% | 857.7% | 1/5 |
+| Best in isolation | 1.31x | 11.6% | 32.9% | 3/5 |
+| **Algorithm (v3)** | **1.38x** | **6.1%** | 23.8% | 3/5 |
+| Algorithm, accuracy-guarded | 1.17x | 25.6% | 53.8% | 5/5 |
+| Oracle | 1.45x | 0% | 0% | 3/5 |
+
+| Experiment | Algorithm picked | Speedup | Oracle | Regret | ΔF1 | Predicted / measured (s) |
+|---|---|---|---|---|---|---|
+| Filter, 1500 short rows | block 6 | 2.23x | block 7, 2.26x | 1.1% | +0.11 | 6.12 / 6.55 |
+| Join, 48×48 pairs | block 2 | 1.52x | block 3, 1.54x | 0.9% | −0.18 | 15.91 / 16.73 |
+| Filter → join, 75% selectivity | filter 1, join 2 | 1.45x | same | 0% | −0.13 | 10.88 / 10.40 |
+| Filter → map, 250 rows | per-tuple | 1.00x | filter 2, map 1, 1.05x | 4.7% | 0.00 | 4.61 / 4.45 |
+| Map → filter, 200 rows | per-tuple | 1.00x | map 1, filter 2, 1.24x | 23.8% | 0.00 | 5.31 / 7.08 |
+
+The one real miss is map → filter. The model predicted 5.3 s for per-tuple, but
+it took 7.1 s, with no map retries in that run. The blocked-filter arms also
+varied by about 1 s between repeats (5.7–6.7 s), so part of the gap is noise.
+
+### Earlier round: `validate` (picked by v2, now part of v3's fit)
+
+| Strategy | Speedup | Regret (mean) | Kept accuracy |
+|---|---|---|---|
+| Per-tuple | 1.00x | 20.9% | 6/6 |
+| Static block 4 / 16 / 32 | 0.91x / 0.55x / 0.34x | 36% / 148% / 350% | 2/6, 0/6, 0/5 |
+| Best in isolation | 0.95x | 30.7% | 6/6 |
+| Algorithm (v2) | 1.07x | 12.1% | 4/6 |
+| v3, choosing among the arms that ran (in-sample) | 1.16x | 2.8% | 3/6 |
+| Oracle | 1.19x | 0% | 3/6 |
+
+v3 halved regret: v2 was 12.1% slower than the oracle on its validation round,
+and v3 was 6.1% slower on new experiments it didn't see.
+
+## Limits and next steps
+
+- **One GPU and one LLM.** The constants are for an L40S running Qwen2.5-7B.
+  Other hardware or another LLM needs a refit on a smaller sweep. The model's
+  shape stays the same.
+- **Accuracy.** The latency-first pick loses F1 on joins (−0.13 to −0.18). Use
+  the guarded variant when accuracy matters.
+- **Maps before a filter** are the weakest prediction (the map → filter miss
+  above).
+- **Proposed fixes in Kalypso core:**
+  - Block joins: group pairs by left row, so a block shares one left row and
+    the prefix cache serves it. This should remove the ~3.3x repeated prompt
+    tokens.
+  - `MapRatioEstimator`: don't size later rows' answer limit from the earliest,
+    shortest answers. This should remove most map retries in pipelines.
+
+## Files
+
+| File | Contents |
+|---|---|
+| `eval/costmodel.py` | The model, the fit, the choice and validation scoring (`python -m vllm.kalypso.benchmark.eval.costmodel`) |
+| `results/analysis/costmodel.md`, `costmodel.json` | Fitted coefficients, per-run choices, every arm's prediction |
+| `results/analysis/validation.md` | Full per-experiment validation tables |
+| `results/analysis/algorithm_choices.json` | The picks, frozen before each validation phase ran |
+| `results/analysis/summary.md`, `arms.csv` | Every measured arm with its metrics |
+| `results/experiments/<phase>/` | Raw trial logs (`run.jsonl`) per experiment |
+| `cloud/experiments.py`, `cloud/modal_block_size.py` | Experiment manifest and Modal runner |
