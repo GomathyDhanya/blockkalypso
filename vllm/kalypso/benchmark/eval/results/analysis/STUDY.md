@@ -39,6 +39,10 @@ short and long rows.
 
 ## What we learned from the experiments
 
+![Speedup vs block size](https://github.com/GomathyDhanya/blockkalypso/blob/batching-cost-model-v3/vllm/kalypso/benchmark/eval/results/analysis/plots/speedup_vs_k.png?raw=true)
+
+![Tokens and answer length vs block size](https://github.com/GomathyDhanya/blockkalypso/blob/batching-cost-model-v3/vllm/kalypso/benchmark/eval/results/analysis/plots/mechanics_vs_k.png?raw=true)
+
 | Finding | Evidence |
 |---|---|
 | Blocking pays most for short-row filters with many rows | 1500-row filter: 2.2x at block 6–7 |
@@ -49,6 +53,89 @@ short and long rows.
 | The best size differs by operator, row length and N | Short filter: 6–8. Join: 2–4. Long rows and maps: 1 (no blocking) |
 | In a pipeline, the best size for a stage isn't its best size alone | Filter → join: the filter runs fastest blocked when measured alone, but the pipeline was fastest with the filter **not** blocked and the join at block 2. Picking each stage's best-alone size gave 0.95x on `validate` |
 | Blocking one stage can make a per-tuple map retry | Kalypso's `MapRatioEstimator` learns answer length from the earliest (shortest) answers. When the map's rows arrive in waves, later rows get 11–20 max tokens, get cut off, and rerun at 512 (up to 56% of map rows) |
+
+## The two research questions
+
+### Q1. When does putting several rows in one LLM call beat sending them as separate requests through vLLM?
+
+vLLM already runs separate requests together and reuses shared prompt
+prefixes from its cache. So blocking doesn't save work by batching. It saves
+the work each call repeats (instructions, answer format, number of call
+waves), and in exchange one call writes k answers back to back.
+
+| Case | Blocking pays? | Why | Measured |
+|---|---|---|---|
+| Short rows, short answers (filter, join), many rows | Yes, k 2–8 | The repeated per-call work is most of each call | filter 2.2x, join 1.5x |
+| Few rows (50–100) | Barely | The fixed cost of starting the operator dominates | ≈ 1.0–1.1x |
+| Long rows (~1500 tokens) | No | Reading the row dominates, and blocking doesn't shrink it | ≤ 1.05x |
+| Long answers (map) | No | One call writes all k answers in a row, and its wave waits for the longest | 0.4–0.9x |
+
+The cost model turns this into a prediction for any operator, row length, row
+count and k. **Open:** we measured only two row lengths (~30 and ~1500
+tokens), so the row length where blocking stops paying is predicted by the
+model but hasn't been measured.
+
+![Best speedup vs row length](https://github.com/GomathyDhanya/blockkalypso/blob/batching-cost-model-v3/vllm/kalypso/benchmark/eval/results/analysis/plots/speedup_vs_row_length.png?raw=true)
+
+### Q2. How should blocks be managed through pipelines whose filters shrink and joins expand the rows?
+
+**Blocks stay full.** Between stages, Kalypso's pipeline executor holds incoming
+rows until it has k of them. Only the last block of each stage can be short.
+In every pipeline run where it can be checked, the calls match full blocks
+exactly:
+
+| Pipeline | Arm (stage sizes) | Rows into the blocked stage | Full-block calls | Actual calls | Fill |
+|---|---|---|---|---|---|
+| filter → join, 10% pass | 1, 4 | 64 pairs | 16 | 16 | 100% |
+| filter → join, 50% | 1, 4 | 896 pairs | 224 | 224 | 100% |
+| filter → join, 90% | 4, 4 | 2496 pairs | 624 | 624 | 100% |
+| filter → join, 75% | 1, 3 | 1344 pairs | 448 | 448 | 100% |
+| filter → join, 25% | 2, 8 | 736 pairs | 92 | 92 | 100% |
+| map → filter, 500 rows | 1, 7 | 500 rows | 72 | 72 | 100% |
+| map → filter, 200 rows | 1, 4 | 200 rows | 50 | 50 | 100% |
+| filter → map, 292 passed | 6, 4 | 292 rows | 73 | 73 | 100% |
+| filter → map, 589 passed | 3, 2 | 589 rows | 295 | 295 | 100% |
+
+The only extra calls are retries, not partial blocks:
+
+- fallbacks for a row a block answer missed (at most 1 per run)
+- block-map repairs
+- map reruns: a per-tuple map in front of a blocked filter reran up to 282 of 500 rows
+
+Rows into the next stage are worked out from the per-stage call counts (by
+`max_tokens` bucket). Each figure is from one run at temperature 0.
+
+**What changes the next stage's work is how many rows the filter passes, and
+that depends on the filter's block size.** A per-tuple filter misses many true
+matches. A blocked filter passes more, so the join after it gets more pairs:
+
+| Pipeline (workload) | Truly positive (of 100) | Passed, filter per-tuple | Passed, filter blocked | Join work |
+|---|---|---|---|---|
+| filter → join (`s10`) | 7 | 2 | 8 (k=4) | 4x |
+| filter → join (`s25`) | 30 | 16 | 23 (k=2) | 1.4x |
+| filter → join (`s50`) | 48 | 28 | 36 (k=4) | 1.3x |
+| filter → join (`s75`) | 68 | 42 | 50 (k=2) | 1.2x |
+| filter → join (`s90`) | 92 | 58 | 78 (k=4) | 1.3x |
+
+![Rows passed by the filter](https://github.com/GomathyDhanya/blockkalypso/blob/batching-cost-model-v3/vllm/kalypso/benchmark/eval/results/analysis/plots/filter_rows_passed.png?raw=true)
+
+How to manage blocks through a pipeline:
+
+| Rule | Why |
+|---|---|
+| Choose block sizes for all stages together, not each on its own | A filter's k changes how many rows the next stage gets. The cost model scores the whole pipeline (1.38x vs 1.31x for each stage's best size alone) |
+| Block the expensive stage, not the cheap one in front of it | Filter per-tuple + join at block 2 was fastest (1.45x). Blocking the filter passes more rows to the join. That's more correct, but slower |
+| Keep holding rows until a block is full (Kalypso already does) | Fill is 100%, so shrinking doesn't leave half-empty blocks |
+| Joins: group the pairs in a block by left row | Today pairs are packed in arrival order, so the left row repeats in every pair (~3.3x the tokens on long left rows) |
+| Maps: fix the output-length estimate before blocking around them | Blocking a neighbouring stage makes a per-tuple map cut off answers and rerun them (12–56% of rows) |
+
+**Open:**
+
+- **Join first, then a filter.** We haven't run a pipeline where the join
+  expands the rows before a filter.
+- **Holding rows vs sending early.** We haven't tested whether holding rows to
+  fill a block slows the pipeline. That needs an option to send a partial
+  block after a short wait.
 
 ## Why the model needs fitting
 
@@ -123,6 +210,8 @@ Per-kind token constants (fitted):
 | Rows a filter passes on | rows · (recall(k)·s + fpr(k)·(1 − s)), s = the workload's true selectivity | recall/fpr per k, short vs long rows (below) |
 | Map retries | Extra map calls when another stage is blocked. They redo the work but don't pay the fixed cost again | map first, per-tuple 56%; map first, blocked 46%; map after a filter, per-tuple 12%; after a filter, blocked 0% |
 
+![Map reruns](https://github.com/GomathyDhanya/blockkalypso/blob/batching-cost-model-v3/vllm/kalypso/benchmark/eval/results/analysis/plots/map_reruns.png?raw=true)
+
 Filter recall and false-positive rate by block size (fitted on the single-filter runs):
 
 | Rows | k = 1 | Blocked (k ≥ 2) |
@@ -150,6 +239,8 @@ Filter recall and false-positive rate by block size (fitted on the single-filter
 | Pipelines, full model | 13.2% | 87% |
 | Held-out `validate3`, the arm the algorithm picked | 8.9% | 25% |
 
+![Predicted vs measured latency](https://github.com/GomathyDhanya/blockkalypso/blob/batching-cost-model-v3/vllm/kalypso/benchmark/eval/results/analysis/plots/predicted_vs_measured.png?raw=true)
+
 ## Validation
 
 Each validation experiment ran per-tuple, static block sizes 4, 16 and 32,
@@ -159,6 +250,8 @@ ran alone), the algorithm's pick, the guarded pick and a grid of nearby sizes.
 oracle. **Speedup** is the geometric mean against per-tuple.
 
 ### Held out: `validate3` (picked by v3 before running)
+
+![Held-out validation speedups](https://github.com/GomathyDhanya/blockkalypso/blob/batching-cost-model-v3/vllm/kalypso/benchmark/eval/results/analysis/plots/validation_validate3.png?raw=true)
 
 | Strategy | Speedup | Regret (mean) | Regret (max) | Kept accuracy |
 |---|---|---|---|---|
@@ -206,6 +299,10 @@ and v3 was 6.1% slower on new experiments it didn't see.
   the guarded variant when accuracy matters.
 - **Maps before a filter** are the weakest prediction (the map → filter miss
   above).
+- **Experiments still to run:**
+  - A row-length sweep (100–1000 tokens) to find where blocking stops paying.
+  - A join → filter pipeline.
+  - A test of sending a partial block early instead of waiting for it to fill.
 - **Proposed fixes in Kalypso core:**
   - Block joins: group pairs by left row, so a block shares one left row and
     the prefix cache serves it. This should remove the ~3.3x repeated prompt
@@ -217,6 +314,7 @@ and v3 was 6.1% slower on new experiments it didn't see.
 
 | File | Contents |
 |---|---|
+| `eval/plots.py` | Regenerates the plots in `results/analysis/plots/` (`python -m vllm.kalypso.benchmark.eval.plots`, needs matplotlib) |
 | `eval/costmodel.py` | The model, the fit, the choice and validation scoring (`python -m vllm.kalypso.benchmark.eval.costmodel`) |
 | `results/analysis/costmodel.md`, `costmodel.json` | Fitted coefficients, per-run choices, every arm's prediction |
 | `results/analysis/validation.md` | Full per-experiment validation tables |
