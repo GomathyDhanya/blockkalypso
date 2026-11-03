@@ -239,11 +239,13 @@ VALIDATE4 = [
                  requires=["contractnli"], phase="validate4", extra=blocks(2, 8))
       for n in (128, 256, 512, 1024)],
     # The same row lengths for a join (40 contract windows x 8 hypotheses)
-    # and a map (400 windows): when blocking pays, for every operator.
-    *[validation(f"cnli-{op}-len{n}", f"cnli_{op}_len{n}", 0,
+    # and a map (400 windows): when blocking pays, for every operator. Sizes
+    # stop at 8: k = 16 and 32 lose everywhere, and on long rows a block map
+    # that large ran past the client's one-hour timeout.
+    *[experiment(f"validate4/cnli-{op}-len{n}", "validate4",
+                 [part(f"cnli_{op}_len{n}", blocks(2, 4, 8))],
                  f"{op.capitalize()} on ~{n}-token rows (ContractNLI windows): where blocking "
-                 "stops paying for this operator.",
-                 requires=["contractnli"], phase="validate4", extra=blocks(2, 8))
+                 "stops paying for this operator.", requires=["algorithm", "contractnli"])
       for op in ("join", "map") for n in (128, 256, 512, 1024)],
 ]
 
