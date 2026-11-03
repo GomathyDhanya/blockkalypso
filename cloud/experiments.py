@@ -238,6 +238,13 @@ VALIDATE4 = [
                  "short and long rows blocking stops paying.",
                  requires=["contractnli"], phase="validate4", extra=blocks(2, 8))
       for n in (128, 256, 512, 1024)],
+    # The same row lengths for a join (40 contract windows x 8 hypotheses)
+    # and a map (400 windows): when blocking pays, for every operator.
+    *[validation(f"cnli-{op}-len{n}", f"cnli_{op}_len{n}", 0,
+                 f"{op.capitalize()} on ~{n}-token rows (ContractNLI windows): where blocking "
+                 "stops paying for this operator.",
+                 requires=["contractnli"], phase="validate4", extra=blocks(2, 8))
+      for op in ("join", "map") for n in (128, 256, 512, 1024)],
 ]
 
 EXPERIMENTS = SINGLE + MAP + LONGROWS + PIPELINE + VALIDATE + VALIDATE3 + VALIDATE_JF + VALIDATE4

@@ -561,5 +561,190 @@
       ],
       "guarded_s": 33.365
     }
+  },
+  "validate4/cnli-join-len128": {
+    "model": "v3",
+    "algorithm": "kalypso_block:2",
+    "algorithm_latency": "kalypso_block:2",
+    "algorithm_guarded": "kalypso_per_tuple",
+    "best_in_isolation": "kalypso_block:5",
+    "grid": [
+      "kalypso_block:3",
+      "kalypso_block:4"
+    ],
+    "predicted": {
+      "items": 320,
+      "item_tokens": 139.43,
+      "regime": "short",
+      "blocks": [
+        2
+      ],
+      "latency_s": 3.333,
+      "guarded": [
+        1
+      ],
+      "guarded_s": 3.407
+    }
+  },
+  "validate4/cnli-join-len256": {
+    "model": "v3",
+    "algorithm": "kalypso_per_tuple",
+    "algorithm_latency": "kalypso_per_tuple",
+    "algorithm_guarded": "kalypso_per_tuple",
+    "best_in_isolation": "kalypso_block:5",
+    "grid": [
+      "kalypso_block:2"
+    ],
+    "predicted": {
+      "items": 320,
+      "item_tokens": 261.15,
+      "regime": "short",
+      "blocks": [
+        1
+      ],
+      "latency_s": 3.841,
+      "guarded": [
+        1
+      ],
+      "guarded_s": 3.841
+    }
+  },
+  "validate4/cnli-join-len512": {
+    "model": "v3",
+    "algorithm": "kalypso_per_tuple",
+    "algorithm_latency": "kalypso_per_tuple",
+    "algorithm_guarded": "kalypso_per_tuple",
+    "best_in_isolation": "kalypso_block:5",
+    "grid": [
+      "kalypso_block:2"
+    ],
+    "predicted": {
+      "items": 320,
+      "item_tokens": 501.35,
+      "regime": "short",
+      "blocks": [
+        1
+      ],
+      "latency_s": 4.748,
+      "guarded": [
+        1
+      ],
+      "guarded_s": 4.748
+    }
+  },
+  "validate4/cnli-join-len1024": {
+    "model": "v3",
+    "algorithm": "kalypso_per_tuple",
+    "algorithm_latency": "kalypso_per_tuple",
+    "algorithm_guarded": "kalypso_per_tuple",
+    "best_in_isolation": "kalypso_per_tuple",
+    "grid": [
+      "kalypso_block:2"
+    ],
+    "predicted": {
+      "items": 320,
+      "item_tokens": 942.35,
+      "regime": "long",
+      "blocks": [
+        1
+      ],
+      "latency_s": 6.584,
+      "guarded": [
+        1
+      ],
+      "guarded_s": 6.584
+    }
+  },
+  "validate4/cnli-map-len128": {
+    "model": "v3",
+    "algorithm": "kalypso_per_tuple",
+    "algorithm_latency": "kalypso_per_tuple",
+    "algorithm_guarded": "kalypso_per_tuple",
+    "best_in_isolation": "kalypso_per_tuple",
+    "grid": [
+      "kalypso_block:2"
+    ],
+    "predicted": {
+      "items": 400,
+      "item_tokens": 124.55,
+      "regime": "short",
+      "blocks": [
+        1
+      ],
+      "latency_s": 9.059,
+      "guarded": [
+        1
+      ],
+      "guarded_s": 9.059
+    }
+  },
+  "validate4/cnli-map-len256": {
+    "model": "v3",
+    "algorithm": "kalypso_per_tuple",
+    "algorithm_latency": "kalypso_per_tuple",
+    "algorithm_guarded": "kalypso_per_tuple",
+    "best_in_isolation": "kalypso_per_tuple",
+    "grid": [
+      "kalypso_block:2"
+    ],
+    "predicted": {
+      "items": 400,
+      "item_tokens": 244.24,
+      "regime": "short",
+      "blocks": [
+        1
+      ],
+      "latency_s": 12.901,
+      "guarded": [
+        1
+      ],
+      "guarded_s": 12.901
+    }
+  },
+  "validate4/cnli-map-len512": {
+    "model": "v3",
+    "algorithm": "kalypso_per_tuple",
+    "algorithm_latency": "kalypso_per_tuple",
+    "algorithm_guarded": "kalypso_per_tuple",
+    "best_in_isolation": "kalypso_per_tuple",
+    "grid": [
+      "kalypso_block:2"
+    ],
+    "predicted": {
+      "items": 400,
+      "item_tokens": 484.85,
+      "regime": "short",
+      "blocks": [
+        1
+      ],
+      "latency_s": 20.687,
+      "guarded": [
+        1
+      ],
+      "guarded_s": 20.687
+    }
+  },
+  "validate4/cnli-map-len1024": {
+    "model": "v3",
+    "algorithm": "kalypso_per_tuple",
+    "algorithm_latency": "kalypso_per_tuple",
+    "algorithm_guarded": "kalypso_per_tuple",
+    "best_in_isolation": "kalypso_per_tuple",
+    "grid": [
+      "kalypso_block:2"
+    ],
+    "predicted": {
+      "items": 400,
+      "item_tokens": 915.92,
+      "regime": "long",
+      "blocks": [
+        1
+      ],
+      "latency_s": 34.842,
+      "guarded": [
+        1
+      ],
+      "guarded_s": 34.842
+    }
   }
 }

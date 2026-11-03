@@ -720,6 +720,79 @@ def load_cnli_length(name: str, n: int | None = None) -> Workload:
     )
 
 
+# Row-length sweep for joins and maps, on the same contract windows.
+# Join: CNLI_JOIN_LENGTH_LEFT windows x the CNLI_JOIN_RIGHT hypotheses
+# entailed most often (as cnli_join_high). Each window covers the evidence
+# of one entailed hypothesis when one fits; a pair matches when the contract
+# entails the hypothesis and that evidence lies inside the window.
+# Map: CNLI_MAP_LENGTH_ROWS windows, one per contract; no labels (arms are
+# compared with per-tuple output).
+CNLI_JOIN_LENGTHS = {f"cnli_join_len{n}": n for n in CNLI_LENGTHS.values()}
+CNLI_MAP_LENGTHS = {f"cnli_map_len{n}": n for n in CNLI_LENGTHS.values()}
+CNLI_JOIN_LENGTH_LEFT = 40
+CNLI_MAP_LENGTH_ROWS = 400
+CONTRACT_GIST_INSTRUCTION = ("In one short sentence, state what this part of the contract "
+                             "is about.")
+
+
+def _high_hypotheses(docs: list[dict], hypotheses: dict[str, str]) -> list[str]:
+    rate = {k: sum(d["choices"].get(k) == "Entailment" for d in docs) / len(docs)
+            for k in hypotheses}
+    return sorted(hypotheses, key=lambda k: (rate[k], k))[-CNLI_JOIN_RIGHT:]
+
+
+def load_cnli_join_length(name: str, n: int | None = None) -> Workload:
+    """ContractNLI join at a set left-row length (``CNLI_JOIN_LENGTHS``)."""
+    docs, hypotheses = _contractnli()
+    size = CNLI_JOIN_LENGTHS[name] * CNLI_CHARS_PER_TOKEN
+    right = _high_hypotheses(docs, hypotheses)
+    rng = random.Random(SELECTIVITY_SEED)
+    docs = rng.sample(docs, len(docs))[:_limit(CNLI_JOIN_LENGTH_LEFT if n is None else n,
+                                               len(docs), name)]
+    left, positives = [], set()
+    for i, doc in enumerate(docs):
+        fits = [k for k in right if doc["choices"].get(k) == "Entailment" and k in doc["evidence"]
+                and doc["evidence"][k][1] - doc["evidence"][k][0] <= size]
+        cover = doc["evidence"][rng.choice(fits)] if fits else None
+        text = _window(doc["text"], size, cover, rng)
+        left.append(text)
+        for j, k in enumerate(right):
+            if doc["choices"].get(k) == "Entailment" and k in doc["evidence"]:
+                lo, hi = doc["evidence"][k]
+                if _evidence_in(doc["text"], text, lo, hi):
+                    positives.add((i, j))
+    return Workload(
+        name=name, kind=JOIN,
+        data_path=_cnli_csv(f"{name}_left_{len(left)}", left),
+        right_path=_cnli_csv(f"{name}_right", [hypotheses[k] for k in right]),
+        instruction=scenarios.CONTRACT_NLI_ENTAILMENT_JOIN,
+        rows=[Row(i, t) for i, t in enumerate(left)],
+        right_rows=[Row(j, hypotheses[k]) for j, k in enumerate(right)],
+        positives=frozenset(positives),
+    )
+
+
+def _evidence_in(text: str, window: str, lo: int, hi: int) -> bool:
+    """Whether ``text[lo:hi]`` lies inside ``window``, a stripped slice of ``text``."""
+    return text[lo:hi].strip() in window
+
+
+def load_cnli_map_length(name: str, n: int | None = None) -> Workload:
+    """Map over contract windows of a set length (``CNLI_MAP_LENGTHS``)."""
+    docs, _ = _contractnli()
+    size = CNLI_MAP_LENGTHS[name] * CNLI_CHARS_PER_TOKEN
+    rng = random.Random(SELECTIVITY_SEED)
+    docs = rng.sample(docs, len(docs))[:_limit(CNLI_MAP_LENGTH_ROWS if n is None else n,
+                                               len(docs), name)]
+    texts = [_window(d["text"], size, None, rng) for d in docs]
+    return Workload(
+        name=name, kind=MAP,
+        data_path=_cnli_csv(f"{name}_{len(texts)}", texts),
+        instruction=CONTRACT_GIST_INSTRUCTION,
+        rows=[Row(i, t) for i, t in enumerate(texts)],
+    )
+
+
 # ContractNLI join: contracts x hypotheses, matched when the contract entails
 # the hypothesis. Selectivity is set by which hypotheses form the right table:
 # the CNLI_JOIN_RIGHT hypotheses entailed least often (low) or most often
@@ -778,4 +851,8 @@ WORKLOADS = {
        for name in CNLI_SELECTIVITIES},
     **{name: (lambda n=None, name=name: load_cnli_join(name, n)) for name in CNLI_JOINS},
     **{name: (lambda n=None, name=name: load_cnli_length(name, n)) for name in CNLI_LENGTHS},
+    **{name: (lambda n=None, name=name: load_cnli_join_length(name, n))
+       for name in CNLI_JOIN_LENGTHS},
+    **{name: (lambda n=None, name=name: load_cnli_map_length(name, n))
+       for name in CNLI_MAP_LENGTHS},
 }
