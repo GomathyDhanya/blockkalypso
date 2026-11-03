@@ -50,6 +50,12 @@ MOVIE_OPPOSITE_INSTRUCTION = ("These two movie reviews express opposite sentimen
 # Map prompts for the batching study; SemBench's movie queries have no map.
 MOVIE_REASON_INSTRUCTION = ("In one short sentence, state the main reason for the "
                             "reviewer's opinion of the movie.")
+# Join -> filter prompts. A filter after a join sees the pair as one row (a
+# block filter flattens it to one line), so its question does not depend on
+# which review comes first.
+MOVIE_SAME_INSTRUCTION = ("These two movie reviews express the same sentiment - "
+                          "both are positive or both are negative.")
+MOVIE_BOTH_POSITIVE_INSTRUCTION = "Determine if both of these movie reviews are clearly positive."
 
 MAP, FILTER, JOIN = "map", "filter", "join"
 
@@ -77,6 +83,10 @@ class Workload:
     # "instruction": ...}; a JOIN stage joins with right_path. ``kind`` is then
     # the kind of the last stage's output. None for single-operator workloads.
     stages: tuple[dict, ...] | None = None
+    # Pipelines only, when known: the true share of each stage's input that
+    # matches (filters and joins; 1.0 for maps). None: the cost model derives
+    # a leading filter's share from ``positives``.
+    stage_selectivity: tuple[float, ...] | None = None
 
 
 def _txt_files(directory: Path) -> list[Path]:
@@ -460,6 +470,82 @@ def load_pipe_filter_join_join(name: str, n: int | None = None) -> Workload:
     )
 
 
+# Join -> filter: JOIN_FILTER_SIDE x JOIN_FILTER_SIDE pairs of distinct
+# reviews from every movie, a share a of the left and b of the right positive.
+# The join keeps same-sentiment pairs (a b + (1 - a)(1 - b) of them), then the
+# filter keeps pairs where both are positive (a b of all pairs). Named by the
+# join's and the filter's true selectivity, in percent.
+JOIN_FILTER_SIDE = 32
+JOIN_FILTER_SEED = 0
+PIPE_JOIN_FILTER = {"pipe_join_filter_j50_f50": (0.50, 0.50),
+                    "pipe_join_filter_j62_f10": (0.25, 0.25),
+                    "pipe_join_filter_j62_f90": (0.75, 0.75),
+                    "pipe_join_filter_j18_f50": (0.90, 0.10)}
+
+
+def _join_filter_sides(name: str, n: int | None) -> tuple[list[dict], list[dict]]:
+    side = JOIN_FILTER_SIDE if n is None else n
+    if side < 1:
+        raise ValueError(f"{name}: --n must be at least 1")
+    a, b = PIPE_JOIN_FILTER[name]
+    reviews = _sembench_reviews()
+    positives = [r for r in reviews if _positive(r)]
+    negatives = [r for r in reviews if not _positive(r)]
+    pos_l, pos_r = round(a * side), round(b * side)
+    if pos_l + pos_r > len(positives) or 2 * side - pos_l - pos_r > len(negatives):
+        raise ValueError(f"{name}: not enough reviews for {side} x {side} pairs")
+    rng = random.Random(JOIN_FILTER_SEED)
+    pos = rng.sample(positives, pos_l + pos_r)
+    neg = rng.sample(negatives, 2 * side - pos_l - pos_r)
+    left = pos[:pos_l] + neg[:side - pos_l]
+    right = pos[pos_l:] + neg[side - pos_l:]
+    rng.shuffle(left)
+    rng.shuffle(right)
+    return left, right
+
+
+def _join_filter_labels(left: list[dict], right: list[dict]):
+    same = {(i, j) for i, x in enumerate(left) for j, y in enumerate(right)
+            if _positive(x) == _positive(y)}
+    both = frozenset((i, j) for i, j in same if _positive(left[i]))
+    return same, both
+
+
+def load_pipe_join_filter(name: str, n: int | None = None) -> Workload:
+    """Same-sentiment review pairs (join), then pairs where both are positive
+    (filter). The join's and filter's true selectivities are set by ``name``."""
+    left, right = _join_filter_sides(name, n)
+    same, both = _join_filter_labels(left, right)
+    side = len(left)
+    return Workload(
+        name=name, kind=JOIN,
+        data_path=_movie_csv(f"{name}_{side}_left", left),
+        right_path=_movie_csv(f"{name}_{side}_right", right),
+        instruction=MOVIE_BOTH_POSITIVE_INSTRUCTION,
+        rows=[Row(i, r["reviewText"]) for i, r in enumerate(left)],
+        right_rows=[Row(j, r["reviewText"]) for j, r in enumerate(right)],
+        positives=both,
+        stages=({"op": JOIN, "instruction": MOVIE_SAME_INSTRUCTION},
+                {"op": FILTER, "instruction": MOVIE_BOTH_POSITIVE_INSTRUCTION}),
+        stage_selectivity=(len(same) / (side * len(right)),
+                           len(both) / len(same) if same else 0.0),
+    )
+
+
+def load_pipe_join_filter_join(name: str, n: int | None = None) -> Workload:
+    """A pipe_join_filter_* join alone (``name`` plus ``_join``), to compare
+    the pipeline with its operators run separately."""
+    base = name.removesuffix("_join")
+    pipeline = load_pipe_join_filter(base, n)
+    left, right = _join_filter_sides(base, n)
+    same, _ = _join_filter_labels(left, right)
+    return Workload(
+        name=name, kind=JOIN, data_path=pipeline.data_path, right_path=pipeline.right_path,
+        instruction=MOVIE_SAME_INSTRUCTION, rows=pipeline.rows,
+        right_rows=pipeline.right_rows, positives=frozenset(same),
+    )
+
+
 # ContractNLI (Stanford, CC BY 4.0): long rows (NDAs, ~1.9k tokens on
 # average). Downloaded on first use into the git-ignored benchmark/data/.
 CONTRACTNLI_DIR = Path(__file__).resolve().parents[1] / "data" / "contract-nli"
@@ -604,6 +690,10 @@ WORKLOADS = {
     "pipe_filter_map_map": load_pipe_filter_map_map,
     **{f"{name}_join": (lambda n=None, name=name: load_pipe_filter_join_join(f"{name}_join", n))
        for name in PIPE_FILTER_JOIN},
+    **{name: (lambda n=None, name=name: load_pipe_join_filter(name, n))
+       for name in PIPE_JOIN_FILTER},
+    **{f"{name}_join": (lambda n=None, name=name: load_pipe_join_filter_join(f"{name}_join", n))
+       for name in PIPE_JOIN_FILTER},
     **{name: (lambda n=None, name=name: load_cnli_selectivity(name, n))
        for name in CNLI_SELECTIVITIES},
     **{name: (lambda n=None, name=name: load_cnli_join(name, n)) for name in CNLI_JOINS},

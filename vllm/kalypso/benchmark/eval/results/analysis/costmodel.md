@@ -1,6 +1,6 @@
 # Cost model (v3)
 
-Fitted on 173 single-operator arms from 45 runs (cnli_join_high, cnli_join_low, cnli_sel10, cnli_sel25, cnli_sel50, cnli_sel90, movie_fanout10, movie_fanout25, movie_fanout50, movie_fanout75, movie_fanout90, movie_map, movie_opposite, movie_positive, movie_sel10, movie_sel25, movie_sel50, movie_sel75, movie_sel90, pipe_filter_join_s10_join, pipe_filter_join_s50_join, pipe_filter_join_s90_join, pipe_filter_map_map); pipeline composition on 75 pipeline arms. Held out: validate3.
+Fitted on 173 single-operator arms from 45 runs (cnli_join_high, cnli_join_low, cnli_sel10, cnli_sel25, cnli_sel50, cnli_sel90, movie_fanout10, movie_fanout25, movie_fanout50, movie_fanout75, movie_fanout90, movie_map, movie_opposite, movie_positive, movie_sel10, movie_sel25, movie_sel50, movie_sel75, movie_sel90, pipe_filter_join_s10_join, pipe_filter_join_s50_join, pipe_filter_join_s90_join, pipe_filter_map_map); pipeline composition on 75 pipeline arms. Held out: validate3, validate-jf.
 
 Latency `L = g[kind] + alpha P + (beta + tail[kind]) W D + gamma C D + delta C p^2` (P computed prompt tokens, W waves, D decode steps per call, C calls, p prompt tokens per call):
 

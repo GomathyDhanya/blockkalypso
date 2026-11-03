@@ -152,6 +152,14 @@ class Pipeline:
     right_rows: float = 0      # joins
     right_tokens: float = 0.0
     right_max_tokens: float = 0.0
+    # True share of each stage's input that matches, when known (join ->
+    # filter); else ``selectivity`` is the leading filter's.
+    stage_selectivity: tuple = ()
+
+    def true_share(self, i: int) -> float:
+        if self.stage_selectivity:
+            return self.stage_selectivity[i]
+        return self.selectivity if i == 0 else 1.0
 
 
 @dataclass
@@ -228,6 +236,9 @@ class Model:
             if op == "join":
                 out.append(Items(rows * pipe.right_rows, tokens + pipe.right_tokens,
                                  max_tokens + pipe.right_max_tokens, rows, tokens))
+                # Later stages see each pair as one row.
+                tokens += pipe.right_tokens
+                max_tokens += pipe.right_max_tokens
             else:
                 out.append(Items(rows, tokens, max_tokens))
             if op == "map":
@@ -263,7 +274,11 @@ class Model:
             if op == "filter":
                 rows = (passed if passed is not None else
                         rows * self.kinds["filter"].pass_share(items.regime, k,
-                                                               pipe.selectivity))
+                                                               pipe.true_share(i)))
+            elif op == "join" and i + 1 < len(pipe.ops):
+                # Pairs the join keeps, from its recall and false-positive rate.
+                rows = items.n * self.kinds["join"].pass_share(items.regime, k,
+                                                                pipe.true_share(i))
         latency = self.lam * sum(s["latency_s"] for s in stages)
         return {"blocks": tuple(blocks), "stages": stages, "latency_s": latency,
                 "calls": sum(s["calls"] for s in stages)}
@@ -595,10 +610,11 @@ def choices_per_run(model: Model, rows: list[dict]) -> list[dict]:
 
 # --- Pipelines ---------------------------------------------------------------
 
-def pipeline_of(r: dict, selectivity: float) -> Pipeline:
+def pipeline_of(r: dict, selectivity: float, stage_selectivity: tuple = ()) -> Pipeline:
     t = r["tok"]
     return Pipeline(tuple(r["stages"].split(">")), t["left_rows"], t["left_mean"], t["left_max"],
-                    selectivity, t["right_rows"], t["right_mean"], t["right_max"])
+                    selectivity, t["right_rows"], t["right_mean"], t["right_max"],
+                    tuple(stage_selectivity))
 
 
 def passed_rows(r: dict, pipe: Pipeline) -> float | None:
@@ -655,6 +671,16 @@ def workload_selectivity(workload: str, n: int | None, cache: dict) -> float:
     return entry["selectivity"]
 
 
+def workload_stage_selectivity(workload: str, n: int | None, cache: dict) -> tuple:
+    """Per-stage true selectivity when the workload records it, else ()."""
+    entry = cache.setdefault(f"{workload}:{n or ''}", {})
+    if "stage_selectivity" not in entry:
+        from .workloads import WORKLOADS
+        entry["stage_selectivity"] = [round(x, 4) for x in
+                                      WORKLOADS[workload](n or None).stage_selectivity or ()]
+    return tuple(entry["stage_selectivity"])
+
+
 def pipeline_runs(model: Model, rows: list[dict], cache: dict) -> list[dict]:
     """Every pipeline arm with two predictions: from the rows its filter really
     passed and the map calls really repeated (tests composition alone), and
@@ -664,7 +690,8 @@ def pipeline_runs(model: Model, rows: list[dict], cache: dict) -> list[dict]:
     for source in sorted({r["source"] for r in rows}):
         run = [r for r in rows if r["source"] == source]
         base = run[0]
-        pipe = pipeline_of(base, workload_selectivity(base["workload"], _n_arg(base), cache))
+        pipe = pipeline_of(base, workload_selectivity(base["workload"], _n_arg(base), cache),
+                           workload_stage_selectivity(base["workload"], _n_arg(base), cache))
         for r in run:
             passed = passed_rows(r, pipe)
             comp = model.predict_pipeline(pipe, r["blocks_t"], r["max_num_seqs"], passed=passed,
@@ -886,10 +913,10 @@ def _grid(blocks: tuple, k_max: list[int]) -> list[tuple]:
     return sorted(out)
 
 
-VALIDATION_PHASES = ("validate", "validate3")
+VALIDATION_PHASES = ("validate", "validate3", "validate-jf")
 # Phases the current model is checked on and never fitted on. The first
 # validation phase tested v2; v3 is fitted on it and checked on validate3.
-HELD_OUT = ("validate3",)
+HELD_OUT = ("validate3", "validate-jf")
 MODEL_VERSION = "v3"
 
 
@@ -899,7 +926,9 @@ def _validation_target(model: Model, exp: dict, cache: dict):
     cannot plan it (an operator kind it was not fitted on). A leading filter's
     selectivity is the workload's true share of matching rows."""
     from .workloads import WORKLOADS
-    (part,) = exp["parts"]
+    # The first part is what is validated; later parts (an operator alone)
+    # only share its container.
+    part = exp["parts"][0]
     try:
         workload = WORKLOADS[part["workload"]](part["n"] or None)
     except KeyError:
@@ -916,7 +945,8 @@ def _validation_target(model: Model, exp: dict, cache: dict):
             left = {p[0] if isinstance(p, tuple) else p for p in workload.positives}
             selectivity = len(left) / len(workload.rows)
         return ("pipe", Pipeline(ops, t["left_rows"], t["left_mean"], t["left_max"], selectivity,
-                                 t["right_rows"], t["right_mean"], t["right_max"]))
+                                 t["right_rows"], t["right_mean"], t["right_max"],
+                                 tuple(workload.stage_selectivity or ())))
     kind = workload.kind
     if kind not in model.kinds:
         return None
@@ -1021,7 +1051,8 @@ def score_validation(model: Model, collected: list[dict], choices: dict,
     for exp in _manifest().EXPERIMENTS:
         if exp["phase"] not in VALIDATION_PHASES:
             continue
-        run = {r["arm"]: r for r in collected if r.get("experiment") == exp["id"]}
+        run = {r["arm"]: r for r in collected if r.get("experiment") == exp["id"]
+               and r.get("part") == exp["parts"][0]["name"]}
         c = choices.get(exp["id"])
         if not run or c is None:
             continue
@@ -1094,8 +1125,8 @@ def write_validation(rows: list[dict], out: Path) -> str:
              f"({MODEL_VERSION}) for that arm, from the workload's true selectivity.", "",
              f"Each phase is scored with the choices made before it ran. `validate` was "
              f"chosen by v2 and is now part of {MODEL_VERSION}'s fit, so its "
-             f"\"{RETRO}\" row is in-sample; {', '.join(f'`{p}`' for p in HELD_OUT)} is "
-             f"held out from {MODEL_VERSION}."]
+             f"\"{RETRO}\" row is in-sample; {', '.join(f'`{p}`' for p in HELD_OUT)} "
+             f"{'is' if len(HELD_OUT) == 1 else 'are'} held out from {MODEL_VERSION}."]
     names = [n for n, _ in STRATEGIES] + [RETRO, ORACLE]
     for phase in dict.fromkeys(r["phase"] for r in rows):
         at = [r for r in rows if r["phase"] == phase]

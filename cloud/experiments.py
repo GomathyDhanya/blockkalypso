@@ -199,14 +199,38 @@ VALIDATE3 = [
                "when the filter is blocked.", requires=["block_map"], phase="validate3"),
 ]
 
-EXPERIMENTS = SINGLE + MAP + LONGROWS + PIPELINE + VALIDATE + VALIDATE3
-PHASES = ("single", "map", "longrows", "pipeline", "validate", "validate3")
+# --- Step 6: join -> filter, a pipeline shape the model has never seen -------
+# The join expands rows (32 x 32 pairs) and the filter after it shrinks them.
+# Held out like validate3: the cost model picks before the run. Beside the
+# static sizes and the picks, a grid of join x filter sizes finds the oracle
+# and maps the shape; the join alone shares the container.
+
+JOIN_FILTER_GRID = pipe(*[(j, f) for j in (1, 2, 4, 6) for f in (1, 2, 4, 8)
+                          if (j, f) != (1, 1)])
+
+VALIDATE_JF = [
+    experiment(f"validate-jf/join-filter-{tag}", "validate-jf", [
+        part(f"pipe_join_filter_{tag}", STATIC + JOIN_FILTER_GRID),
+        part(f"pipe_join_filter_{tag}_join", blocks(2, 4, 6), name="alone-join"),
+    ], f"Join -> filter ({purpose}): the filter's input is the join's output, "
+       "so the join's block size changes how many pairs the filter sees.",
+       requires=["algorithm"])
+    for tag, purpose in (("j50_f50", "join 50%, filter 50%"),
+                         ("j62_f10", "join 62%, filter 10%"),
+                         ("j62_f90", "join 62%, filter 90%"),
+                         ("j18_f50", "join 18%, filter 50%"))
+]
+
+EXPERIMENTS = SINGLE + MAP + LONGROWS + PIPELINE + VALIDATE + VALIDATE3 + VALIDATE_JF
+PHASES = ("single", "map", "longrows", "pipeline", "validate", "validate3", "validate-jf")
 
 
 def arms_for(exp, part_) -> list[str]:
     """The part's arms, plus the cost model's picks for a validation experiment."""
     arms = list(part_["arms"])
-    if exp["phase"].startswith("validate") and ALGORITHM_CHOICES.exists():
+    # Picks are for the validated (first) part, not an operator run alone.
+    if (exp["phase"].startswith("validate") and part_["name"] == exp["parts"][0]["name"]
+            and ALGORITHM_CHOICES.exists()):
         picks = json.loads(ALGORITHM_CHOICES.read_text(encoding="utf-8")).get(exp["id"], {})
         arms += [picks[k] for k in ("algorithm", "algorithm_latency", "algorithm_guarded",
                                     "best_in_isolation") if picks.get(k)]

@@ -131,8 +131,10 @@ How to manage blocks through a pipeline:
 
 **Open:**
 
-- **Join first, then a filter.** We haven't run a pipeline where the join
-  expands the rows before a filter.
+- **Join first, then a filter.** Not run yet. The `validate-jf` phase is ready
+  (32×32 review pairs; the join keeps same-sentiment pairs, then the filter keeps
+  both-positive pairs; join 18–62%, filter 10–90%), with v3's picks frozen
+  before the run: join ≈10, filter 2 (guarded: join 1, filter 2–3).
 - **Holding rows vs sending early.** We haven't tested whether holding rows to
   fill a block slows the pipeline. That needs an option to send a partial
   block after a short wait.
@@ -301,7 +303,7 @@ and v3 was 6.1% slower on new experiments it didn't see.
   above).
 - **Experiments still to run:**
   - A row-length sweep (100–1000 tokens) to find where blocking stops paying.
-  - A join → filter pipeline.
+  - A join → filter pipeline (`validate-jf`, ready to run).
   - A test of sending a partial block early instead of waiting for it to fill.
 - **Proposed fixes in Kalypso core:**
   - Block joins: group pairs by left row, so a block shares one left row and
@@ -317,6 +319,7 @@ and v3 was 6.1% slower on new experiments it didn't see.
 | `eval/plots.py` | Regenerates the plots in `results/analysis/plots/` (`python -m vllm.kalypso.benchmark.eval.plots`, needs matplotlib) |
 | `eval/costmodel.py` | The model, the fit, the choice and validation scoring (`python -m vllm.kalypso.benchmark.eval.costmodel`) |
 | `results/analysis/costmodel.md`, `costmodel.json` | Fitted coefficients, per-run choices, every arm's prediction |
+| `results/analysis/REPORT.pdf`, `REPORT.html` | The 2-page report |
 | `results/analysis/validation.md` | Full per-experiment validation tables |
 | `results/analysis/algorithm_choices.json` | The picks, frozen before each validation phase ran |
 | `results/analysis/summary.md`, `arms.csv` | Every measured arm with its metrics |

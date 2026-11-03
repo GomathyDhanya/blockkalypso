@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Batching Semantic Operators: Report</title>
+<style>
+  @page { size: Letter; margin: 0.45in 0.5in; }
+  * { box-sizing: border-box; }
+  body { font: 8.1pt/1.28 "Helvetica Neue", Helvetica, Arial, sans-serif; color: #111; margin: 0; }
+  h1 { font-size: 13pt; margin: 0 0 2pt; }
+  .sub { color: #444; margin: 0 0 5pt; }
+  h2 { font-size: 9.4pt; margin: 6pt 0 2pt; padding-bottom: 1pt; border-bottom: 1px solid #999; }
+  h3 { font-size: 8.4pt; margin: 4pt 0 1.5pt; }
+  p { margin: 0 0 3pt; }
+  table { border-collapse: collapse; width: 100%; margin: 1pt 0 4pt; }
+  th, td { border: 1px solid #bbb; padding: 1pt 3pt; text-align: left; vertical-align: top; }
+  th { background: #eee; font-weight: 600; }
+  td.n, th.n { text-align: right; white-space: nowrap; }
+  tr.hl td { background: #fff4c2; font-weight: 600; }
+  .cols { display: flex; gap: 10pt; }
+  .cols > div { flex: 1; min-width: 0; }
+  .box { background: #f3f6fa; border: 1px solid #c9d4e3; padding: 3pt 5pt; margin: 3pt 0 4pt; }
+  code { font: 7.6pt Menlo, monospace; }
+  .f { font: 8pt Menlo, monospace; display: block; margin: 1pt 0 2pt; }
+  ol, ul { margin: 0 0 3pt; padding-left: 13pt; }
+  li { margin: 0 0 1pt; }
+  img { width: 100%; display: block; }
+  .fig { font-size: 7.2pt; color: #444; margin: 1pt 0 3pt; }
+  .q { font-weight: 600; }
+  .break { break-before: page; }
+</style>
+</head>
+<body>
+
+<h1>Batching semantic operators in Kalypso: when it pays, and how to choose block sizes</h1>
+<p class="sub">Batching study and cost model v3 · L40S, vLLM 0.29.0, Qwen2.5-7B-Instruct · full write-up: <code>results/analysis/STUDY.md</code> (PR #20)</p>
+
+<div class="box">
+<b>Summary.</b> A semantic operator (filter, join or map) can run one row per LLM call (<i>per-tuple</i>) or <i>k</i> rows per call (a <i>block</i>). We measured blocking for each operator alone and in two-stage pipelines (45 runs, 248 arms), fitted a latency cost model, and used it to choose each stage's block size. On 5 held-out experiments the algorithm was <b>1.38x</b> faster than per-tuple. The fastest arm measured was 1.45x, so the algorithm was 6.1% slower than the best possible on average. It beat every fixed block size (k=4: 1.08x, k=16: 0.69x, k=32: 0.47x) and beat tuning each operator on its own (1.31x).
+</div>
+
+<h2>1. Hardware and workloads</h2>
+<div class="cols">
+<div>
+<table>
+<tr><th>Item</th><th>Setting</th><th>Why it matters for batching</th></tr>
+<tr><td>GPU</td><td>1× NVIDIA L40S 48 GB (Modal), one container per experiment</td><td>Sets prefill speed and decode-step time</td></tr>
+<tr><td>Server</td><td>vLLM 0.29.0 OpenAI server, defaults (bf16 weights)</td><td>Batches separate requests on its own (continuous batching)</td></tr>
+<tr><td>Batch limits</td><td><code>max_num_seqs</code> 256, <code>max_num_batched_tokens</code> 2048, <code>max_model_len</code> 32768</td><td>256 calls run at once; more calls run in waves</td></tr>
+<tr><td>Prefix cache</td><td>On, reset before each trial</td><td>Separate calls reuse shared prompt text, so per-tuple is already cheap</td></tr>
+<tr><td>Model</td><td>Qwen2.5-7B-Instruct, temperature 0</td><td>Repeatable answers</td></tr>
+<tr><td>Measure</td><td>1 warm-up + 3 repeats, median; arms interleaved A,B,A,B</td><td>Drift hits all arms equally</td></tr>
+</table>
+</div>
+<div>
+<table>
+<tr><th>Workload</th><th>Op</th><th class="n">Rows</th><th class="n">Tokens/row</th></tr>
+<tr><td>SemBench movie reviews: “clearly positive?”, true selectivity 7–92%</td><td>filter</td><td class="n">100–1865</td><td class="n">~31</td></tr>
+<tr><td>Review pairs: “opposite sentiment?”, match rate 10–90%</td><td>join</td><td class="n">16²–64²</td><td class="n">~31/side</td></tr>
+<tr><td>Reviews: “main reason, one sentence”</td><td>map</td><td class="n">100–500</td><td class="n">~31</td></tr>
+<tr><td>ContractNLI: “contract entails hypothesis?”</td><td>filter</td><td class="n">400</td><td class="n">~1500</td></tr>
+<tr><td>Contract × clause</td><td>join</td><td class="n">24×8</td><td class="n">~1600 + 15</td></tr>
+<tr><td>filter→join, filter→map, map→filter</td><td>pipe</td><td class="n">50–1000</td><td class="n">~31</td></tr>
+</table>
+<p>Correct answers come from dataset labels (SemBench sentiment, ContractNLI entailment). Maps have no labels, so they are scored by ROUGE-1 against per-tuple output. Rows over 512 tokens count as <b>long</b>.</p>
+</div>
+</div>
+
+<h2>2. Findings: operators alone and in pipelines</h2>
+<div class="cols">
+<div>
+<p class="q">When does a block beat separate requests through vLLM?</p>
+<p>vLLM already batches separate requests and caches shared prompt text. A block saves only the work each call repeats (instructions, answer format, extra waves). In exchange, one call has to write <i>k</i> answers one after another.</p>
+<table>
+<tr><th>Case</th><th>Block?</th><th>Measured</th></tr>
+<tr><td>Short rows, short answers (filter, join), many rows</td><td>Yes, k 2–8</td><td>filter 2.2x (1500 rows, k 6–7); join 1.5x (k 2–3)</td></tr>
+<tr><td>Few rows (50–100)</td><td>Barely</td><td>1.0–1.1x; operator startup dominates</td></tr>
+<tr><td>Long rows (~1500 tok)</td><td>No</td><td>≤1.05x; reading the row dominates. Recall 0.70→0.45</td></tr>
+<tr><td>Long answers (map)</td><td>No</td><td>0.37–0.9x; one call writes all k answers</td></tr>
+<tr><td>Large blocks (k ≥ 16)</td><td>No</td><td>0.47–0.69x, and accuracy falls</td></tr>
+</table>
+<img src="plots/speedup_vs_k.png" alt="Speedup vs block size">
+<p class="fig">Speedup over per-tuple vs block size, per operator and row length.</p>
+</div>
+<div>
+<p class="q">How should blocks move through filters that shrink rows and joins that expand them?</p>
+<table>
+<tr><th>Observation</th><th>Evidence</th></tr>
+<tr><td>Blocks stay full: rows are held until a block has k of them; only the last one is partial</td><td>100% fill in every pipeline run checked</td></tr>
+<tr><td>A filter's block size changes the next stage's work</td><td>A blocked filter passes 1.2–4x more rows to the join (recall 0.63 → 0.79)</td></tr>
+<tr><td>Block the expensive stage, not the cheap one before it</td><td>Filter per-tuple + join k=2 was fastest (1.45x)</td></tr>
+<tr><td>Blocking a neighbour makes a per-tuple map cut off and rerun answers</td><td>12–56% of map rows rerun</td></tr>
+<tr><td>Block joins repeat the left row in every pair</td><td>~3.3x prompt tokens on long left rows</td></tr>
+<tr><td>Stages on one GPU add up</td><td>L ≈ 0.98 × Σ stage latencies</td></tr>
+</table>
+<p><b>Rules:</b> (1) choose all stages' block sizes together, because a filter's k sets how many rows the next stage gets (1.38x jointly vs 1.31x per stage); (2) keep blocks full; (3) group block-join pairs by left row (proposed); (4) fix map output-length estimation before blocking around maps (proposed).</p>
+<table>
+<tr><th>filter→join</th><th class="n">s10</th><th class="n">s25</th><th class="n">s50</th><th class="n">s75</th><th class="n">s90</th></tr>
+<tr><td>True positives (of 100)</td><td class="n">7</td><td class="n">30</td><td class="n">48</td><td class="n">68</td><td class="n">92</td></tr>
+<tr><td>Passed, filter per-tuple</td><td class="n">2</td><td class="n">16</td><td class="n">28</td><td class="n">42</td><td class="n">58</td></tr>
+<tr><td>Passed, filter blocked</td><td class="n">8</td><td class="n">23</td><td class="n">36</td><td class="n">50</td><td class="n">78</td></tr>
+</table>
+</div>
+</div>
+
+<h2 class="break">3. Algorithm: deciding whether to block and what size</h2>
+<div class="cols">
+<div>
+<p>No fixed rule works, so the model has a fixed shape whose constants are fitted on measured runs (weighted least squares on relative error). Latency of one stage with N items at block size k:</p>
+<span class="f">L = g[op] + α·P + (β + tail[op])·W·D + γ·C·D + δ·C·p²</span>
+<table>
+<tr><th>Term</th><th>Meaning</th><th>Fitted (L40S)</th></tr>
+<tr><td>g</td><td>Fixed cost to start the operator</td><td>map 0.29 s; filter/join ≈ −0.05 s</td></tr>
+<tr><td>α·P</td><td>Reading prompts: P = prompt tokens not served by the cache</td><td>0.79 s / 10k tok</td></tr>
+<tr><td>β·W·D</td><td>Writing answers: W waves of ≤256 calls × D tokens per answer</td><td>24.8 ms / step (+11 ms map)</td></tr>
+<tr><td>γ·C·D</td><td>Bigger running batch slows each token</td><td>0.1 ms / token</td></tr>
+<tr><td>δ·C·p²</td><td>Attention on long prompts (p in 1k tokens)</td><td>1.77 ms</td></tr>
+</table>
+<p>Calls C = N for per-tuple and ⌈N/k⌉ for blocks. Answer length D grows with k: filter −2.6+4.5k, join −2.6+4.6k, map 63+14.7k tokens. Prompt tokens come from the real prompt template. Pipelines pass row counts from stage to stage: a filter passes N·(recall(k)·s + fpr(k)·(1−s)) for true selectivity s, a join keeps pairs the same way, and map reruns are added. Total L = 0.98·Σ stages.</p>
+<p><b>Fitted on</b> 45 runs (173 single-operator arms, 75 pipeline arms). <b>Error:</b> 4.3% single operator, 13% pipelines, 8.9% on held-out picks.</p>
+</div>
+<div>
+<p><b>Algorithm</b> (input: the pipeline's operators, row count and token lengths, a selectivity estimate):</p>
+<ol>
+<li>For each stage, the largest allowed k: fits the context window and is no larger than the largest size measured for that operator and row length.</li>
+<li>Try every combination of block sizes (k=1 means no blocking).</li>
+<li>For each one, predict every stage's latency, passing on the rows each filter or join keeps.</li>
+<li>Pick the lowest total predicted latency.</li>
+<li>Among options within 2% of the best (the model's error), choose the smallest blocks.</li>
+<li>Optional accuracy guard: cap k where measured F1 dropped by more than 0.02 (maps: ROUGE-1 ≥ 0.8).</li>
+</ol>
+<p><b>Example</b> (filter→join, 100×32 rows, true s = 0.68). The model predicts 10.9 s for filter per-tuple + join k=2; measured 10.4 s, 1.45x, which was the fastest arm. Blocking the filter passes more rows and makes the join slower.</p>
+<p><b>At run time</b> (proposed): re-estimate the pass rate as rows go by, π̂ = (passed + a)/(seen + a + b), and re-plan the stages not yet started. Switch only if the gain is over 5%, and only if the same choice wins at π̂ ± 2σ.</p>
+<p><b>Compared with Trummer</b> (arXiv 2510.08489): his model minimises token cost, so bigger blocks always cost less. On a local GPU, latency rises past k ≈ 8, so his rule would pick our worst sizes. His left×right join layout is worth adopting.</p>
+</div>
+</div>
+
+<h2>4. Validation experiments</h2>
+<div class="cols">
+<div>
+<table>
+<tr><th>Design</th><th>Setting</th></tr>
+<tr><td>Held out</td><td>validate3: sizes, selectivities and shapes not in the fit. The model picks block sizes <i>before</i> the run (picks frozen in <code>algorithm_choices.json</code>)</td></tr>
+<tr><td>Experiments</td><td>filter 1500 rows; join 48×48; filter→join s75; filter→map 250; map→filter 200</td></tr>
+<tr><td>Strategies</td><td>Per-tuple; fixed k 4 / 16 / 32; best-in-isolation (each stage's best size alone); algorithm; algorithm + accuracy guard</td></tr>
+<tr><td>Oracle</td><td>Fastest of all arms, plus a grid around the pick</td></tr>
+<tr><td>Metrics</td><td>Speedup vs per-tuple (geometric mean), regret = slower than oracle, F1 / ROUGE-1 change</td></tr>
+</table>
+<table>
+<tr><th>Strategy</th><th class="n">Speedup</th><th class="n">Regret</th><th class="n">Kept acc.</th></tr>
+<tr><td>Per-tuple</td><td class="n">1.00x</td><td class="n">50.6%</td><td class="n">5/5</td></tr>
+<tr><td>Fixed k=4</td><td class="n">1.08x</td><td class="n">39.0%</td><td class="n">2/5</td></tr>
+<tr><td>Fixed k=16</td><td class="n">0.69x</td><td class="n">162.8%</td><td class="n">1/5</td></tr>
+<tr><td>Fixed k=32</td><td class="n">0.47x</td><td class="n">346.4%</td><td class="n">1/5</td></tr>
+<tr><td>Best in isolation</td><td class="n">1.31x</td><td class="n">11.6%</td><td class="n">3/5</td></tr>
+<tr class="hl"><td>Algorithm (v3)</td><td class="n">1.38x</td><td class="n">6.1%</td><td class="n">3/5</td></tr>
+<tr><td>Algorithm + guard</td><td class="n">1.17x</td><td class="n">25.6%</td><td class="n">5/5</td></tr>
+<tr><td>Oracle</td><td class="n">1.45x</td><td class="n">0%</td><td class="n">3/5</td></tr>
+</table>
+</div>
+<div>
+<table>
+<tr><th>Experiment</th><th>Pick</th><th class="n">Speedup</th><th class="n">Regret</th><th class="n">ΔF1</th></tr>
+<tr><td>Filter, 1500 rows</td><td>k 6</td><td class="n">2.23x</td><td class="n">1.1%</td><td class="n">+0.11</td></tr>
+<tr><td>Join, 48×48</td><td>k 2</td><td class="n">1.52x</td><td class="n">0.9%</td><td class="n">−0.18</td></tr>
+<tr><td>Filter→join, s75</td><td>1, 2</td><td class="n">1.45x</td><td class="n">0%</td><td class="n">−0.13</td></tr>
+<tr><td>Filter→map, 250</td><td>per-tuple</td><td class="n">1.00x</td><td class="n">4.7%</td><td class="n">0.00</td></tr>
+<tr><td>Map→filter, 200</td><td>per-tuple</td><td class="n">1.00x</td><td class="n">23.8%</td><td class="n">0.00</td></tr>
+</table>
+<p>The one miss is map→filter: the model predicted 5.3 s for per-tuple and it took 7.1 s. Repeats varied by about 1 s. Earlier round (picked by v2): 1.07x, regret 12.1%. v3 halved regret on unseen experiments.</p>
+<img src="plots/validation_validate3.png" alt="Held-out validation">
+<p class="fig">Held-out speedups per strategy and experiment.</p>
+<p><b>Next experiment (code ready, picks frozen):</b> <code>validate-jf</code>, join→filter on 32×32 review pairs. The join keeps same-sentiment pairs (18–62%), then the filter keeps pairs where both reviews are positive (10–90%). It compares per-tuple, fixed sizes, the algorithm and a 4×4 grid of join × filter sizes. The model picks join k≈10, filter k=2, because a blocked join keeps fewer pairs. The guarded pick is join 1, filter 2–3.</p>
+</div>
+</div>
+
+<h2>5. Limits</h2>
+<p>One GPU and one model: other hardware needs a refit on a smaller sweep, but the model's shape stays the same. The latency-first pick loses F1 on joins (−0.13 to −0.18), so use the guard when accuracy matters. Only two row lengths were measured (~30 and ~1500 tokens), so where blocking stops paying in between is predicted, not measured. Untested: sending a partial block early instead of waiting for it to fill.</p>
+
+</body>
+</html>

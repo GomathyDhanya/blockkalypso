@@ -2,7 +2,7 @@
 
 Latency first: the algorithm picks the block sizes with the lowest predicted latency, and the oracle is the fastest measured arm. Accuracy is reported, not required: kept quality = F1 within the slack of tuple-wise (and for a pipeline ending in a map, ROUGE-1 similarity at least 0.8). The accuracy-guarded algorithm only blocks where the measured runs kept quality. Speedup over tuple-wise is a geometric mean over the experiments the strategy ran; regret = how much slower than the oracle. Predicted = the current model (v3) for that arm, from the workload's true selectivity.
 
-Each phase is scored with the choices made before it ran. `validate` was chosen by v2 and is now part of v3's fit, so its "Current model, among measured arms" row is in-sample; `validate3` is held out from v3.
+Each phase is scored with the choices made before it ran. `validate` was chosen by v2 and is now part of v3's fit, so its "Current model, among measured arms" row is in-sample; `validate3`, `validate-jf` are held out from v3.
 
 ## Summary: `validate` (chosen by v2; in the current fit)
 

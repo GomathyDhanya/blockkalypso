@@ -382,7 +382,8 @@
     "right_max": 62,
     "right_mean": 38.72,
     "right_rows": 32,
-    "selectivity": 0.07
+    "selectivity": 0.07,
+    "stage_selectivity": []
   },
   "pipe_filter_join_s10_join:": {
     "left_max": 50,
@@ -403,7 +404,8 @@
     "right_max": 62,
     "right_mean": 38.72,
     "right_rows": 32,
-    "selectivity": 0.3
+    "selectivity": 0.3,
+    "stage_selectivity": []
   },
   "pipe_filter_join_s50:": {
     "left_max": 59,
@@ -414,7 +416,8 @@
     "right_max": 62,
     "right_mean": 38.72,
     "right_rows": 32,
-    "selectivity": 0.48
+    "selectivity": 0.48,
+    "stage_selectivity": []
   },
   "pipe_filter_join_s50_join:": {
     "left_max": 59,
@@ -449,7 +452,8 @@
     "right_max": 62,
     "right_mean": 38.72,
     "right_rows": 32,
-    "selectivity": 0.92
+    "selectivity": 0.92,
+    "stage_selectivity": []
   },
   "pipe_filter_join_s90_join:": {
     "left_max": 59,
@@ -474,7 +478,8 @@
     "right_max": 0,
     "right_mean": 0.0,
     "right_rows": 0,
-    "selectivity": 0.746
+    "selectivity": 0.746,
+    "stage_selectivity": []
   },
   "pipe_filter_map:1000": {
     "left_max": 64,
@@ -485,7 +490,8 @@
     "right_max": 0,
     "right_mean": 0.0,
     "right_rows": 0,
-    "selectivity": 0.746
+    "selectivity": 0.746,
+    "stage_selectivity": []
   },
   "pipe_filter_map:250": {
     "left_max": 64,
@@ -506,7 +512,8 @@
     "right_max": 0,
     "right_mean": 0.0,
     "right_rows": 0,
-    "selectivity": 0.74
+    "selectivity": 0.74,
+    "stage_selectivity": []
   },
   "pipe_filter_map_map:": {
     "left_max": 64,
@@ -521,6 +528,46 @@
   "pipe_filter_map_map:373": {
     "max": 64,
     "mean": 31.59
+  },
+  "pipe_join_filter_j18_f50:": {
+    "left_max": 52,
+    "left_mean": 33.28,
+    "left_rows": 32,
+    "max": 111,
+    "mean": 62.44,
+    "right_max": 59,
+    "right_mean": 29.16,
+    "right_rows": 32
+  },
+  "pipe_join_filter_j50_f50:": {
+    "left_max": 52,
+    "left_mean": 29.62,
+    "left_rows": 32,
+    "max": 111,
+    "mean": 62.44,
+    "right_max": 59,
+    "right_mean": 32.81,
+    "right_rows": 32
+  },
+  "pipe_join_filter_j62_f10:": {
+    "left_max": 52,
+    "left_mean": 31.84,
+    "left_rows": 32,
+    "max": 111,
+    "mean": 59.44,
+    "right_max": 59,
+    "right_mean": 27.59,
+    "right_rows": 32
+  },
+  "pipe_join_filter_j62_f90:": {
+    "left_max": 52,
+    "left_mean": 32.91,
+    "left_rows": 32,
+    "max": 103,
+    "mean": 62.0,
+    "right_max": 51,
+    "right_mean": 29.09,
+    "right_rows": 32
   },
   "pipe_map_filter:200": {
     "left_max": 64,
@@ -541,6 +588,7 @@
     "right_max": 0,
     "right_mean": 0.0,
     "right_rows": 0,
-    "selectivity": 0.746
+    "selectivity": 0.746,
+    "stage_selectivity": []
   }
 }
