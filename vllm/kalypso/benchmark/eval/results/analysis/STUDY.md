@@ -425,7 +425,7 @@ and v3 was 6.1% slower on new experiments it didn't see.
 | `eval/plots.py` | Regenerates the plots in `results/analysis/plots/` (`python -m vllm.kalypso.benchmark.eval.plots`, needs matplotlib) |
 | `eval/costmodel.py` | The model, the fit, the choice and validation scoring (`python -m vllm.kalypso.benchmark.eval.costmodel`) |
 | `results/analysis/costmodel.md`, `costmodel.json` | Fitted coefficients, per-run choices, every arm's prediction |
-| `results/analysis/REPORT.pdf`, `REPORT.html` | The 2-page report |
+| `results/analysis/REPORT.docx` | The report (Word, editable), answering the three project questions |
 | `results/analysis/plots/validation_*.png` | One plot per held-out round |
 | `results/analysis/validation.md` | Full per-experiment validation tables |
 | `results/analysis/algorithm_choices.json` | The picks, frozen before each validation phase ran |
