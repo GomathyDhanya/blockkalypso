@@ -1,0 +1,9 @@
+{
+  "id": "validate-jf/join-filter-j18_f50",
+  "started": "2026-11-03T21:07:34+0000",
+  "parts": {
+    "pipe_join_filter_j18_f50": "done",
+    "alone-join": "done"
+  },
+  "finished": "2026-11-03T21:33:00+0000"
+}

@@ -302,8 +302,12 @@ and v3 was 6.1% slower on new experiments it didn't see.
 - **Maps before a filter** are the weakest prediction (the map → filter miss
   above).
 - **Experiments still to run:**
-  - A row-length sweep (100–1000 tokens) to find where blocking stops paying.
-  - A join → filter pipeline (`validate-jf`, ready to run).
+  - `validate4` (ready to run, picks frozen):
+    - a row-length sweep: ContractNLI filters cut to ~146, 267, 505 and 937
+      tokens per row (each entailed row keeps its evidence), k 1/2/4/8/16/32;
+    - held-out long rows: a ContractNLI filter at 75% selectivity, 300 rows,
+      and a ContractNLI join at 40 × 8 (v3 picks per-tuple for both);
+  - `validate-jf` (running): join → filter (above).
   - A test of sending a partial block early instead of waiting for it to fill.
 - **Proposed fixes in Kalypso core:**
   - Block joins: group pairs by left row, so a block shares one left row and

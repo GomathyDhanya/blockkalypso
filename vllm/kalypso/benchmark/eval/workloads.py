@@ -561,8 +561,10 @@ def _contractnli() -> tuple[list[dict], dict[str, str]]:
     """ContractNLI documents (train, dev, test; at most CNLI_MAX_CHARS) and
     the 17 hypotheses.
 
-    Each document is ``{"id", "text", "choices": {label_id: choice}}`` with
-    choice Entailment, Contradiction or NotMentioned.
+    Each document is ``{"id", "text", "choices": {label_id: choice},
+    "evidence": {label_id: (start, end)}}`` with choice Entailment,
+    Contradiction or NotMentioned; evidence is the character range of
+    ``text`` covering the label's evidence spans (labels with spans only).
     """
     path = CONTRACTNLI_DIR / "contract-nli.zip"
     if not path.exists():
@@ -578,8 +580,14 @@ def _contractnli() -> tuple[list[dict], dict[str, str]]:
                 if len(doc["text"]) > CNLI_MAX_CHARS:
                     continue
                 annotations = doc["annotation_sets"][0]["annotations"]
+                # Span offsets are into the unstripped text.
+                shift = len(doc["text"]) - len(doc["text"].lstrip())
+                evidence = {k: (min(doc["spans"][i][0] for i in a["spans"]) - shift,
+                                max(doc["spans"][i][1] for i in a["spans"]) - shift)
+                            for k, a in annotations.items() if a["spans"]}
                 docs.append({"id": f"{split}-{doc['id']}", "text": doc["text"].strip(),
-                             "choices": {k: a["choice"] for k, a in annotations.items()}})
+                             "choices": {k: a["choice"] for k, a in annotations.items()},
+                             "evidence": evidence})
     return docs, hypotheses
 
 
@@ -627,6 +635,78 @@ def load_cnli_selectivity(name: str, n: int | None = None) -> Workload:
             rows.append((_cnli_row(doc["text"], hypotheses[rng.choice(entailed)]), True))
         elif negative and other:
             rows.append((_cnli_row(doc["text"], hypotheses[rng.choice(other)]), False))
+    if len(rows) < SELECTIVITY_ROWS:
+        raise ValueError(f"{name}: only {len(rows)} usable contracts for {SELECTIVITY_ROWS} rows")
+    rng.shuffle(rows)
+    rows = rows[:_limit(n, len(rows), name)]
+    return Workload(
+        name=name, kind=FILTER,
+        data_path=_cnli_csv(f"{name}_{len(rows)}", [t for t, _ in rows]),
+        instruction=CONTRACTNLI_ENTAILMENT,
+        rows=[Row(i, t) for i, (t, _) in enumerate(rows)],
+        positives=frozenset(i for i, (_, p) in enumerate(rows) if p),
+    )
+
+
+# Row-length sweep: the ContractNLI filter with each contract cut to a window
+# of about L tokens (CNLI_CHARS_PER_TOKEN characters each), so only the row
+# length changes. An entailed row's window holds all of that label's evidence,
+# so its label stays true; a negative row's window is anywhere (cutting text
+# cannot make a hypothesis entailed). Half the rows are entailed, one row per
+# contract as in cnli_sel*. Named by the target length in tokens.
+CNLI_CHARS_PER_TOKEN = 5
+CNLI_LENGTHS = {"cnli_len128": 128, "cnli_len256": 256, "cnli_len512": 512,
+                "cnli_len1024": 1024}
+CNLI_LENGTH_SELECTIVITY = 0.5
+
+
+def _window(text: str, size: int, cover: tuple[int, int] | None,
+            rng: random.Random) -> str | None:
+    """About ``size`` characters of ``text`` at word boundaries, containing
+    ``cover`` when given; None if ``cover`` is wider than ``size``."""
+    if len(text) <= size:
+        return text
+    lo, hi = 0, len(text) - size
+    if cover is not None:
+        if cover[1] - cover[0] > size:
+            return None
+        lo, hi = max(0, cover[1] - size), min(cover[0], hi)
+    start = rng.randint(lo, hi)
+    end = start + size
+    # Widen to word boundaries so no word is cut.
+    while start > 0 and not text[start - 1].isspace():
+        start -= 1
+    while end < len(text) and not text[end].isspace():
+        end += 1
+    return text[start:end].strip()
+
+
+def load_cnli_length(name: str, n: int | None = None) -> Workload:
+    """ContractNLI entailment filter at a set row length (``CNLI_LENGTHS``)."""
+    docs, hypotheses = _contractnli()
+    size = CNLI_LENGTHS[name] * CNLI_CHARS_PER_TOKEN
+    rng = random.Random(SELECTIVITY_SEED)
+    docs = rng.sample(docs, len(docs))
+    want = round(CNLI_LENGTH_SELECTIVITY * SELECTIVITY_ROWS)
+    rows = []  # (text, is_positive)
+    for doc in docs:
+        n_pos = sum(p for _, p in rows)
+        positive, negative = n_pos < want, len(rows) - n_pos < SELECTIVITY_ROWS - want
+        if not (positive or negative):
+            break
+        entailed = sorted(k for k, c in doc["choices"].items()
+                          if c == "Entailment" and k in doc["evidence"])
+        other = sorted(k for k, c in doc["choices"].items() if c != "Entailment")
+        # A positive row takes the first entailed label whose evidence fits.
+        fits = [k for k in rng.sample(entailed, len(entailed))
+                if doc["evidence"][k][1] - doc["evidence"][k][0] <= size]
+        if positive and fits:
+            k = fits[0]
+            text = _window(doc["text"], size, doc["evidence"][k], rng)
+            rows.append((_cnli_row(text, hypotheses[k]), True))
+        elif negative and other:
+            k = rng.choice(other)
+            rows.append((_cnli_row(_window(doc["text"], size, None, rng), hypotheses[k]), False))
     if len(rows) < SELECTIVITY_ROWS:
         raise ValueError(f"{name}: only {len(rows)} usable contracts for {SELECTIVITY_ROWS} rows")
     rng.shuffle(rows)
@@ -697,4 +777,5 @@ WORKLOADS = {
     **{name: (lambda n=None, name=name: load_cnli_selectivity(name, n))
        for name in CNLI_SELECTIVITIES},
     **{name: (lambda n=None, name=name: load_cnli_join(name, n)) for name in CNLI_JOINS},
+    **{name: (lambda n=None, name=name: load_cnli_length(name, n)) for name in CNLI_LENGTHS},
 }

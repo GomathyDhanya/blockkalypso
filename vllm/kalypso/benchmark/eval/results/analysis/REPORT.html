@@ -170,12 +170,12 @@
 <p>The one miss is map→filter: the model predicted 5.3 s for per-tuple and it took 7.1 s. Repeats varied by about 1 s. Earlier round (picked by v2): 1.07x, regret 12.1%. v3 halved regret on unseen experiments.</p>
 <img src="plots/validation_validate3.png" alt="Held-out validation">
 <p class="fig">Held-out speedups per strategy and experiment.</p>
-<p><b>Next experiment (code ready, picks frozen):</b> <code>validate-jf</code>, join→filter on 32×32 review pairs. The join keeps same-sentiment pairs (18–62%), then the filter keeps pairs where both reviews are positive (10–90%). It compares per-tuple, fixed sizes, the algorithm and a 4×4 grid of join × filter sizes. The model picks join k≈10, filter k=2, because a blocked join keeps fewer pairs. The guarded pick is join 1, filter 2–3.</p>
+<p><b>Next rounds (picks frozen), same baselines.</b> (1) <code>validate-jf</code>, <b>join→filter</b>, 32×32 review pairs: the join keeps same-sentiment pairs (18–62%), then the filter keeps both-positive pairs (10–90%). Includes a 4×4 grid of join × filter sizes. Model picks join ≈10, filter 2, because a blocked join keeps fewer pairs. Guarded pick: join 1, filter 2–3. <code>validate4</code>: (2) <b>held-out long rows</b>: ContractNLI filter (75%, 300 rows) and join (40×8). Model picks per-tuple. (3) <b>Row-length sweep</b>: contracts cut to ~146 / 267 / 505 / 937 tokens per row. Model picks k=2 (per-tuple at 937 when guarded).</p>
 </div>
 </div>
 
 <h2>5. Limits</h2>
-<p>One GPU and one model: other hardware needs a refit on a smaller sweep, but the model's shape stays the same. The latency-first pick loses F1 on joins (−0.13 to −0.18), so use the guard when accuracy matters. Only two row lengths were measured (~30 and ~1500 tokens), so where blocking stops paying in between is predicted, not measured. Untested: sending a partial block early instead of waiting for it to fill.</p>
+<p>One GPU and one model: other hardware needs a refit on a smaller sweep, but the model's shape stays the same. The latency-first pick loses F1 on joins (−0.13 to −0.18), so use the guard when accuracy matters. Only two row lengths are measured so far (~30 and ~1500 tokens); the in-between lengths come with <code>validate4</code>. Untested: sending a partial block early instead of waiting for it to fill.</p>
 
 </body>
 </html>

@@ -158,8 +158,8 @@ PIPELINE = [
 STATIC = blocks(4, 16, 32)
 
 
-def validation(id, workload, n, purpose, requires=(), phase="validate"):
-    return experiment(f"{phase}/{id}", phase, [part(workload, STATIC, n=n)],
+def validation(id, workload, n, purpose, requires=(), phase="validate", extra=()):
+    return experiment(f"{phase}/{id}", phase, [part(workload, [*STATIC, *extra], n=n)],
                       purpose, requires=["algorithm", *requires])
 
 
@@ -199,11 +199,16 @@ VALIDATE3 = [
                "when the filter is blocked.", requires=["block_map"], phase="validate3"),
 ]
 
-# --- Step 6: join -> filter, a pipeline shape the model has never seen -------
-# The join expands rows (32 x 32 pairs) and the filter after it shrinks them.
-# Held out like validate3: the cost model picks before the run. Beside the
-# static sizes and the picks, a grid of join x filter sizes finds the oracle
-# and maps the shape; the join alone shares the container.
+# --- Step 6: held-out rounds after validate3 ---------------------------------
+# Held out like validate3: the cost model picks before the run.
+# validate-jf: join -> filter, a shape the model has never seen. The join
+# expands rows (32 x 32 pairs) and the filter after it shrinks them. Beside
+# the static sizes and the picks, a grid of join x filter sizes finds the
+# oracle; the join alone shares the container.
+# validate4: long rows (~1500 tokens) at a selectivity and size not in the
+# fit, where the algorithm should not block; and row lengths between the
+# short (~31 tokens) and long rows measured so far: where does blocking stop
+# paying?
 
 JOIN_FILTER_GRID = pipe(*[(j, f) for j in (1, 2, 4, 6) for f in (1, 2, 4, 8)
                           if (j, f) != (1, 1)])
@@ -221,8 +226,22 @@ VALIDATE_JF = [
                          ("j18_f50", "join 18%, filter 50%"))
 ]
 
-EXPERIMENTS = SINGLE + MAP + LONGROWS + PIPELINE + VALIDATE + VALIDATE3 + VALIDATE_JF
-PHASES = ("single", "map", "longrows", "pipeline", "validate", "validate3", "validate-jf")
+VALIDATE4 = [
+    validation("cnli-filter-s75-n300", "cnli_sel75", 300,
+               "Long rows at an unseen selectivity and size: the algorithm should not block.",
+               requires=["contractnli"], phase="validate4"),
+    validation("cnli-join-high-n40", "cnli_join_high", 40,
+               "Long-row join at an unseen size (40 x 8): block joins repeat the contract, "
+               "so the algorithm should not block.", requires=["contractnli"], phase="validate4"),
+    *[validation(f"cnli-len{n}", f"cnli_len{n}", 0,
+                 f"Filter on ~{n}-token rows (ContractNLI cut to a window): where between "
+                 "short and long rows blocking stops paying.",
+                 requires=["contractnli"], phase="validate4", extra=blocks(2, 8))
+      for n in (128, 256, 512, 1024)],
+]
+
+EXPERIMENTS = SINGLE + MAP + LONGROWS + PIPELINE + VALIDATE + VALIDATE3 + VALIDATE_JF + VALIDATE4
+PHASES = ("single", "map", "longrows", "pipeline", "validate", "validate3", "validate-jf", "validate4")
 
 
 def arms_for(exp, part_) -> list[str]:

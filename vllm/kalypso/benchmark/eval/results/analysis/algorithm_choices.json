@@ -416,5 +416,150 @@
       ],
       "guarded_s": 13.11
     }
+  },
+  "validate4/cnli-filter-s75-n300": {
+    "model": "v3",
+    "algorithm": "kalypso_per_tuple",
+    "algorithm_latency": "kalypso_per_tuple",
+    "algorithm_guarded": "kalypso_per_tuple",
+    "best_in_isolation": "kalypso_block:2",
+    "grid": [
+      "kalypso_block:2"
+    ],
+    "predicted": {
+      "items": 300,
+      "item_tokens": 1482.75,
+      "regime": "long",
+      "blocks": [
+        1
+      ],
+      "latency_s": 38.773,
+      "guarded": [
+        1
+      ],
+      "guarded_s": 38.773
+    }
+  },
+  "validate4/cnli-join-high-n40": {
+    "model": "v3",
+    "algorithm": "kalypso_per_tuple",
+    "algorithm_latency": "kalypso_per_tuple",
+    "algorithm_guarded": "kalypso_per_tuple",
+    "best_in_isolation": "kalypso_per_tuple",
+    "grid": [
+      "kalypso_block:2"
+    ],
+    "predicted": {
+      "items": 320,
+      "item_tokens": 1645.53,
+      "regime": "long",
+      "blocks": [
+        1
+      ],
+      "latency_s": 9.966,
+      "guarded": [
+        1
+      ],
+      "guarded_s": 9.966
+    }
+  },
+  "validate4/cnli-len128": {
+    "model": "v3",
+    "algorithm": "kalypso_block:2",
+    "algorithm_latency": "kalypso_block:2",
+    "algorithm_guarded": "kalypso_block:2",
+    "best_in_isolation": "kalypso_block:4",
+    "grid": [
+      "kalypso_per_tuple",
+      "kalypso_block:3",
+      "kalypso_block:4"
+    ],
+    "predicted": {
+      "items": 400,
+      "item_tokens": 145.84,
+      "regime": "short",
+      "blocks": [
+        2
+      ],
+      "latency_s": 5.632,
+      "guarded": [
+        2
+      ],
+      "guarded_s": 5.632
+    }
+  },
+  "validate4/cnli-len256": {
+    "model": "v3",
+    "algorithm": "kalypso_block:2",
+    "algorithm_latency": "kalypso_block:2",
+    "algorithm_guarded": "kalypso_block:2",
+    "best_in_isolation": "kalypso_block:4",
+    "grid": [
+      "kalypso_per_tuple",
+      "kalypso_block:3",
+      "kalypso_block:4"
+    ],
+    "predicted": {
+      "items": 400,
+      "item_tokens": 266.84,
+      "regime": "short",
+      "blocks": [
+        2
+      ],
+      "latency_s": 9.544,
+      "guarded": [
+        2
+      ],
+      "guarded_s": 9.544
+    }
+  },
+  "validate4/cnli-len512": {
+    "model": "v3",
+    "algorithm": "kalypso_block:2",
+    "algorithm_latency": "kalypso_block:2",
+    "algorithm_guarded": "kalypso_block:2",
+    "best_in_isolation": "kalypso_block:4",
+    "grid": [
+      "kalypso_per_tuple",
+      "kalypso_block:3",
+      "kalypso_block:4"
+    ],
+    "predicted": {
+      "items": 400,
+      "item_tokens": 504.92,
+      "regime": "short",
+      "blocks": [
+        2
+      ],
+      "latency_s": 17.362,
+      "guarded": [
+        2
+      ],
+      "guarded_s": 17.362
+    }
+  },
+  "validate4/cnli-len1024": {
+    "model": "v3",
+    "algorithm": "kalypso_block:2",
+    "algorithm_latency": "kalypso_block:2",
+    "algorithm_guarded": "kalypso_per_tuple",
+    "best_in_isolation": "kalypso_block:2",
+    "grid": [
+      "kalypso_block:3",
+      "kalypso_block:4"
+    ],
+    "predicted": {
+      "items": 400,
+      "item_tokens": 937.46,
+      "regime": "long",
+      "blocks": [
+        2
+      ],
+      "latency_s": 31.977,
+      "guarded": [
+        1
+      ],
+      "guarded_s": 33.365
+    }
   }
 }

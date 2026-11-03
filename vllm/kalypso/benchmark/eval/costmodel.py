@@ -913,10 +913,10 @@ def _grid(blocks: tuple, k_max: list[int]) -> list[tuple]:
     return sorted(out)
 
 
-VALIDATION_PHASES = ("validate", "validate3", "validate-jf")
+VALIDATION_PHASES = ("validate", "validate3", "validate-jf", "validate4")
 # Phases the current model is checked on and never fitted on. The first
 # validation phase tested v2; v3 is fitted on it and checked on validate3.
-HELD_OUT = ("validate3", "validate-jf")
+HELD_OUT = ("validate3", "validate-jf", "validate4")
 MODEL_VERSION = "v3"
 
 

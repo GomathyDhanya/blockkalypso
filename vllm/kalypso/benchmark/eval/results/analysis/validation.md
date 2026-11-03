@@ -2,7 +2,7 @@
 
 Latency first: the algorithm picks the block sizes with the lowest predicted latency, and the oracle is the fastest measured arm. Accuracy is reported, not required: kept quality = F1 within the slack of tuple-wise (and for a pipeline ending in a map, ROUGE-1 similarity at least 0.8). The accuracy-guarded algorithm only blocks where the measured runs kept quality. Speedup over tuple-wise is a geometric mean over the experiments the strategy ran; regret = how much slower than the oracle. Predicted = the current model (v3) for that arm, from the workload's true selectivity.
 
-Each phase is scored with the choices made before it ran. `validate` was chosen by v2 and is now part of v3's fit, so its "Current model, among measured arms" row is in-sample; `validate3`, `validate-jf` are held out from v3.
+Each phase is scored with the choices made before it ran. `validate` was chosen by v2 and is now part of v3's fit, so its "Current model, among measured arms" row is in-sample; `validate3`, `validate-jf`, `validate4` are held out from v3.
 
 ## Summary: `validate` (chosen by v2; in the current fit)
 
@@ -30,6 +30,19 @@ Each phase is scored with the choices made before it ran. `validate` was chosen 
 | Algorithm | 5 | 3/5 | 0 | 1.38x | 6.1% | 23.8% | 8.9% |
 | Algorithm with accuracy guard | 5 | 5/5 | 0 | 1.17x | 25.6% | 53.8% | 9.1% |
 | Oracle (fastest measured) | 5 | 3/5 | 0 | 1.45x | 0.0% | 0.0% | 7.4% |
+
+## Summary: `validate-jf` (chosen by v3; held out)
+
+| Strategy | Experiments | Kept quality | Failed | Speedup (geomean) | Regret (mean) | Regret (max) | Prediction error (mean) |
+|---|---|---|---|---|---|---|---|
+| Tuple-wise | 1 | 1/1 | 0 | 1.00x | 28.7% | 28.7% | 28.8% |
+| Static 4 | 1 | 1/1 | 0 | 1.27x | 1.2% | 1.2% | 12.7% |
+| Static 16 | 1 | 1/1 | 0 | 0.90x | 43.0% | 43.0% | 18.5% |
+| Static 32 | 1 | 0/1 | 0 | 0.64x | 102.4% | 102.4% | 23.1% |
+| Best in isolation | 1 | 1/1 | 0 | 1.28x | 0.7% | 0.7% | 5.4% |
+| Algorithm | 1 | 1/1 | 0 | 1.21x | 6.5% | 6.5% | 6.6% |
+| Algorithm with accuracy guard | 1 | 1/1 | 0 | 1.07x | 20.3% | 20.3% | 22.5% |
+| Oracle (fastest measured) | 1 | 1/1 | 0 | 1.29x | 0.0% | 0.0% | 11.2% |
 
 ## validate/filter-join-s25
 
@@ -179,3 +192,16 @@ Each phase is scored with the choices made before it ran. `validate` was chosen 
 | Algorithm | `kalypso_per_tuple` | 7.08 | 1.00x | 23.8% | +0.00 | – | yes | 5.31 |
 | Algorithm with accuracy guard | `kalypso_per_tuple` | 7.08 | 1.00x | 23.8% | +0.00 | – | yes | 5.31 |
 | Oracle (fastest measured) | `kalypso_pipe:1,2` | 5.72 | 1.24x | 0.0% | +0.05 | – | yes | 6.35 |
+
+## validate-jf/join-filter-j18_f50
+
+| Strategy | Arm | Latency (s) | Speedup | Regret | ΔF1 | Sim | Kept quality | Predicted (s) |
+|---|---|---|---|---|---|---|---|---|
+| Tuple-wise | `kalypso_per_tuple` | 11.46 | 1.00x | 28.7% | +0.00 | – | yes | 14.76 |
+| Static 4 | `kalypso_block:4` | 9.01 | 1.27x | 1.2% | +0.47 | – | yes | 10.15 |
+| Static 16 | `kalypso_block:16` | 12.73 | 0.90x | 43.0% | +0.31 | – | yes | 10.37 |
+| Static 32 | `kalypso_block:32` | 18.02 | 0.64x | 102.4% | -0.04 | – | no | 13.85 |
+| Best in isolation | `kalypso_pipe:5,4` | 8.96 | 1.28x | 0.7% | +0.41 | – | yes | 9.45 |
+| Algorithm | `kalypso_pipe:9,2` | 9.48 | 1.21x | 6.5% | +0.34 | – | yes | 8.85 |
+| Algorithm with accuracy guard | `kalypso_pipe:1,2` | 10.70 | 1.07x | 20.3% | +0.00 | – | yes | 13.11 |
+| Oracle (fastest measured) | `kalypso_pipe:2,2` | 8.90 | 1.29x | 0.0% | +0.27 | – | yes | 9.90 |
