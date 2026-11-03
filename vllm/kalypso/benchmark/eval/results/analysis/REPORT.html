@@ -6,7 +6,7 @@
 <style>
   @page { size: Letter; margin: 0.45in 0.5in; }
   * { box-sizing: border-box; }
-  body { font: 8.1pt/1.28 "Helvetica Neue", Helvetica, Arial, sans-serif; color: #111; margin: 0; }
+  body { font: 7.9pt/1.25 "Helvetica Neue", Helvetica, Arial, sans-serif; color: #111; margin: 0; }
   h1 { font-size: 13pt; margin: 0 0 2pt; }
   .sub { color: #444; margin: 0 0 5pt; }
   h2 { font-size: 9.4pt; margin: 6pt 0 2pt; padding-bottom: 1pt; border-bottom: 1px solid #999; }
@@ -36,7 +36,7 @@
 <p class="sub">Batching study and cost model v3 · L40S, vLLM 0.29.0, Qwen2.5-7B-Instruct · full write-up: <code>results/analysis/STUDY.md</code> (PR #20)</p>
 
 <div class="box">
-<b>Summary.</b> A semantic operator (filter, join or map) can run one row per LLM call (<i>per-tuple</i>) or <i>k</i> rows per call (a <i>block</i>). We measured blocking for each operator alone and in two-stage pipelines (45 runs, 248 arms), fitted a latency cost model, and used it to choose each stage's block size. On 5 held-out experiments the algorithm was <b>1.38x</b> faster than per-tuple. The fastest arm measured was 1.45x, so the algorithm was 6.1% slower than the best possible on average. It beat every fixed block size (k=4: 1.08x, k=16: 0.69x, k=32: 0.47x) and beat tuning each operator on its own (1.31x).
+<b>Summary.</b> A semantic operator (filter, join or map) can run one row per LLM call (<i>per-tuple</i>) or <i>k</i> rows per call (a <i>block</i>). We measured blocking for each operator alone and in two-stage pipelines (45 runs, 248 arms), fitted a latency cost model, and used it to choose each stage's block size. On <b>15 held-out experiments</b> in three rounds, the algorithm was <b>1.19x</b> faster than per-tuple, and 5.7% slower on average than the fastest arm measured (1.26x). It beat every fixed block size (k=4: 1.00x, k=16: 0.80x, k=32: 0.58x) and tied with using each operator's best size from the single-operator runs (1.20x). Its worst case was 24% slower than the best arm; every fixed size had cases 90–860% slower. Blocking pays for short rows with short answers (up to 2.2x). The gain fades with row length (1.33x at 146 tokens, 1.07x at 505, none by ~1000) and is never worth it for maps.
 </div>
 
 <h2>1. Hardware and workloads</h2>
@@ -60,7 +60,9 @@
 <tr><td>Reviews: “main reason, one sentence”</td><td>map</td><td class="n">100–500</td><td class="n">~31</td></tr>
 <tr><td>ContractNLI: “contract entails hypothesis?”</td><td>filter</td><td class="n">400</td><td class="n">~1500</td></tr>
 <tr><td>Contract × clause</td><td>join</td><td class="n">24×8</td><td class="n">~1600 + 15</td></tr>
+<tr><td>ContractNLI cut to a window that keeps the evidence</td><td>filter</td><td class="n">400</td><td class="n">146–937</td></tr>
 <tr><td>filter→join, filter→map, map→filter</td><td>pipe</td><td class="n">50–1000</td><td class="n">~31</td></tr>
+<tr><td>join→filter: “same sentiment?” then “both positive?”</td><td>pipe</td><td class="n">32×32</td><td class="n">~31/side</td></tr>
 </table>
 <p>Correct answers come from dataset labels (SemBench sentiment, ContractNLI entailment). Maps have no labels, so they are scored by ROUGE-1 against per-tuple output. Rows over 512 tokens count as <b>long</b>.</p>
 </div>
@@ -75,12 +77,13 @@
 <tr><th>Case</th><th>Block?</th><th>Measured</th></tr>
 <tr><td>Short rows, short answers (filter, join), many rows</td><td>Yes, k 2–8</td><td>filter 2.2x (1500 rows, k 6–7); join 1.5x (k 2–3)</td></tr>
 <tr><td>Few rows (50–100)</td><td>Barely</td><td>1.0–1.1x; operator startup dominates</td></tr>
-<tr><td>Long rows (~1500 tok)</td><td>No</td><td>≤1.05x; reading the row dominates. Recall 0.70→0.45</td></tr>
+<tr><td>Medium rows (146–505 tok)</td><td>A little, k 2–3</td><td>1.33x at 146, 1.15x at 267, 1.07x at 505 tokens</td></tr>
+<tr><td>Long rows (937–1500 tok)</td><td>No</td><td>≤1.02x; reading the row dominates. Recall 0.70→0.45</td></tr>
 <tr><td>Long answers (map)</td><td>No</td><td>0.37–0.9x; one call writes all k answers</td></tr>
 <tr><td>Large blocks (k ≥ 16)</td><td>No</td><td>0.47–0.69x, and accuracy falls</td></tr>
 </table>
-<img src="plots/speedup_vs_k.png" alt="Speedup vs block size">
-<p class="fig">Speedup over per-tuple vs block size, per operator and row length.</p>
+<img src="plots/speedup_vs_row_length.png" alt="Speedup vs row length" style="width:88%">
+<p class="fig">Best filter speedup vs row length: model (line), fitted runs (dots), held-out sweep (stars).</p>
 </div>
 <div>
 <p class="q">How should blocks move through filters that shrink rows and joins that expand them?</p>
@@ -92,6 +95,8 @@
 <tr><td>Blocking a neighbour makes a per-tuple map cut off and rerun answers</td><td>12–56% of map rows rerun</td></tr>
 <tr><td>Block joins repeat the left row in every pair</td><td>~3.3x prompt tokens on long left rows</td></tr>
 <tr><td>Stages on one GPU add up</td><td>L ≈ 0.98 × Σ stage latencies</td></tr>
+<tr><td>Join→filter: small blocks in both stages win</td><td>join 2, filter 2–3: 1.21–1.40x</td></tr>
+<tr><td>A join's recall depends on its wording, and per-tuple can fail where blocks don't</td><td>“Same sentiment?”: per-tuple join kept 0–8% of true pairs, blocks 23–49%</td></tr>
 </table>
 <p><b>Rules:</b> (1) choose all stages' block sizes together, because a filter's k sets how many rows the next stage gets (1.38x jointly vs 1.31x per stage); (2) keep blocks full; (3) group block-join pairs by left row (proposed); (4) fix map output-length estimation before blocking around maps (proposed).</p>
 <table>
@@ -100,6 +105,7 @@
 <tr><td>Passed, filter per-tuple</td><td class="n">2</td><td class="n">16</td><td class="n">28</td><td class="n">42</td><td class="n">58</td></tr>
 <tr><td>Passed, filter blocked</td><td class="n">8</td><td class="n">23</td><td class="n">36</td><td class="n">50</td><td class="n">78</td></tr>
 </table>
+
 </div>
 </div>
 
@@ -117,7 +123,7 @@
 <tr><td>δ·C·p²</td><td>Attention on long prompts (p in 1k tokens)</td><td>1.77 ms</td></tr>
 </table>
 <p>Calls C = N for per-tuple and ⌈N/k⌉ for blocks. Answer length D grows with k: filter −2.6+4.5k, join −2.6+4.6k, map 63+14.7k tokens. Prompt tokens come from the real prompt template. Pipelines pass row counts from stage to stage: a filter passes N·(recall(k)·s + fpr(k)·(1−s)) for true selectivity s, a join keeps pairs the same way, and map reruns are added. Total L = 0.98·Σ stages.</p>
-<p><b>Fitted on</b> 45 runs (173 single-operator arms, 75 pipeline arms). <b>Error:</b> 4.3% single operator, 13% pipelines, 8.9% on held-out picks.</p>
+<p><b>Fitted on</b> 45 runs (173 single-operator arms, 75 pipeline arms). <b>Error:</b> 4.3% single operator, 13% pipelines, 6.3% on the 15 held-out picks.</p>
 </div>
 <div>
 <p><b>Algorithm</b> (input: the pipeline's operators, row count and token lengths, a selectivity estimate):</p>
@@ -140,42 +146,51 @@
 <div>
 <table>
 <tr><th>Design</th><th>Setting</th></tr>
-<tr><td>Held out</td><td>validate3: sizes, selectivities and shapes not in the fit. The model picks block sizes <i>before</i> the run (picks frozen in <code>algorithm_choices.json</code>)</td></tr>
-<tr><td>Experiments</td><td>filter 1500 rows; join 48×48; filter→join s75; filter→map 250; map→filter 200</td></tr>
-<tr><td>Strategies</td><td>Per-tuple; fixed k 4 / 16 / 32; best-in-isolation (each stage's best size alone); algorithm; algorithm + accuracy guard</td></tr>
-<tr><td>Oracle</td><td>Fastest of all arms, plus a grid around the pick</td></tr>
-<tr><td>Metrics</td><td>Speedup vs per-tuple (geometric mean), regret = slower than oracle, F1 / ROUGE-1 change</td></tr>
-</table>
-<table>
-<tr><th>Strategy</th><th class="n">Speedup</th><th class="n">Regret</th><th class="n">Kept acc.</th></tr>
-<tr><td>Per-tuple</td><td class="n">1.00x</td><td class="n">50.6%</td><td class="n">5/5</td></tr>
-<tr><td>Fixed k=4</td><td class="n">1.08x</td><td class="n">39.0%</td><td class="n">2/5</td></tr>
-<tr><td>Fixed k=16</td><td class="n">0.69x</td><td class="n">162.8%</td><td class="n">1/5</td></tr>
-<tr><td>Fixed k=32</td><td class="n">0.47x</td><td class="n">346.4%</td><td class="n">1/5</td></tr>
-<tr><td>Best in isolation</td><td class="n">1.31x</td><td class="n">11.6%</td><td class="n">3/5</td></tr>
-<tr class="hl"><td>Algorithm (v3)</td><td class="n">1.38x</td><td class="n">6.1%</td><td class="n">3/5</td></tr>
-<tr><td>Algorithm + guard</td><td class="n">1.17x</td><td class="n">25.6%</td><td class="n">5/5</td></tr>
-<tr><td>Oracle</td><td class="n">1.45x</td><td class="n">0%</td><td class="n">3/5</td></tr>
+<tr><td>Held out</td><td>Sizes, selectivities, row lengths and pipeline shapes not in the fit. The model picks block sizes <i>before</i> each run (picks frozen in <code>algorithm_choices.json</code>)</td></tr>
+<tr><td>Rounds</td><td><b>validate3</b>: filter 1500 rows; join 48×48; filter→join; filter→map; map→filter. <b>validate-jf</b> (jf): join→filter at 4 selectivities. <b>validate4</b>: long-row filter and join; filters at 146 / 267 / 505 / 937 tokens per row</td></tr>
+<tr><td>Strategies</td><td>Per-tuple; fixed k 4 / 16 / 32 (same k for every stage); best in isolation; algorithm; algorithm + accuracy guard</td></tr>
+<tr><td>Oracle</td><td>Fastest of all arms run, including a grid around the pick</td></tr>
+<tr><td>Metrics</td><td>Speedup vs per-tuple (geometric mean), regret = how much slower than the oracle, F1 change vs per-tuple</td></tr>
 </table>
 </div>
 <div>
 <table>
-<tr><th>Experiment</th><th>Pick</th><th class="n">Speedup</th><th class="n">Regret</th><th class="n">ΔF1</th></tr>
-<tr><td>Filter, 1500 rows</td><td>k 6</td><td class="n">2.23x</td><td class="n">1.1%</td><td class="n">+0.11</td></tr>
-<tr><td>Join, 48×48</td><td>k 2</td><td class="n">1.52x</td><td class="n">0.9%</td><td class="n">−0.18</td></tr>
-<tr><td>Filter→join, s75</td><td>1, 2</td><td class="n">1.45x</td><td class="n">0%</td><td class="n">−0.13</td></tr>
-<tr><td>Filter→map, 250</td><td>per-tuple</td><td class="n">1.00x</td><td class="n">4.7%</td><td class="n">0.00</td></tr>
-<tr><td>Map→filter, 200</td><td>per-tuple</td><td class="n">1.00x</td><td class="n">23.8%</td><td class="n">0.00</td></tr>
+<tr><th>Speedup</th><th class="n">validate3</th><th class="n">jf</th><th class="n">validate4</th><th class="n">All 15</th><th class="n">Regret</th></tr>
+<tr><td>Per-tuple</td><td class="n">1.00x</td><td class="n">1.00x</td><td class="n">1.00x</td><td class="n">1.00x</td><td class="n">29%</td></tr>
+<tr><td>Fixed k=4</td><td class="n">1.08x</td><td class="n">1.25x</td><td class="n">0.82x</td><td class="n">1.00x</td><td class="n">40%</td></tr>
+<tr><td>Fixed k=16</td><td class="n">0.69x</td><td class="n">0.89x</td><td class="n">0.86x</td><td class="n">0.80x</td><td class="n">82%</td></tr>
+<tr><td>Fixed k=32</td><td class="n">0.47x</td><td class="n">0.62x</td><td class="n">0.73x</td><td class="n">0.58x</td><td class="n">184%</td></tr>
+<tr><td>Best in isolation</td><td class="n">1.31x</td><td class="n">1.25x</td><td class="n">1.08x</td><td class="n">1.20x</td><td class="n">5.5%</td></tr>
+<tr class="hl"><td>Algorithm (v3)</td><td class="n">1.38x</td><td class="n">1.17x</td><td class="n">1.07x</td><td class="n">1.19x</td><td class="n">5.7%</td></tr>
+<tr><td>Algorithm + guard</td><td class="n">1.17x</td><td class="n">1.07x</td><td class="n">1.07x</td><td class="n">1.10x</td><td class="n">15%</td></tr>
+<tr><td>Oracle</td><td class="n">1.45x</td><td class="n">1.31x</td><td class="n">1.09x</td><td class="n">1.26x</td><td class="n">0%</td></tr>
 </table>
-<p>The one miss is map→filter: the model predicted 5.3 s for per-tuple and it took 7.1 s. Repeats varied by about 1 s. Earlier round (picked by v2): 1.07x, regret 12.1%. v3 halved regret on unseen experiments.</p>
-<img src="plots/validation_validate3.png" alt="Held-out validation">
-<p class="fig">Held-out speedups per strategy and experiment.</p>
-<p><b>Next rounds (picks frozen), same baselines.</b> (1) <code>validate-jf</code>, <b>join→filter</b>, 32×32 review pairs: the join keeps same-sentiment pairs (18–62%), then the filter keeps both-positive pairs (10–90%). Includes a 4×4 grid of join × filter sizes. Model picks join ≈10, filter 2, because a blocked join keeps fewer pairs. Guarded pick: join 1, filter 2–3. <code>validate4</code>: (2) <b>held-out long rows</b>: ContractNLI filter (75%, 300 rows) and join (40×8). Model picks per-tuple. (3) <b>Row-length sweep</b>: contracts cut to ~146 / 267 / 505 / 937 tokens per row. Model picks k=2 (per-tuple at 937 when guarded).</p>
+</div>
+</div>
+<div class="cols">
+<div>
+<table>
+<tr><th>Experiment</th><th>Pick</th><th class="n">Speedup</th><th>Fastest</th><th class="n">Regret</th></tr>
+<tr><td>Filter, 1500 short rows</td><td>k 6</td><td class="n">2.23x</td><td>k 7, 2.26x</td><td class="n">1%</td></tr>
+<tr><td>Join, 48×48</td><td>k 2</td><td class="n">1.52x</td><td>k 3, 1.54x</td><td class="n">1%</td></tr>
+<tr><td>Filter→join, s75</td><td>1, 2</td><td class="n">1.45x</td><td>same</td><td class="n">0%</td></tr>
+<tr><td>Filter→map, 250</td><td>per-tuple</td><td class="n">1.00x</td><td>2, 1: 1.05x</td><td class="n">5%</td></tr>
+<tr><td>Map→filter, 200</td><td>per-tuple</td><td class="n">1.00x</td><td>1, 2: 1.24x</td><td class="n">24%</td></tr>
+<tr><td>Join→filter (4)</td><td>≈10, 2</td><td class="n">1.09–1.22x</td><td>2, 2–3: 1.21–1.40x</td><td class="n">7–16%</td></tr>
+<tr><td>Long-row filter, 300</td><td>per-tuple</td><td class="n">1.00x</td><td>same</td><td class="n">0%</td></tr>
+<tr><td>Long-row join, 40×8</td><td>per-tuple</td><td class="n">1.00x</td><td>same (k 4: 0.21x)</td><td class="n">0%</td></tr>
+<tr><td>Rows of 146 / 267 tok</td><td>k 2</td><td class="n">1.27x / 1.12x</td><td>k 3: 1.33x / 1.15x</td><td class="n">4% / 2%</td></tr>
+<tr><td>Rows of 505 / 937 tok</td><td>k 2</td><td class="n">1.05x / 1.00x</td><td>k 3 / k 2</td><td class="n">2% / 0%</td></tr>
+</table>
+</div>
+<div>
+<p><b>Misses.</b> (1) Map→filter: per-tuple was predicted at 5.3 s and took 7.1 s, with repeats varying by ~1 s. (2) Join→filter: the model assumed per-tuple join recall of 0.69 from the opposite-sentiment joins, but the same-sentiment join kept only ~5% of true pairs per-tuple. It planned with the wrong pair counts and picked join ≈10 instead of 2, losing to fixed k=4 in this round. On long rows it correctly chose not to block, and predictions were within 1–8%.</p>
+<p>Fixed k=16/32 arms that didn't fit the context window on long rows are left out of their speedups.</p>
 </div>
 </div>
 
 <h2>5. Limits</h2>
-<p>One GPU and one model: other hardware needs a refit on a smaller sweep, but the model's shape stays the same. The latency-first pick loses F1 on joins (−0.13 to −0.18), so use the guard when accuracy matters. Only two row lengths are measured so far (~30 and ~1500 tokens); the in-between lengths come with <code>validate4</code>. Untested: sending a partial block early instead of waiting for it to fill.</p>
+<p>One GPU and one model: other hardware needs a refit on a smaller sweep, but the model's shape stays the same. The latency-first pick loses F1 on joins and contract filters (−0.1 to −0.25), so use the guard when accuracy matters. The model was given each workload's true selectivity and reuses recall from past joins of the same kind. Both have to be estimated in a real run (live re-estimation is proposed, not built). Untested: sending a partial block early instead of waiting for it to fill.</p>
 
 </body>
 </html>

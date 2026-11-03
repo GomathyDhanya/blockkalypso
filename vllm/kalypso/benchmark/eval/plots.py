@@ -117,7 +117,7 @@ def predicted_vs_measured(evaluated, pipes, validation, out):
     held = {(r["experiment"], r["arm"]): r for r in validation
             if r["phase"] in cm.HELD_OUT and r["latency_s"] and r["predicted_s"]}
     ax.plot([r["latency_s"] for r in held.values()], [r["predicted_s"] for r in held.values()],
-            "*", ms=11, color="black", label="held out (validate3)")
+            "*", ms=11, color="black", label="held out (" + ", ".join(cm.HELD_OUT) + ")")
     lo, hi = 0.3, 200
     ax.plot([lo, hi], [lo, hi], color="grey", lw=0.8)
     ax.fill_between([lo, hi], [lo * 0.8, hi * 0.8], [lo * 1.2, hi * 1.2], color="grey",
@@ -133,8 +133,8 @@ def predicted_vs_measured(evaluated, pipes, validation, out):
     _save(fig, out, "predicted_vs_measured.png")
 
 
-def validation_bars(validation, out):
-    rows = [r for r in validation if r["phase"] in cm.HELD_OUT]
+def validation_bars(validation, out, phase: str, title: str):
+    rows = [r for r in validation if r["phase"] == phase]
     exps = list(dict.fromkeys(r["experiment"] for r in rows))
     speed = {(r["experiment"], r["strategy"]): r["speedup"] for r in rows}
     groups = [e.split("/", 1)[1] for e in exps] + ["geomean"]
@@ -152,9 +152,9 @@ def validation_bars(validation, out):
     ax.axhline(1, color="grey", lw=0.8, ls="--")
     ax.set_xticks(x, groups, fontsize=8)
     ax.set_ylabel("speedup over per-tuple")
-    ax.set_title("Held-out validation: block sizes picked by v3 before the runs")
+    ax.set_title(title)
     ax.legend(fontsize=8, ncol=3)
-    _save(fig, out, "validation_validate3.png")
+    _save(fig, out, f"validation_{phase.replace('-', '_')}.png")
 
 
 def filter_pass(pipes, out):
@@ -195,9 +195,10 @@ def map_reruns(model, out):
     _save(fig, out, "map_reruns.png")
 
 
-def row_length(model, rows, out):
+def row_length(model, rows, held, out):
     """Q1: best predicted speedup of a 1000-row filter against row length,
-    with the measured runs at both ends."""
+    with the measured runs: the fitted ones at both ends and the held-out
+    row-length sweep (validate4) between them."""
     lengths = np.unique(np.geomspace(20, 3000, 40).astype(int))
     best = []
     for t in lengths:
@@ -213,8 +214,14 @@ def row_length(model, rows, out):
         if base:
             ax.plot(base["item_tokens"], max(base["latency_s"] / r["latency_s"] for r in run),
                     "o", color="black")
-    ax.plot([], [], "o", color="black", label="measured, best k")
-    ax.axvspan(70, 1300, color="orange", alpha=0.12, label="not measured yet")
+    ax.plot([], [], "o", color="black", label="measured, best k (fit)")
+    for n in (128, 256, 512, 1024):
+        run = _by_k(held, f"validate4/cnli-len{n}")
+        base = next((r for r in run if r["k"] == 1), None)
+        if base:
+            ax.plot(base["item_tokens"], max(base["latency_s"] / r["latency_s"] for r in run
+                                             if r["latency_s"]), "*", ms=11, color="C3")
+    ax.plot([], [], "*", ms=11, color="C3", label="measured, best k (held out, 400 rows)")
     ax.axhline(1, color="grey", lw=0.8, ls="--")
     ax.set_xscale("log")
     ax.set_xlabel("tokens per row")
@@ -253,10 +260,16 @@ def main() -> None:
     mechanics(rows, out)
     predicted_vs_measured(evaluated, pipes, validation, out)
     if validation:
-        validation_bars(validation, out)
+        for phase, title in (
+                ("validate3", "Held out (validate3): block sizes picked by v3 before the runs"),
+                ("validate-jf", "Held out (validate-jf): join -> filter"),
+                ("validate4", "Held out (validate4): long rows and row-length sweep")):
+            validation_bars(validation, out, phase, title)
     filter_pass(all_pipes, out)
     map_reruns(model, out)
-    row_length(model, rows, out)
+    held = cm.attach_tokens(cm._single_operator_rows(
+        [r for r in everything if r["phase"] in cm.HELD_OUT]), cache)
+    row_length(model, rows, held, out)
 
 
 if __name__ == "__main__":

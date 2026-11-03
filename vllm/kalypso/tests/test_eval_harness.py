@@ -576,6 +576,39 @@ def test_cost_model_pipeline_composition():
     assert costmodel.arm_name((6, 1)) == "kalypso_pipe:6,1"
 
 
+def test_join_filter_workload_and_cost_model(tmp_path, monkeypatch, fake_kv_manager):
+    from vllm.kalypso.benchmark.eval import arms, costmodel
+
+    _movie_fixture(tmp_path, monkeypatch)
+    jf = workloads.WORKLOADS["pipe_join_filter_j50_f50"](8)
+    assert [s["op"] for s in jf.stages] == [JOIN, FILTER] and jf.kind == JOIN
+    assert len(jf.rows) == len(jf.right_rows) == 8
+    # Half of each side positive: same-sentiment pairs are half, both-positive
+    # pairs half of those.
+    assert jf.stage_selectivity == (0.5, 0.5) and len(jf.positives) == 16
+    assert {t for p in jf.positives for t in (jf.rows[p[0]].text, jf.right_rows[p[1]].text)
+            } <= {f"good {i}" for i in range(12)} | {f"ant {i}" for i in (1, 3, 5)}
+    alone = workloads.WORKLOADS["pipe_join_filter_j50_f50_join"](8)
+    assert not alone.stages and len(alone.positives) == 32
+    ops = kalypso_ops(jf, arms.stage_blocks(parse_arm("kalypso_pipe:4,2"), jf))
+    assert ops[0]["op"] == "join" and ops[0]["args"]["pair_block_size"] == 4
+    assert ops[1] == {"op": "sem_filter", "args": {"prompt": jf.stages[1]["instruction"],
+                                                   "block_size": 2}}
+
+    model = costmodel.fit(_cost_rows())
+    model.kinds["join"] = model.kinds["filter"]
+    model.g["join"] = model.g["filter"]
+    pipe = costmodel.Pipeline(("join", "filter"), 8, 30.0, 60, 1.0, 8, 20.0, 40,
+                              stage_selectivity=(0.5, 0.5))
+    pred = model.predict_pipeline(pipe, (4, 2))
+    join = model.predict("join", costmodel.Items(64, 50.0, 100, 8, 30.0), 4)
+    # The filter sees the pairs the join keeps, each as one row of both sides.
+    kept = 64 * model.kinds["join"].pass_share("short", 4, 0.5)
+    after = model.predict("filter", costmodel.Items(kept, 50.0, 100), 2)
+    assert pred["latency_s"] == pytest.approx(
+        model.lam * (join["latency_s"] + after["latency_s"]))
+
+
 def test_map_similarity():
     from vllm.kalypso.benchmark.eval import analyze
 

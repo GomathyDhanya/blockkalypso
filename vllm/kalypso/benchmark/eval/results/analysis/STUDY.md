@@ -4,13 +4,19 @@ Kalypso can answer a semantic operator (filter, join or map) one row per LLM
 call (per-tuple), or put k rows in one prompt and answer them together (a block
 of size k). This study measures when blocking pays, builds a cost model that
 predicts latency for any block size, and uses it to pick a block size for every
-stage of a pipeline. The model was then tested on five experiments it had never
-seen.
+stage of a pipeline. The model was then tested on 15 experiments it had never
+seen, in three held-out rounds.
 
-**Result:** on the five new experiments the algorithm ran 1.38x faster than
-per-tuple. The fastest arm we measured ran 1.45x, so the algorithm was 6%
-slower than that on average. Every fixed block size, and tuning each operator
-on its own, did worse.
+**Result:** over all 15 held-out experiments the algorithm ran 1.19x faster
+than per-tuple, 5.7% slower than the fastest arm measured (1.26x). It beat
+per-tuple and every fixed block size (4: 1.00x, 16: 0.80x, 32: 0.58x), and tied
+with picking each stage's best size from the single-operator runs (1.20x).
+
+| Round | Experiments | Algorithm | Best fixed size | Oracle | Algorithm's regret |
+|---|---|---|---|---|---|
+| `validate3` | short-row filter and join, filter → join, filter → map, map → filter | 1.38x | 1.08x (k 4) | 1.45x | 6.1% |
+| `validate-jf` | join → filter, 4 selectivities | 1.17x | 1.25x (k 4) | 1.31x | 11.4% |
+| `validate4` | held-out long rows; row lengths 146–937 tokens | 1.07x | 0.86x (k 16) | 1.09x | 1.4% |
 
 The choice is latency first. Accuracy is measured and reported, but it doesn't
 drive the choice. An accuracy-guarded variant is reported alongside.
@@ -67,13 +73,26 @@ waves), and in exchange one call writes k answers back to back.
 |---|---|---|---|
 | Short rows, short answers (filter, join), many rows | Yes, k 2–8 | The repeated per-call work is most of each call | filter 2.2x, join 1.5x |
 | Few rows (50–100) | Barely | The fixed cost of starting the operator dominates | ≈ 1.0–1.1x |
-| Long rows (~1500 tokens) | No | Reading the row dominates, and blocking doesn't shrink it | ≤ 1.05x |
+| Medium rows (~150–500 tokens) | A little, k 2–3 | The repeated per-call work shrinks relative to the row | 1.33x at 146, 1.07x at 505 tokens |
+| Long rows (~1000–1500 tokens) | No | Reading the row dominates, and blocking doesn't shrink it | ≤ 1.02x |
 | Long answers (map) | No | One call writes all k answers in a row, and its wave waits for the longest | 0.4–0.9x |
 
-The cost model turns this into a prediction for any operator, row length, row
-count and k. **Open:** we measured only two row lengths (~30 and ~1500
-tokens), so the row length where blocking stops paying is predicted by the
-model but hasn't been measured.
+**Where blocking stops paying, by row length** (filter, measured; `validate4`
+rows are ContractNLI contracts cut to a window that keeps the evidence of each
+entailed row, 400 rows, half entailed):
+
+| Tokens per row | Best measured speedup | v3's pick (speedup) | F1 change at the pick |
+|---|---|---|---|
+| ~31 (movie reviews) | 2.26x (k 7) | k 6 (2.23x) | +0.11 |
+| 146 | 1.33x (k 3) | k 2 (1.27x) | −0.12 |
+| 267 | 1.15x (k 3) | k 2 (1.12x) | −0.11 |
+| 505 | 1.07x (k 3) | k 2 (1.05x) | −0.18 |
+| 937 | 1.00x (k 2) | k 2 (1.00x) | −0.25 |
+| ~1500 (held out) | 1.00x (per-tuple) | per-tuple | 0 |
+
+The gain shrinks steadily with row length: under 10% by ~500 tokens and gone
+by ~1000. The cost model predicted these held-out lengths within 1–8%. On
+contracts, blocking also costs F1 at every length.
 
 ![Best speedup vs row length](https://github.com/GomathyDhanya/blockkalypso/blob/batching-cost-model-v3/vllm/kalypso/benchmark/eval/results/analysis/plots/speedup_vs_row_length.png?raw=true)
 
@@ -129,12 +148,30 @@ How to manage blocks through a pipeline:
 | Joins: group the pairs in a block by left row | Today pairs are packed in arrival order, so the left row repeats in every pair (~3.3x the tokens on long left rows) |
 | Maps: fix the output-length estimate before blocking around them | Blocking a neighbouring stage makes a per-tuple map cut off answers and rerun them (12–56% of rows) |
 
+**Join first, then a filter** (`validate-jf`: 32×32 review pairs; the join
+keeps same-sentiment pairs, then the filter keeps pairs where both are
+positive):
+
+| Join keeps / filter keeps | Per-tuple | Static 4 | v3's pick (join, filter) | Fastest measured |
+|---|---|---|---|---|
+| 50% / 50% | 1.00x | 1.28x | 1.18x (10, 2) | 1.33x (2, 2) |
+| 62% / 10% | 1.00x | 1.30x | 1.22x (10, 2) | 1.40x (2, 3) |
+| 62% / 90% | 1.00x | 1.15x | 1.09x (10, 2) | 1.21x (2, 2) |
+| 18% / 50% | 1.00x | 1.27x | 1.21x (9, 2) | 1.29x (2, 2) |
+
+- Small blocks in both stages won (join 2, filter 2–3). v3 picked join ≈10.
+- **The per-tuple join failed on this question.** It kept 0–8% of the true
+  same-sentiment pairs; block joins kept 23–49%. v3 expected per-tuple join
+  recall of 0.69 (learned on the opposite-sentiment join), so it planned with
+  the wrong number of pairs reaching the filter and over-predicted per-tuple
+  (16–17 s predicted, ~11 s measured). Latency comparisons hold; the F1
+  comparison mostly reflects the per-tuple join failing.
+- Lesson: a join's recall depends on how its question is worded, and it can
+  differ sharply between per-tuple and block prompts. The model takes recall
+  from past runs of the same kind of join.
+
 **Open:**
 
-- **Join first, then a filter.** Not run yet. The `validate-jf` phase is ready
-  (32×32 review pairs; the join keeps same-sentiment pairs, then the filter keeps
-  both-positive pairs; join 18–62%, filter 10–90%), with v3's picks frozen
-  before the run: join ≈10, filter 2 (guarded: join 1, filter 2–3).
 - **Holding rows vs sending early.** We haven't tested whether holding rows to
   fill a block slows the pipeline. That needs an option to send a partial
   block after a short wait.
@@ -240,6 +277,7 @@ Filter recall and false-positive rate by block size (fitted on the single-filter
 | Pipelines, given measured filter output and retries | 10.9% | 58% |
 | Pipelines, full model | 13.2% | 87% |
 | Held-out `validate3`, the arm the algorithm picked | 8.9% | 25% |
+| All 15 held-out experiments, the arm the algorithm picked | 6.3% | 25% |
 
 ![Predicted vs measured latency](https://github.com/GomathyDhanya/blockkalypso/blob/batching-cost-model-v3/vllm/kalypso/benchmark/eval/results/analysis/plots/predicted_vs_measured.png?raw=true)
 
@@ -278,6 +316,69 @@ The one real miss is map → filter. The model predicted 5.3 s for per-tuple, bu
 it took 7.1 s, with no map retries in that run. The blocked-filter arms also
 varied by about 1 s between repeats (5.7–6.7 s), so part of the gap is noise.
 
+### Held out: `validate-jf` (join → filter, picked by v3 before running)
+
+![Join -> filter validation](https://github.com/GomathyDhanya/blockkalypso/blob/batching-cost-model-v3/vllm/kalypso/benchmark/eval/results/analysis/plots/validation_validate_jf.png?raw=true)
+
+| Strategy | Speedup | Regret (mean) | Regret (max) | Kept accuracy |
+|---|---|---|---|---|
+| Per-tuple | 1.00x | 30.9% | 40.5% | 4/4 |
+| Static block 4 | 1.25x | 4.6% | 7.7% | 4/4 |
+| Static block 16 | 0.89x | 46.3% | 50.7% | 4/4 |
+| Static block 32 | 0.62x | 110.2% | 119.7% | 2/4 |
+| Best in isolation | 1.25x | 4.8% | 6.8% | 4/4 |
+| **Algorithm (v3)** | **1.17x** | **11.4%** | 15.5% | 4/4 |
+| Algorithm, accuracy-guarded | 1.07x | 22.7% | 31.9% | 2/4 |
+| Oracle | 1.31x | 0% | 0% | 4/4 |
+
+v3 lost to static 4 here: it picked join ≈10 where join 2 was fastest, misled by
+the per-tuple join's recall (see Q2). "Kept accuracy" is against a per-tuple run
+whose join barely matched, so it is not a meaningful bar in this round.
+
+### Held out: `validate4` (long rows and row lengths, picked by v3 before running)
+
+![Long rows and row lengths validation](https://github.com/GomathyDhanya/blockkalypso/blob/batching-cost-model-v3/vllm/kalypso/benchmark/eval/results/analysis/plots/validation_validate4.png?raw=true)
+
+| Strategy | Speedup | Regret (mean) | Regret (max) | Kept accuracy | Failed |
+|---|---|---|---|---|---|
+| Per-tuple | 1.00x | 9.1% | 32.6% | 6/6 | 0 |
+| Static block 4 | 0.82x | 65.5% | 379.7% | 1/6 | 0 |
+| Static block 16 | 0.86x | 28.8% | 46.7% | 0/5 | 1 |
+| Static block 32 | 0.73x | 55.2% | 69.3% | 0/4 | 2 (context too long) |
+| Best in isolation | 1.08x | 0.8% | 2.1% | 1/6 | 0 |
+| **Algorithm (v3)** | **1.07x** | **1.4%** | 4.2% | 2/6 | 0 |
+| Algorithm, accuracy-guarded | 1.07x | 1.4% | 4.2% | 3/6 | 0 |
+| Oracle | 1.09x | 0% | 0% | 2/6 | 0 |
+
+| Experiment | v3 picked | Speedup | Fastest measured | Regret | Predicted / measured (s) |
+|---|---|---|---|---|---|
+| Long-row filter (75%, 300 rows) | per-tuple | 1.00x | per-tuple | 0% | 38.8 / 39.7 |
+| Long-row join (40 × 8) | per-tuple | 1.00x | per-tuple (k 4: 0.21x) | 0% | 10.0 / 9.4 |
+| Rows of ~146 tokens | k 2 | 1.27x | k 3, 1.33x | 4.2% | 5.63 / 6.05 |
+| Rows of ~267 tokens | k 2 | 1.12x | k 3, 1.15x | 2.4% | 9.54 / 10.14 |
+| Rows of ~505 tokens | k 2 | 1.05x | k 3, 1.07x | 2.0% | 17.36 / 19.16 |
+| Rows of ~937 tokens | k 2 | 1.00x | k 2, 1.00x | 0% | 31.98 / 32.97 |
+
+On long rows v3 correctly chose not to block, and its predictions were within
+1–8% throughout.
+
+### All held-out rounds together (15 experiments)
+
+| Strategy | Speedup | Regret (mean) | Regret (max) | Kept accuracy |
+|---|---|---|---|---|
+| Per-tuple | 1.00x | 28.7% | 126.0% | 15/15 |
+| Static block 4 | 1.00x | 40.4% | 379.7% | 7/15 |
+| Static block 16 | 0.80x | 81.7% | 437.7% | 5/15 |
+| Static block 32 | 0.58x | 184.1% | 857.7% | 3/15 |
+| Best in isolation | 1.20x | 5.5% | 32.9% | 8/15 |
+| **Algorithm (v3)** | **1.19x** | **5.7%** | **23.8%** | 9/15 |
+| Algorithm, accuracy-guarded | 1.10x | 15.2% | 53.8% | 10/15 |
+| Oracle | 1.26x | 0% | 0% | 9/15 |
+
+The algorithm never did badly (worst case 23.8% slower than the oracle), while
+every fixed size had cases 90–860% slower. Over all rounds it tied with "best in
+isolation"; it was ahead on `validate3`, behind on `validate-jf`.
+
 ### Earlier round: `validate` (picked by v2, now part of v3's fit)
 
 | Strategy | Speedup | Regret (mean) | Kept accuracy |
@@ -297,18 +398,19 @@ and v3 was 6.1% slower on new experiments it didn't see.
 - **One GPU and one LLM.** The constants are for an L40S running Qwen2.5-7B.
   Other hardware or another LLM needs a refit on a smaller sweep. The model's
   shape stays the same.
-- **Accuracy.** The latency-first pick loses F1 on joins (−0.13 to −0.18). Use
-  the guarded variant when accuracy matters.
+- **Accuracy.** The latency-first pick loses F1 on joins (−0.13 to −0.18) and
+  on contract filters (−0.11 to −0.25). Use the guarded variant when accuracy
+  matters.
+- **Recall carried over from other joins.** v3 assumes a join's recall from
+  past joins; on a differently worded join (same sentiment) per-tuple recall
+  was ~5%, and v3's pick was 11% off the best.
 - **Maps before a filter** are the weakest prediction (the map → filter miss
   above).
-- **Experiments still to run:**
-  - `validate4` (ready to run, picks frozen):
-    - a row-length sweep: ContractNLI filters cut to ~146, 267, 505 and 937
-      tokens per row (each entailed row keeps its evidence), k 1/2/4/8/16/32;
-    - held-out long rows: a ContractNLI filter at 75% selectivity, 300 rows,
-      and a ContractNLI join at 40 × 8 (v3 picks per-tuple for both);
-  - `validate-jf` (running): join → filter (above).
-  - A test of sending a partial block early instead of waiting for it to fill.
+- **Selectivity given to the model.** Each validation gave v3 the workload's
+  true selectivity; a real run has to estimate it (live re-estimation is
+  proposed, not built).
+- **Experiments still to run:** sending a partial block early instead of
+  waiting for it to fill.
 - **Proposed fixes in Kalypso core:**
   - Block joins: group pairs by left row, so a block shares one left row and
     the prefix cache serves it. This should remove the ~3.3x repeated prompt
@@ -324,6 +426,7 @@ and v3 was 6.1% slower on new experiments it didn't see.
 | `eval/costmodel.py` | The model, the fit, the choice and validation scoring (`python -m vllm.kalypso.benchmark.eval.costmodel`) |
 | `results/analysis/costmodel.md`, `costmodel.json` | Fitted coefficients, per-run choices, every arm's prediction |
 | `results/analysis/REPORT.pdf`, `REPORT.html` | The 2-page report |
+| `results/analysis/plots/validation_*.png` | One plot per held-out round |
 | `results/analysis/validation.md` | Full per-experiment validation tables |
 | `results/analysis/algorithm_choices.json` | The picks, frozen before each validation phase ran |
 | `results/analysis/summary.md`, `arms.csv` | Every measured arm with its metrics |
