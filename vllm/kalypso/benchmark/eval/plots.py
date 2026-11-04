@@ -140,7 +140,7 @@ def validation_bars(validation, out, phase: str, title: str):
     groups = [e.split("/", 1)[1] for e in exps] + ["geomean"]
     x = np.arange(len(groups))
     width = 0.8 / len(SHOWN)
-    fig, ax = plt.subplots(figsize=(10, 4.4))
+    fig, ax = plt.subplots(figsize=(max(10, 0.85 * len(groups)), 4.4))
     for i, name in enumerate(SHOWN):
         vals = [speed.get((e, name)) or 0 for e in exps]
         ok = [v for v in vals if v]
@@ -150,7 +150,8 @@ def validation_bars(validation, out, phase: str, title: str):
         if name == "Algorithm":
             ax.bar_label(bars, fmt="%.2fx", fontsize=7, padding=2)
     ax.axhline(1, color="grey", lw=0.8, ls="--")
-    ax.set_xticks(x, groups, fontsize=8)
+    many = len(groups) > 7
+    ax.set_xticks(x, groups, fontsize=8, rotation=35 if many else 0, ha="right" if many else "center")
     ax.set_ylabel("speedup over per-tuple")
     ax.set_title(title)
     ax.legend(fontsize=8, ncol=3)
