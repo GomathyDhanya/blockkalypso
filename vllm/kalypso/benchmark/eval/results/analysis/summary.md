@@ -1105,6 +1105,68 @@ Best: `kalypso_per_tuple` (1.00x).
 - `kalypso_block:16` failed 3 trial(s); see run.jsonl
 - `kalypso_block:32` failed 3 trial(s); see run.jsonl
 
+### validate4/cnli-join-len1024
+
+**cnli_join_len1024**: `cnli_join_len1024` (join), 40 x 8 = 320 pairs, 53% positive; GPU NVIDIA L40S, 46068 MiB, max_num_seqs 256, git `6d3c9b6c1`.
+
+| Arm | Latency (s) | Speedup | Calls | Fallbacks | Waves | Peak running | Peak waiting | Computed prompt tok | Gen tok/call | Decode/call (s) | s/gen tok | Hit rate | Peak KV % | Preempt | Recall | F1 | ΔF1 | Agree | Self | Sim | Selected |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| `kalypso_per_tuple` | 6.47 | 1.00 | 320 | – | 2 | 19 | 279 | 74728 | 2.5 | 0.23 | 0.091 | 0.79 | 1.2 | 0 | 0.34 | 0.48 | 0.00 | 1.00 | 1.00 | – | 70 |
+| `kalypso_block:2` | 17.29 | 0.37 | 162 | 2 | 1 | 15 | 154 | 201456 | 7.9 | 1.07 | 0.135 | 0.38 | 3.7 | 0 | 0.29 | 0.39 | -0.09 | 0.74 | 1.00 | – | 82 |
+| `kalypso_block:4` | 23.75 | 0.27 | 80 | 0 | 1 | 12 | 77 | 271652 | 16.0 | 2.35 | 0.147 | 0.13 | 7.8 | 0 | 0.37 | 0.45 | -0.03 | 0.69 | 1.00 | – | 110 |
+| `kalypso_block:8` | 28.86 | 0.22 | 40 | 0 | 1 | 10 | 39 | 307377 | 32.0 | 5.00 | 0.156 | 0.01 | 16.1 | 0 | 0.40 | 0.47 | -0.01 | 0.62 | 1.00 | – | 117 |
+
+Best: `kalypso_per_tuple` (1.00x).
+
+### validate4/cnli-join-len128
+
+**cnli_join_len128**: `cnli_join_len128` (join), 40 x 8 = 320 pairs, 14% positive; GPU NVIDIA L40S, 46068 MiB, max_num_seqs 256, git `3fd859ed2`.
+
+| Arm | Latency (s) | Speedup | Calls | Fallbacks | Waves | Peak running | Peak waiting | Computed prompt tok | Gen tok/call | Decode/call (s) | s/gen tok | Hit rate | Peak KV % | Preempt | Recall | F1 | ΔF1 | Agree | Self | Sim | Selected |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| `kalypso_per_tuple` | 3.48 | 1.00 | 320 | – | 2 | 21 | 271 | 42580 | 2.1 | 0.15 | 0.074 | 0.56 | 0.7 | 0 | 0.11 | 0.19 | 0.00 | 1.00 | 1.00 | – | 7 |
+| `kalypso_block:4` | 4.24 | 0.82 | 80 | 0 | 1 | 54 | 67 | 45822 | 16.0 | 1.65 | 0.103 | 0.17 | 7.1 | 0 | 0.50 | 0.37 | 0.19 | 0.76 | 1.00 | – | 77 |
+| `kalypso_block:16` | 5.96 | 0.58 | 20 | 0 | 1 | 20 | 17 | 48538 | 71.0 | 3.41 | 0.048 | 0.02 | 11.1 | 0 | 0.46 | 0.29 | 0.10 | 0.69 | 1.00 | – | 98 |
+| `kalypso_block:32` | 8.04 | 0.43 | 10 | 0 | 1 | 10 | 8 | 48116 | 151.0 | 5.37 | 0.036 | 0.01 | 11.1 | 0 | 0.37 | 0.24 | 0.05 | 0.70 | 1.00 | – | 94 |
+| `kalypso_block:2` | 3.57 | 0.97 | 161 | 1 | 1 | 59 | 133 | 39191 | 7.9 | 0.88 | 0.111 | 0.38 | 3.3 | 0 | 0.24 | 0.33 | 0.14 | 0.93 | 1.00 | – | 20 |
+| `kalypso_block:8` | 4.94 | 0.70 | 40 | 0 | 1 | 40 | 37 | 49334 | 32.0 | 2.36 | 0.074 | 0.04 | 11.2 | 0 | 0.50 | 0.32 | 0.13 | 0.69 | 1.00 | – | 100 |
+| `kalypso_block:5` | 4.45 | 0.78 | 64 | 0 | 1 | 53 | 54 | 47310 | 20.0 | 1.91 | 0.096 | 0.12 | 8.9 | 0 | 0.26 | 0.23 | 0.04 | 0.82 | 1.00 | – | 59 |
+| `kalypso_block:3` | 3.97 | 0.88 | 107 | 0 | 1 | 56 | 90 | 43517 | 12.0 | 1.30 | 0.108 | 0.25 | 5.2 | 0 | 0.30 | 0.29 | 0.10 | 0.85 | 1.00 | – | 50 |
+
+Best: `kalypso_per_tuple` (1.00x).
+
+### validate4/cnli-join-len256
+
+**cnli_join_len256**: `cnli_join_len256` (join), 40 x 8 = 320 pairs, 18% positive; GPU NVIDIA L40S, 46068 MiB, max_num_seqs 256, git `3fd859ed2`.
+
+| Arm | Latency (s) | Speedup | Calls | Fallbacks | Waves | Peak running | Peak waiting | Computed prompt tok | Gen tok/call | Decode/call (s) | s/gen tok | Hit rate | Peak KV % | Preempt | Recall | F1 | ΔF1 | Agree | Self | Sim | Selected |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| `kalypso_per_tuple` | 4.08 | 1.00 | 320 | – | 2 | 19 | 288 | 47310 | 2.1 | 0.16 | 0.079 | 0.65 | 0.8 | 0 | 0.12 | 0.20 | 0.00 | 1.00 | 1.00 | – | 11 |
+| `kalypso_block:4` | 7.35 | 0.56 | 80 | 0 | 1 | 32 | 74 | 80170 | 16.0 | 2.04 | 0.128 | 0.15 | 7.1 | 0 | 0.45 | 0.35 | 0.15 | 0.71 | 1.00 | – | 90 |
+| `kalypso_block:16` | 9.99 | 0.41 | 20 | 0 | 1 | 20 | 18 | 87743 | 71.0 | 5.09 | 0.072 | 0.01 | 19.9 | 0 | 0.43 | 0.35 | 0.15 | 0.75 | 1.00 | – | 83 |
+| `kalypso_block:32` | 12.78 | 0.32 | 10 | 0 | 1 | 10 | 9 | 87326 | 151.0 | 7.47 | 0.050 | 0.00 | 19.9 | 0 | 0.29 | 0.26 | 0.05 | 0.77 | 1.00 | – | 74 |
+| `kalypso_block:2` | 5.83 | 0.70 | 160 | 0 | 1 | 37 | 148 | 63509 | 8.0 | 1.01 | 0.127 | 0.38 | 3.4 | 0 | 0.16 | 0.21 | 0.01 | 0.89 | 1.00 | – | 27 |
+| `kalypso_block:8` | 8.71 | 0.47 | 40 | 0 | 1 | 30 | 37 | 88544 | 32.0 | 3.66 | 0.114 | 0.02 | 14.7 | 0 | 0.40 | 0.29 | 0.09 | 0.68 | 1.00 | – | 98 |
+| `kalypso_block:5` | 7.83 | 0.52 | 64 | 0 | 1 | 31 | 59 | 83627 | 20.0 | 2.53 | 0.126 | 0.10 | 9.0 | 0 | 0.38 | 0.35 | 0.15 | 0.78 | 1.00 | – | 68 |
+
+Best: `kalypso_per_tuple` (1.00x).
+
+### validate4/cnli-join-len512
+
+**cnli_join_len512**: `cnli_join_len512` (join), 40 x 8 = 320 pairs, 30% positive; GPU NVIDIA L40S, 46068 MiB, max_num_seqs 256, git `3fd859ed2`.
+
+| Arm | Latency (s) | Speedup | Calls | Fallbacks | Waves | Peak running | Peak waiting | Computed prompt tok | Gen tok/call | Decode/call (s) | s/gen tok | Hit rate | Peak KV % | Preempt | Recall | F1 | ΔF1 | Agree | Self | Sim | Selected |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| `kalypso_per_tuple` | 4.90 | 1.00 | 320 | – | 2 | 21 | 271 | 57134 | 2.2 | 0.18 | 0.083 | 0.73 | 0.9 | 0 | 0.20 | 0.29 | 0.00 | 1.00 | 1.00 | – | 36 |
+| `kalypso_block:4` | 12.99 | 0.38 | 80 | 0 | 1 | 19 | 76 | 147720 | 16.0 | 2.21 | 0.138 | 0.14 | 7.4 | 0 | 0.34 | 0.37 | 0.09 | 0.75 | 1.00 | – | 81 |
+| `kalypso_block:16` | 17.84 | 0.28 | 20 | 0 | 1 | 19 | 19 | 164936 | 71.0 | 8.23 | 0.116 | 0.01 | 34.0 | 0 | 0.38 | 0.39 | 0.10 | 0.71 | 1.00 | – | 88 |
+| `kalypso_block:32` | 22.16 | 0.22 | 10 | 0 | 1 | 10 | 9 | 164519 | 151.0 | 11.50 | 0.076 | 0.00 | 37.1 | 0 | 0.25 | 0.28 | -0.01 | 0.73 | 1.00 | – | 78 |
+| `kalypso_block:2` | 9.79 | 0.50 | 160 | 0 | 1 | 24 | 152 | 111761 | 8.0 | 1.05 | 0.131 | 0.38 | 3.5 | 0 | 0.19 | 0.27 | -0.02 | 0.84 | 1.00 | – | 36 |
+| `kalypso_block:8` | 15.45 | 0.32 | 40 | 0 | 1 | 17 | 38 | 165731 | 32.0 | 4.41 | 0.138 | 0.01 | 15.2 | 0 | 0.32 | 0.34 | 0.05 | 0.73 | 1.00 | – | 85 |
+| `kalypso_block:5` | 13.81 | 0.35 | 64 | 0 | 1 | 18 | 61 | 154829 | 20.0 | 2.78 | 0.139 | 0.09 | 9.3 | 0 | 0.22 | 0.25 | -0.03 | 0.75 | 1.00 | – | 70 |
+
+Best: `kalypso_per_tuple` (1.00x).
+
 ### validate4/cnli-len1024
 
 **cnli_len1024**: `cnli_len1024` (filter), 400 rows, 50% positive; GPU NVIDIA L40S, 46068 MiB, max_num_seqs 256, git `5891dbbb5`.
@@ -1166,6 +1228,58 @@ Best: `kalypso_per_tuple` (1.00x).
 | `kalypso_block:2` | 19.16 | 1.05 | 229 | 29 | 1 | 16 | 191 | 227389 | 7.0 | 0.95 | 0.135 | 0.04 | 3.5 | 0 | 0.39 | 0.54 | -0.18 | 0.80 | 1.00 | – | 91 |
 | `kalypso_block:8` | 19.46 | 1.03 | 50 | 0 | 1 | 17 | 48 | 204696 | 32.0 | 4.64 | 0.145 | 0.01 | 15.2 | 0 | 0.39 | 0.50 | -0.21 | 0.71 | 1.00 | – | 107 |
 | `kalypso_block:3` | 18.78 | 1.07 | 144 | 11 | 1 | 16 | 127 | 213779 | 11.1 | 1.60 | 0.144 | 0.03 | 5.4 | 0 | 0.42 | 0.57 | -0.14 | 0.79 | 1.00 | – | 94 |
+
+Best: `kalypso_per_tuple` (1.00x).
+
+### validate4/cnli-map-len1024
+
+**cnli_map_len1024**: `cnli_map_len1024` (map), 400 rows; GPU NVIDIA L40S, 46068 MiB, max_num_seqs 256, git `6d3c9b6c1`.
+
+| Arm | Latency (s) | Speedup | Calls | Fallbacks | Waves | Peak running | Peak waiting | Computed prompt tok | Gen tok/call | Decode/call (s) | s/gen tok | Hit rate | Peak KV % | Preempt | Recall | F1 | ΔF1 | Agree | Self | Sim | Selected |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| `kalypso_per_tuple` | 41.90 | 1.00 | 412 | – | 2 | 59 | 244 | 397414 | 28.4 | 4.12 | 0.145 | 0.07 | 13.5 | 0 | – | – | – | 1.00 | 1.00 | 1.00 | – |
+| `kalypso_block:2` | 52.67 | 0.80 | 312 | 0 | 2 | 91 | 141 | 493991 | 59.9 | 9.85 | 0.164 | 0.05 | 39.1 | 0 | – | – | – | 0.22 | 1.00 | 0.55 | – |
+| `kalypso_block:4` | 58.77 | 0.71 | 156 | 0 | 1 | 82 | 72 | 435903 | 106.2 | 16.49 | 0.155 | 0.03 | 68.8 | 0 | – | – | – | 0.10 | 0.99 | 0.49 | – |
+| `kalypso_block:8` | 76.83 | 0.55 | 122 | 0 | 1 | 41 | 36 | 445096 | 144.8 | 13.79 | 0.095 | 0.03 | 66.4 | 0 | – | – | – | 0.12 | 1.00 | 0.48 | – |
+
+Best: `kalypso_per_tuple` (1.00x).
+
+### validate4/cnli-map-len128
+
+**cnli_map_len128**: `cnli_map_len128` (map), 400 rows; GPU NVIDIA L40S, 46068 MiB, max_num_seqs 256, git `6d3c9b6c1`.
+
+| Arm | Latency (s) | Speedup | Calls | Fallbacks | Waves | Peak running | Peak waiting | Computed prompt tok | Gen tok/call | Decode/call (s) | s/gen tok | Hit rate | Peak KV % | Preempt | Recall | F1 | ΔF1 | Agree | Self | Sim | Selected |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| `kalypso_per_tuple` | 10.10 | 1.00 | 400 | – | 2 | 211 | 368 | 80906 | 23.1 | 2.88 | 0.124 | 0.19 | 10.4 | 0 | – | – | – | 1.00 | 1.00 | 1.00 | – |
+| `kalypso_block:2` | 9.79 | 1.03 | 211 | 0 | 1 | 200 | 180 | 66600 | 60.3 | 4.30 | 0.071 | 0.17 | 15.9 | 0 | – | – | – | 0.01 | 1.00 | 0.44 | – |
+| `kalypso_block:4` | 10.71 | 0.94 | 113 | 0 | 1 | 100 | 92 | 62155 | 97.0 | 4.91 | 0.051 | 0.11 | 14.9 | 0 | – | – | – | 0.02 | 1.00 | 0.38 | – |
+| `kalypso_block:8` | 14.84 | 0.68 | 72 | 0 | 1 | 50 | 46 | 62154 | 138.8 | 5.60 | 0.040 | 0.06 | 13.6 | 0 | – | – | – | 0.05 | 1.00 | 0.37 | – |
+
+Best: `kalypso_per_tuple` (1.00x).
+
+### validate4/cnli-map-len256
+
+**cnli_map_len256**: `cnli_map_len256` (map), 400 rows; GPU NVIDIA L40S, 46068 MiB, max_num_seqs 256, git `6d3c9b6c1`.
+
+| Arm | Latency (s) | Speedup | Calls | Fallbacks | Waves | Peak running | Peak waiting | Computed prompt tok | Gen tok/call | Decode/call (s) | s/gen tok | Hit rate | Peak KV % | Preempt | Recall | F1 | ΔF1 | Agree | Self | Sim | Selected |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| `kalypso_per_tuple` | 13.06 | 1.00 | 400 | – | 2 | 145 | 379 | 128777 | 24.5 | 3.15 | 0.129 | 0.13 | 11.1 | 0 | – | – | – | 1.00 | 1.00 | 1.00 | – |
+| `kalypso_block:2` | 17.19 | 0.76 | 219 | 0 | 1 | 194 | 188 | 119647 | 65.0 | 6.17 | 0.095 | 0.10 | 26.2 | 0 | – | – | – | 0.04 | 1.00 | 0.48 | – |
+| `kalypso_block:4` | 16.23 | 0.81 | 119 | 0 | 1 | 100 | 95 | 113687 | 105.0 | 6.75 | 0.064 | 0.07 | 25.4 | 0 | – | – | – | 0.03 | 1.00 | 0.43 | – |
+| `kalypso_block:8` | 20.59 | 0.63 | 71 | 0 | 1 | 50 | 47 | 111541 | 168.6 | 8.17 | 0.048 | 0.05 | 24.7 | 0 | – | – | – | 0.03 | 1.00 | 0.39 | – |
+
+Best: `kalypso_per_tuple` (1.00x).
+
+### validate4/cnli-map-len512
+
+**cnli_map_len512**: `cnli_map_len512` (map), 400 rows; GPU NVIDIA L40S, 46068 MiB, max_num_seqs 256, git `6d3c9b6c1`.
+
+| Arm | Latency (s) | Speedup | Calls | Fallbacks | Waves | Peak running | Peak waiting | Computed prompt tok | Gen tok/call | Decode/call (s) | s/gen tok | Hit rate | Peak KV % | Preempt | Recall | F1 | ΔF1 | Agree | Self | Sim | Selected |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| `kalypso_per_tuple` | 23.13 | 1.00 | 410 | – | 2 | 93 | 351 | 225094 | 26.4 | 3.57 | 0.135 | 0.10 | 12.2 | 0 | – | – | – | 1.00 | 1.00 | 1.00 | – |
+| `kalypso_block:2` | 26.41 | 0.88 | 233 | 0 | 1 | 140 | 191 | 229418 | 66.9 | 9.13 | 0.137 | 0.06 | 34.6 | 0 | – | – | – | 0.06 | 1.00 | 0.50 | – |
+| `kalypso_block:4` | 29.83 | 0.78 | 141 | 0 | 1 | 92 | 96 | 227449 | 101.1 | 10.09 | 0.100 | 0.04 | 43.5 | 0 | – | – | – | 0.07 | 1.00 | 0.40 | – |
+| `kalypso_block:8` | 36.50 | 0.63 | 103 | 0 | 1 | 50 | 48 | 230027 | 134.7 | 9.38 | 0.070 | 0.04 | 45.0 | 0 | – | – | – | 0.08 | 0.93 | 0.44 | – |
 
 Best: `kalypso_per_tuple` (1.00x).
 

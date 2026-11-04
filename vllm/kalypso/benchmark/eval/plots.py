@@ -231,6 +231,57 @@ def row_length(model, rows, held, out):
     _save(fig, out, "speedup_vs_row_length.png")
 
 
+# Per operator, the runs that make up the row-length sweep, shortest first.
+LENGTH_SWEEP = {
+    "filter": ("single/filter-n1000", "validate4/cnli-len128", "validate4/cnli-len256",
+               "validate4/cnli-len512", "validate4/cnli-len1024", "longrows/cnli-filter-s50"),
+    "join": ("single/join-fanout50", "validate4/cnli-join-len128", "validate4/cnli-join-len256",
+             "validate4/cnli-join-len512", "validate4/cnli-join-len1024", "longrows/cnli-join-high"),
+    "map": ("map/map-n500", "validate4/cnli-map-len128", "validate4/cnli-map-len256",
+            "validate4/cnli-map-len512", "validate4/cnli-map-len1024"),
+}
+
+
+def length_sweep(rows):
+    """Per operator and run: tokens per item and the best measured speedup of a
+    block (k >= 2) over per-tuple, with its k; below 1 means blocking lost."""
+    out = {}
+    for op, exps in LENGTH_SWEEP.items():
+        pts = []
+        for exp in exps:
+            run = [r for r in _by_k(rows, exp) if r["latency_s"]]
+            base = next((r for r in run if r["k"] == 1), None)
+            if not base:
+                continue
+            blocked = [r for r in run if r["k"] > 1]
+            if not blocked:
+                continue
+            best = min(blocked, key=lambda r: r["latency_s"])
+            pts.append((base["item_tokens"], base["latency_s"] / best["latency_s"], best["k"]))
+        out[op] = pts
+    return out
+
+
+def operators_vs_row_length(rows, out):
+    """Q1, all operators: best measured speedup against tokens per item."""
+    fig, ax = plt.subplots(figsize=(6.8, 4.2))
+    for i, (op, pts) in enumerate(length_sweep(rows).items()):
+        if not pts:
+            continue
+        x, y = [p[0] for p in pts], [p[1] for p in pts]
+        ax.plot(x, y, "o-", color=f"C{i}", label=op)
+        for t, sp, k in pts:
+            ax.annotate(f"k{k}", (t, sp), textcoords="offset points", xytext=(4, 4), fontsize=7,
+                        color=f"C{i}")
+    ax.axhline(1, color="grey", lw=0.8, ls="--")
+    ax.set_xscale("log")
+    ax.set_xlabel("tokens per item (join: left + right row)")
+    ax.set_ylabel("best block (k >= 2) speedup over per-tuple")
+    ax.set_title("When blocking pays, per operator (below 1: per-tuple is faster)")
+    ax.legend(fontsize=8)
+    _save(fig, out, "operators_vs_row_length.png")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--results", type=Path, default=cm.RESULTS)
@@ -270,6 +321,7 @@ def main() -> None:
     held = cm.attach_tokens(cm._single_operator_rows(
         [r for r in everything if r["phase"] in cm.HELD_OUT]), cache)
     row_length(model, rows, held, out)
+    operators_vs_row_length(cm.attach_tokens(cm._single_operator_rows(everything), cache), out)
 
 
 if __name__ == "__main__":
