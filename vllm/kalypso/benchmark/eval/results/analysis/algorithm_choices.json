@@ -1,0 +1,750 @@
+{
+  "validate/filter-join-s25": {
+    "algorithm": "kalypso_per_tuple",
+    "algorithm_latency": "kalypso_pipe:2,4",
+    "best_in_isolation": "kalypso_pipe:4,1",
+    "grid": [
+      "kalypso_pipe:1,2",
+      "kalypso_pipe:1,4",
+      "kalypso_pipe:2,1",
+      "kalypso_pipe:2,2",
+      "kalypso_pipe:2,3",
+      "kalypso_pipe:2,5",
+      "kalypso_pipe:2,8",
+      "kalypso_pipe:3,4",
+      "kalypso_pipe:4,4"
+    ],
+    "predicted": {
+      "pass_share": 0.201,
+      "rows": 100,
+      "blocks": [
+        1,
+        1
+      ],
+      "latency_s": 8.203,
+      "latency_only": [
+        2,
+        4
+      ],
+      "latency_only_s": 5.77
+    }
+  },
+  "validate/filter-map-n1000": {
+    "algorithm": "kalypso_pipe:3,1",
+    "algorithm_latency": "kalypso_pipe:3,1",
+    "best_in_isolation": "kalypso_pipe:4,1",
+    "grid": [
+      "kalypso_per_tuple",
+      "kalypso_pipe:2,1",
+      "kalypso_pipe:3,2",
+      "kalypso_pipe:4,1",
+      "kalypso_pipe:6,1"
+    ],
+    "predicted": {
+      "pass_share": 0.499,
+      "rows": 1000,
+      "blocks": [
+        3,
+        1
+      ],
+      "latency_s": 13.344,
+      "latency_only": [
+        3,
+        1
+      ],
+      "latency_only_s": 13.344
+    }
+  },
+  "validate/map-filter": {
+    "algorithm": "kalypso_pipe:1,7",
+    "algorithm_latency": "kalypso_pipe:1,7",
+    "best_in_isolation": "kalypso_pipe:1,4",
+    "grid": [
+      "kalypso_pipe:1,3",
+      "kalypso_pipe:1,6",
+      "kalypso_pipe:1,8",
+      "kalypso_pipe:1,14",
+      "kalypso_pipe:2,7"
+    ],
+    "predicted": {
+      "pass_share": 1.0,
+      "rows": 500,
+      "blocks": [
+        1,
+        7
+      ],
+      "latency_s": 10.27,
+      "latency_only": [
+        1,
+        7
+      ],
+      "latency_only_s": 10.27
+    }
+  },
+  "validate/filter-map-n50": {
+    "algorithm": "kalypso_pipe:2,1",
+    "algorithm_latency": "kalypso_pipe:2,1",
+    "best_in_isolation": "kalypso_pipe:4,1",
+    "grid": [
+      "kalypso_per_tuple",
+      "kalypso_pipe:2,2",
+      "kalypso_pipe:3,1",
+      "kalypso_pipe:4,1"
+    ],
+    "predicted": {
+      "pass_share": 0.495,
+      "rows": 50,
+      "blocks": [
+        2,
+        1
+      ],
+      "latency_s": 1.399,
+      "latency_only": [
+        2,
+        1
+      ],
+      "latency_only_s": 1.399
+    }
+  },
+  "validate/join-fanout25-n64": {
+    "algorithm": "kalypso_per_tuple",
+    "algorithm_latency": "kalypso_block:10",
+    "best_in_isolation": "kalypso_per_tuple",
+    "grid": [
+      "kalypso_block:2",
+      "kalypso_block:5",
+      "kalypso_block:9",
+      "kalypso_block:11"
+    ],
+    "predicted": {
+      "items": 4096,
+      "item_tokens": 63.38,
+      "regime": "short",
+      "blocks": [
+        1
+      ],
+      "latency_s": 43.444,
+      "latency_only": [
+        10
+      ],
+      "latency_only_s": 27.654
+    }
+  },
+  "validate/cnli-filter-s25": {
+    "algorithm": "kalypso_per_tuple",
+    "algorithm_latency": "kalypso_block:2",
+    "best_in_isolation": "kalypso_per_tuple",
+    "grid": [
+      "kalypso_block:3",
+      "kalypso_block:4"
+    ],
+    "predicted": {
+      "items": 200,
+      "item_tokens": 1450.74,
+      "regime": "long",
+      "blocks": [
+        1
+      ],
+      "latency_s": 25.237,
+      "latency_only": [
+        2
+      ],
+      "latency_only_s": 25.069
+    }
+  },
+  "validate3/filter-n1500": {
+    "model": "v3",
+    "algorithm": "kalypso_block:6",
+    "algorithm_latency": "kalypso_block:6",
+    "algorithm_guarded": "kalypso_block:6",
+    "best_in_isolation": "kalypso_block:4",
+    "grid": [
+      "kalypso_block:3",
+      "kalypso_block:5",
+      "kalypso_block:7",
+      "kalypso_block:12"
+    ],
+    "predicted": {
+      "items": 1500,
+      "item_tokens": 31.38,
+      "regime": "short",
+      "blocks": [
+        6
+      ],
+      "latency_s": 6.125,
+      "guarded": [
+        6
+      ],
+      "guarded_s": 6.125
+    }
+  },
+  "validate3/join-n48": {
+    "model": "v3",
+    "algorithm": "kalypso_block:2",
+    "algorithm_latency": "kalypso_block:2",
+    "algorithm_guarded": "kalypso_per_tuple",
+    "best_in_isolation": "kalypso_block:5",
+    "grid": [
+      "kalypso_block:3",
+      "kalypso_block:4"
+    ],
+    "predicted": {
+      "items": 2304,
+      "item_tokens": 65.48,
+      "regime": "short",
+      "blocks": [
+        2
+      ],
+      "latency_s": 15.911,
+      "guarded": [
+        1
+      ],
+      "guarded_s": 24.891
+    }
+  },
+  "validate3/filter-join-s75": {
+    "model": "v3",
+    "algorithm": "kalypso_pipe:1,2",
+    "algorithm_latency": "kalypso_pipe:1,2",
+    "algorithm_guarded": "kalypso_per_tuple",
+    "best_in_isolation": "kalypso_pipe:4,5",
+    "grid": [
+      "kalypso_pipe:1,3",
+      "kalypso_pipe:1,4",
+      "kalypso_pipe:2,1",
+      "kalypso_pipe:2,2"
+    ],
+    "predicted": {
+      "selectivity": 0.68,
+      "rows": 100,
+      "blocks": [
+        1,
+        2
+      ],
+      "latency_s": 10.878,
+      "guarded": [
+        1,
+        1
+      ],
+      "guarded_s": 16.258
+    }
+  },
+  "validate3/filter-map-n250": {
+    "model": "v3",
+    "algorithm": "kalypso_per_tuple",
+    "algorithm_latency": "kalypso_per_tuple",
+    "algorithm_guarded": "kalypso_per_tuple",
+    "best_in_isolation": "kalypso_pipe:4,1",
+    "grid": [
+      "kalypso_pipe:1,2",
+      "kalypso_pipe:2,1"
+    ],
+    "predicted": {
+      "selectivity": 0.744,
+      "rows": 250,
+      "blocks": [
+        1,
+        1
+      ],
+      "latency_s": 4.611,
+      "guarded": [
+        1,
+        1
+      ],
+      "guarded_s": 4.611
+    }
+  },
+  "validate3/map-filter-n200": {
+    "model": "v3",
+    "algorithm": "kalypso_per_tuple",
+    "algorithm_latency": "kalypso_per_tuple",
+    "algorithm_guarded": "kalypso_per_tuple",
+    "best_in_isolation": "kalypso_pipe:1,4",
+    "grid": [
+      "kalypso_pipe:1,2",
+      "kalypso_pipe:2,1"
+    ],
+    "predicted": {
+      "selectivity": 1.0,
+      "rows": 200,
+      "blocks": [
+        1,
+        1
+      ],
+      "latency_s": 5.309,
+      "guarded": [
+        1,
+        1
+      ],
+      "guarded_s": 5.309
+    }
+  },
+  "validate-jf/join-filter-j50_f50": {
+    "model": "v3",
+    "algorithm": "kalypso_pipe:10,2",
+    "algorithm_latency": "kalypso_pipe:10,2",
+    "algorithm_guarded": "kalypso_pipe:1,2",
+    "best_in_isolation": "kalypso_pipe:5,4",
+    "grid": [
+      "kalypso_per_tuple",
+      "kalypso_pipe:1,3",
+      "kalypso_pipe:1,4",
+      "kalypso_pipe:2,2",
+      "kalypso_pipe:5,2",
+      "kalypso_pipe:9,2",
+      "kalypso_pipe:10,1",
+      "kalypso_pipe:10,3",
+      "kalypso_pipe:10,4",
+      "kalypso_pipe:11,2",
+      "kalypso_pipe:20,2"
+    ],
+    "predicted": {
+      "selectivity": 1.0,
+      "rows": 32,
+      "blocks": [
+        10,
+        2
+      ],
+      "latency_s": 9.562,
+      "guarded": [
+        1,
+        2
+      ],
+      "guarded_s": 14.371
+    }
+  },
+  "validate-jf/join-filter-j62_f10": {
+    "model": "v3",
+    "algorithm": "kalypso_pipe:10,2",
+    "algorithm_latency": "kalypso_pipe:10,2",
+    "algorithm_guarded": "kalypso_pipe:1,3",
+    "best_in_isolation": "kalypso_pipe:5,4",
+    "grid": [
+      "kalypso_per_tuple",
+      "kalypso_pipe:1,2",
+      "kalypso_pipe:1,4",
+      "kalypso_pipe:1,6",
+      "kalypso_pipe:2,3",
+      "kalypso_pipe:5,2",
+      "kalypso_pipe:9,2",
+      "kalypso_pipe:10,1",
+      "kalypso_pipe:10,3",
+      "kalypso_pipe:10,4",
+      "kalypso_pipe:11,2",
+      "kalypso_pipe:20,2"
+    ],
+    "predicted": {
+      "selectivity": 1.0,
+      "rows": 32,
+      "blocks": [
+        10,
+        2
+      ],
+      "latency_s": 9.517,
+      "guarded": [
+        1,
+        3
+      ],
+      "guarded_s": 14.058
+    }
+  },
+  "validate-jf/join-filter-j62_f90": {
+    "model": "v3",
+    "algorithm": "kalypso_pipe:10,2",
+    "algorithm_latency": "kalypso_pipe:10,2",
+    "algorithm_guarded": "kalypso_pipe:1,3",
+    "best_in_isolation": "kalypso_pipe:5,4",
+    "grid": [
+      "kalypso_per_tuple",
+      "kalypso_pipe:1,2",
+      "kalypso_pipe:1,4",
+      "kalypso_pipe:1,6",
+      "kalypso_pipe:2,3",
+      "kalypso_pipe:5,2",
+      "kalypso_pipe:9,2",
+      "kalypso_pipe:10,1",
+      "kalypso_pipe:10,3",
+      "kalypso_pipe:10,4",
+      "kalypso_pipe:11,2",
+      "kalypso_pipe:20,2"
+    ],
+    "predicted": {
+      "selectivity": 1.0,
+      "rows": 32,
+      "blocks": [
+        10,
+        2
+      ],
+      "latency_s": 9.792,
+      "guarded": [
+        1,
+        3
+      ],
+      "guarded_s": 14.292
+    }
+  },
+  "validate-jf/join-filter-j18_f50": {
+    "model": "v3",
+    "algorithm": "kalypso_pipe:9,2",
+    "algorithm_latency": "kalypso_pipe:9,2",
+    "algorithm_guarded": "kalypso_pipe:1,2",
+    "best_in_isolation": "kalypso_pipe:5,4",
+    "grid": [
+      "kalypso_per_tuple",
+      "kalypso_pipe:1,3",
+      "kalypso_pipe:1,4",
+      "kalypso_pipe:2,2",
+      "kalypso_pipe:4,2",
+      "kalypso_pipe:8,2",
+      "kalypso_pipe:9,1",
+      "kalypso_pipe:9,3",
+      "kalypso_pipe:9,4",
+      "kalypso_pipe:10,2",
+      "kalypso_pipe:18,2"
+    ],
+    "predicted": {
+      "selectivity": 1.0,
+      "rows": 32,
+      "blocks": [
+        9,
+        2
+      ],
+      "latency_s": 8.852,
+      "guarded": [
+        1,
+        2
+      ],
+      "guarded_s": 13.11
+    }
+  },
+  "validate4/cnli-filter-s75-n300": {
+    "model": "v3",
+    "algorithm": "kalypso_per_tuple",
+    "algorithm_latency": "kalypso_per_tuple",
+    "algorithm_guarded": "kalypso_per_tuple",
+    "best_in_isolation": "kalypso_block:2",
+    "grid": [
+      "kalypso_block:2"
+    ],
+    "predicted": {
+      "items": 300,
+      "item_tokens": 1482.75,
+      "regime": "long",
+      "blocks": [
+        1
+      ],
+      "latency_s": 38.773,
+      "guarded": [
+        1
+      ],
+      "guarded_s": 38.773
+    }
+  },
+  "validate4/cnli-join-high-n40": {
+    "model": "v3",
+    "algorithm": "kalypso_per_tuple",
+    "algorithm_latency": "kalypso_per_tuple",
+    "algorithm_guarded": "kalypso_per_tuple",
+    "best_in_isolation": "kalypso_per_tuple",
+    "grid": [
+      "kalypso_block:2"
+    ],
+    "predicted": {
+      "items": 320,
+      "item_tokens": 1645.53,
+      "regime": "long",
+      "blocks": [
+        1
+      ],
+      "latency_s": 9.966,
+      "guarded": [
+        1
+      ],
+      "guarded_s": 9.966
+    }
+  },
+  "validate4/cnli-len128": {
+    "model": "v3",
+    "algorithm": "kalypso_block:2",
+    "algorithm_latency": "kalypso_block:2",
+    "algorithm_guarded": "kalypso_block:2",
+    "best_in_isolation": "kalypso_block:4",
+    "grid": [
+      "kalypso_per_tuple",
+      "kalypso_block:3",
+      "kalypso_block:4"
+    ],
+    "predicted": {
+      "items": 400,
+      "item_tokens": 145.84,
+      "regime": "short",
+      "blocks": [
+        2
+      ],
+      "latency_s": 5.632,
+      "guarded": [
+        2
+      ],
+      "guarded_s": 5.632
+    }
+  },
+  "validate4/cnli-len256": {
+    "model": "v3",
+    "algorithm": "kalypso_block:2",
+    "algorithm_latency": "kalypso_block:2",
+    "algorithm_guarded": "kalypso_block:2",
+    "best_in_isolation": "kalypso_block:4",
+    "grid": [
+      "kalypso_per_tuple",
+      "kalypso_block:3",
+      "kalypso_block:4"
+    ],
+    "predicted": {
+      "items": 400,
+      "item_tokens": 266.84,
+      "regime": "short",
+      "blocks": [
+        2
+      ],
+      "latency_s": 9.544,
+      "guarded": [
+        2
+      ],
+      "guarded_s": 9.544
+    }
+  },
+  "validate4/cnli-len512": {
+    "model": "v3",
+    "algorithm": "kalypso_block:2",
+    "algorithm_latency": "kalypso_block:2",
+    "algorithm_guarded": "kalypso_block:2",
+    "best_in_isolation": "kalypso_block:4",
+    "grid": [
+      "kalypso_per_tuple",
+      "kalypso_block:3",
+      "kalypso_block:4"
+    ],
+    "predicted": {
+      "items": 400,
+      "item_tokens": 504.92,
+      "regime": "short",
+      "blocks": [
+        2
+      ],
+      "latency_s": 17.362,
+      "guarded": [
+        2
+      ],
+      "guarded_s": 17.362
+    }
+  },
+  "validate4/cnli-len1024": {
+    "model": "v3",
+    "algorithm": "kalypso_block:2",
+    "algorithm_latency": "kalypso_block:2",
+    "algorithm_guarded": "kalypso_per_tuple",
+    "best_in_isolation": "kalypso_block:2",
+    "grid": [
+      "kalypso_block:3",
+      "kalypso_block:4"
+    ],
+    "predicted": {
+      "items": 400,
+      "item_tokens": 937.46,
+      "regime": "long",
+      "blocks": [
+        2
+      ],
+      "latency_s": 31.977,
+      "guarded": [
+        1
+      ],
+      "guarded_s": 33.365
+    }
+  },
+  "validate4/cnli-join-len128": {
+    "model": "v3",
+    "algorithm": "kalypso_block:2",
+    "algorithm_latency": "kalypso_block:2",
+    "algorithm_guarded": "kalypso_per_tuple",
+    "best_in_isolation": "kalypso_block:5",
+    "grid": [
+      "kalypso_block:3",
+      "kalypso_block:4"
+    ],
+    "predicted": {
+      "items": 320,
+      "item_tokens": 139.43,
+      "regime": "short",
+      "blocks": [
+        2
+      ],
+      "latency_s": 3.333,
+      "guarded": [
+        1
+      ],
+      "guarded_s": 3.407
+    }
+  },
+  "validate4/cnli-join-len256": {
+    "model": "v3",
+    "algorithm": "kalypso_per_tuple",
+    "algorithm_latency": "kalypso_per_tuple",
+    "algorithm_guarded": "kalypso_per_tuple",
+    "best_in_isolation": "kalypso_block:5",
+    "grid": [
+      "kalypso_block:2"
+    ],
+    "predicted": {
+      "items": 320,
+      "item_tokens": 261.15,
+      "regime": "short",
+      "blocks": [
+        1
+      ],
+      "latency_s": 3.841,
+      "guarded": [
+        1
+      ],
+      "guarded_s": 3.841
+    }
+  },
+  "validate4/cnli-join-len512": {
+    "model": "v3",
+    "algorithm": "kalypso_per_tuple",
+    "algorithm_latency": "kalypso_per_tuple",
+    "algorithm_guarded": "kalypso_per_tuple",
+    "best_in_isolation": "kalypso_block:5",
+    "grid": [
+      "kalypso_block:2"
+    ],
+    "predicted": {
+      "items": 320,
+      "item_tokens": 501.35,
+      "regime": "short",
+      "blocks": [
+        1
+      ],
+      "latency_s": 4.748,
+      "guarded": [
+        1
+      ],
+      "guarded_s": 4.748
+    }
+  },
+  "validate4/cnli-join-len1024": {
+    "model": "v3",
+    "algorithm": "kalypso_per_tuple",
+    "algorithm_latency": "kalypso_per_tuple",
+    "algorithm_guarded": "kalypso_per_tuple",
+    "best_in_isolation": "kalypso_per_tuple",
+    "grid": [
+      "kalypso_block:2"
+    ],
+    "predicted": {
+      "items": 320,
+      "item_tokens": 942.35,
+      "regime": "long",
+      "blocks": [
+        1
+      ],
+      "latency_s": 6.584,
+      "guarded": [
+        1
+      ],
+      "guarded_s": 6.584
+    }
+  },
+  "validate4/cnli-map-len128": {
+    "model": "v3",
+    "algorithm": "kalypso_per_tuple",
+    "algorithm_latency": "kalypso_per_tuple",
+    "algorithm_guarded": "kalypso_per_tuple",
+    "best_in_isolation": "kalypso_per_tuple",
+    "grid": [
+      "kalypso_block:2"
+    ],
+    "predicted": {
+      "items": 400,
+      "item_tokens": 124.55,
+      "regime": "short",
+      "blocks": [
+        1
+      ],
+      "latency_s": 9.059,
+      "guarded": [
+        1
+      ],
+      "guarded_s": 9.059
+    }
+  },
+  "validate4/cnli-map-len256": {
+    "model": "v3",
+    "algorithm": "kalypso_per_tuple",
+    "algorithm_latency": "kalypso_per_tuple",
+    "algorithm_guarded": "kalypso_per_tuple",
+    "best_in_isolation": "kalypso_per_tuple",
+    "grid": [
+      "kalypso_block:2"
+    ],
+    "predicted": {
+      "items": 400,
+      "item_tokens": 244.24,
+      "regime": "short",
+      "blocks": [
+        1
+      ],
+      "latency_s": 12.901,
+      "guarded": [
+        1
+      ],
+      "guarded_s": 12.901
+    }
+  },
+  "validate4/cnli-map-len512": {
+    "model": "v3",
+    "algorithm": "kalypso_per_tuple",
+    "algorithm_latency": "kalypso_per_tuple",
+    "algorithm_guarded": "kalypso_per_tuple",
+    "best_in_isolation": "kalypso_per_tuple",
+    "grid": [
+      "kalypso_block:2"
+    ],
+    "predicted": {
+      "items": 400,
+      "item_tokens": 484.85,
+      "regime": "short",
+      "blocks": [
+        1
+      ],
+      "latency_s": 20.687,
+      "guarded": [
+        1
+      ],
+      "guarded_s": 20.687
+    }
+  },
+  "validate4/cnli-map-len1024": {
+    "model": "v3",
+    "algorithm": "kalypso_per_tuple",
+    "algorithm_latency": "kalypso_per_tuple",
+    "algorithm_guarded": "kalypso_per_tuple",
+    "best_in_isolation": "kalypso_per_tuple",
+    "grid": [
+      "kalypso_block:2"
+    ],
+    "predicted": {
+      "items": 400,
+      "item_tokens": 915.92,
+      "regime": "long",
+      "blocks": [
+        1
+      ],
+      "latency_s": 34.842,
+      "guarded": [
+        1
+      ],
+      "guarded_s": 34.842
+    }
+  }
+}

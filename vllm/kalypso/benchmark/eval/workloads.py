@@ -50,6 +50,12 @@ MOVIE_OPPOSITE_INSTRUCTION = ("These two movie reviews express opposite sentimen
 # Map prompts for the batching study; SemBench's movie queries have no map.
 MOVIE_REASON_INSTRUCTION = ("In one short sentence, state the main reason for the "
                             "reviewer's opinion of the movie.")
+# Join -> filter prompts. A filter after a join sees the pair as one row (a
+# block filter flattens it to one line), so its question does not depend on
+# which review comes first.
+MOVIE_SAME_INSTRUCTION = ("These two movie reviews express the same sentiment - "
+                          "both are positive or both are negative.")
+MOVIE_BOTH_POSITIVE_INSTRUCTION = "Determine if both of these movie reviews are clearly positive."
 
 MAP, FILTER, JOIN = "map", "filter", "join"
 
@@ -77,6 +83,10 @@ class Workload:
     # "instruction": ...}; a JOIN stage joins with right_path. ``kind`` is then
     # the kind of the last stage's output. None for single-operator workloads.
     stages: tuple[dict, ...] | None = None
+    # Pipelines only, when known: the true share of each stage's input that
+    # matches (filters and joins; 1.0 for maps). None: the cost model derives
+    # a leading filter's share from ``positives``.
+    stage_selectivity: tuple[float, ...] | None = None
 
 
 def _txt_files(directory: Path) -> list[Path]:
@@ -409,7 +419,8 @@ def load_pipe_filter_map_map(n: int | None = None) -> Workload:
 
 
 PIPE_FILTER_JOIN = {"pipe_filter_join_s10": "movie_sel10", "pipe_filter_join_s25": "movie_sel25",
-                    "pipe_filter_join_s50": "movie_sel50", "pipe_filter_join_s90": "movie_sel90"}
+                    "pipe_filter_join_s50": "movie_sel50", "pipe_filter_join_s75": "movie_sel75",
+                    "pipe_filter_join_s90": "movie_sel90"}
 
 
 def load_pipe_filter_join(name: str, n: int | None = None) -> Workload:
@@ -459,6 +470,82 @@ def load_pipe_filter_join_join(name: str, n: int | None = None) -> Workload:
     )
 
 
+# Join -> filter: JOIN_FILTER_SIDE x JOIN_FILTER_SIDE pairs of distinct
+# reviews from every movie, a share a of the left and b of the right positive.
+# The join keeps same-sentiment pairs (a b + (1 - a)(1 - b) of them), then the
+# filter keeps pairs where both are positive (a b of all pairs). Named by the
+# join's and the filter's true selectivity, in percent.
+JOIN_FILTER_SIDE = 32
+JOIN_FILTER_SEED = 0
+PIPE_JOIN_FILTER = {"pipe_join_filter_j50_f50": (0.50, 0.50),
+                    "pipe_join_filter_j62_f10": (0.25, 0.25),
+                    "pipe_join_filter_j62_f90": (0.75, 0.75),
+                    "pipe_join_filter_j18_f50": (0.90, 0.10)}
+
+
+def _join_filter_sides(name: str, n: int | None) -> tuple[list[dict], list[dict]]:
+    side = JOIN_FILTER_SIDE if n is None else n
+    if side < 1:
+        raise ValueError(f"{name}: --n must be at least 1")
+    a, b = PIPE_JOIN_FILTER[name]
+    reviews = _sembench_reviews()
+    positives = [r for r in reviews if _positive(r)]
+    negatives = [r for r in reviews if not _positive(r)]
+    pos_l, pos_r = round(a * side), round(b * side)
+    if pos_l + pos_r > len(positives) or 2 * side - pos_l - pos_r > len(negatives):
+        raise ValueError(f"{name}: not enough reviews for {side} x {side} pairs")
+    rng = random.Random(JOIN_FILTER_SEED)
+    pos = rng.sample(positives, pos_l + pos_r)
+    neg = rng.sample(negatives, 2 * side - pos_l - pos_r)
+    left = pos[:pos_l] + neg[:side - pos_l]
+    right = pos[pos_l:] + neg[side - pos_l:]
+    rng.shuffle(left)
+    rng.shuffle(right)
+    return left, right
+
+
+def _join_filter_labels(left: list[dict], right: list[dict]):
+    same = {(i, j) for i, x in enumerate(left) for j, y in enumerate(right)
+            if _positive(x) == _positive(y)}
+    both = frozenset((i, j) for i, j in same if _positive(left[i]))
+    return same, both
+
+
+def load_pipe_join_filter(name: str, n: int | None = None) -> Workload:
+    """Same-sentiment review pairs (join), then pairs where both are positive
+    (filter). The join's and filter's true selectivities are set by ``name``."""
+    left, right = _join_filter_sides(name, n)
+    same, both = _join_filter_labels(left, right)
+    side = len(left)
+    return Workload(
+        name=name, kind=JOIN,
+        data_path=_movie_csv(f"{name}_{side}_left", left),
+        right_path=_movie_csv(f"{name}_{side}_right", right),
+        instruction=MOVIE_BOTH_POSITIVE_INSTRUCTION,
+        rows=[Row(i, r["reviewText"]) for i, r in enumerate(left)],
+        right_rows=[Row(j, r["reviewText"]) for j, r in enumerate(right)],
+        positives=both,
+        stages=({"op": JOIN, "instruction": MOVIE_SAME_INSTRUCTION},
+                {"op": FILTER, "instruction": MOVIE_BOTH_POSITIVE_INSTRUCTION}),
+        stage_selectivity=(len(same) / (side * len(right)),
+                           len(both) / len(same) if same else 0.0),
+    )
+
+
+def load_pipe_join_filter_join(name: str, n: int | None = None) -> Workload:
+    """A pipe_join_filter_* join alone (``name`` plus ``_join``), to compare
+    the pipeline with its operators run separately."""
+    base = name.removesuffix("_join")
+    pipeline = load_pipe_join_filter(base, n)
+    left, right = _join_filter_sides(base, n)
+    same, _ = _join_filter_labels(left, right)
+    return Workload(
+        name=name, kind=JOIN, data_path=pipeline.data_path, right_path=pipeline.right_path,
+        instruction=MOVIE_SAME_INSTRUCTION, rows=pipeline.rows,
+        right_rows=pipeline.right_rows, positives=frozenset(same),
+    )
+
+
 # ContractNLI (Stanford, CC BY 4.0): long rows (NDAs, ~1.9k tokens on
 # average). Downloaded on first use into the git-ignored benchmark/data/.
 CONTRACTNLI_DIR = Path(__file__).resolve().parents[1] / "data" / "contract-nli"
@@ -474,8 +561,10 @@ def _contractnli() -> tuple[list[dict], dict[str, str]]:
     """ContractNLI documents (train, dev, test; at most CNLI_MAX_CHARS) and
     the 17 hypotheses.
 
-    Each document is ``{"id", "text", "choices": {label_id: choice}}`` with
-    choice Entailment, Contradiction or NotMentioned.
+    Each document is ``{"id", "text", "choices": {label_id: choice},
+    "evidence": {label_id: (start, end)}}`` with choice Entailment,
+    Contradiction or NotMentioned; evidence is the character range of
+    ``text`` covering the label's evidence spans (labels with spans only).
     """
     path = CONTRACTNLI_DIR / "contract-nli.zip"
     if not path.exists():
@@ -491,8 +580,14 @@ def _contractnli() -> tuple[list[dict], dict[str, str]]:
                 if len(doc["text"]) > CNLI_MAX_CHARS:
                     continue
                 annotations = doc["annotation_sets"][0]["annotations"]
+                # Span offsets are into the unstripped text.
+                shift = len(doc["text"]) - len(doc["text"].lstrip())
+                evidence = {k: (min(doc["spans"][i][0] for i in a["spans"]) - shift,
+                                max(doc["spans"][i][1] for i in a["spans"]) - shift)
+                            for k, a in annotations.items() if a["spans"]}
                 docs.append({"id": f"{split}-{doc['id']}", "text": doc["text"].strip(),
-                             "choices": {k: a["choice"] for k, a in annotations.items()}})
+                             "choices": {k: a["choice"] for k, a in annotations.items()},
+                             "evidence": evidence})
     return docs, hypotheses
 
 
@@ -553,6 +648,151 @@ def load_cnli_selectivity(name: str, n: int | None = None) -> Workload:
     )
 
 
+# Row-length sweep: the ContractNLI filter with each contract cut to a window
+# of about L tokens (CNLI_CHARS_PER_TOKEN characters each), so only the row
+# length changes. An entailed row's window holds all of that label's evidence,
+# so its label stays true; a negative row's window is anywhere (cutting text
+# cannot make a hypothesis entailed). Half the rows are entailed, one row per
+# contract as in cnli_sel*. Named by the target length in tokens.
+CNLI_CHARS_PER_TOKEN = 5
+CNLI_LENGTHS = {"cnli_len128": 128, "cnli_len256": 256, "cnli_len512": 512,
+                "cnli_len1024": 1024}
+CNLI_LENGTH_SELECTIVITY = 0.5
+
+
+def _window(text: str, size: int, cover: tuple[int, int] | None,
+            rng: random.Random) -> str | None:
+    """About ``size`` characters of ``text`` at word boundaries, containing
+    ``cover`` when given; None if ``cover`` is wider than ``size``."""
+    if len(text) <= size:
+        return text
+    lo, hi = 0, len(text) - size
+    if cover is not None:
+        if cover[1] - cover[0] > size:
+            return None
+        lo, hi = max(0, cover[1] - size), min(cover[0], hi)
+    start = rng.randint(lo, hi)
+    end = start + size
+    # Widen to word boundaries so no word is cut.
+    while start > 0 and not text[start - 1].isspace():
+        start -= 1
+    while end < len(text) and not text[end].isspace():
+        end += 1
+    return text[start:end].strip()
+
+
+def load_cnli_length(name: str, n: int | None = None) -> Workload:
+    """ContractNLI entailment filter at a set row length (``CNLI_LENGTHS``)."""
+    docs, hypotheses = _contractnli()
+    size = CNLI_LENGTHS[name] * CNLI_CHARS_PER_TOKEN
+    rng = random.Random(SELECTIVITY_SEED)
+    docs = rng.sample(docs, len(docs))
+    want = round(CNLI_LENGTH_SELECTIVITY * SELECTIVITY_ROWS)
+    rows = []  # (text, is_positive)
+    for doc in docs:
+        n_pos = sum(p for _, p in rows)
+        positive, negative = n_pos < want, len(rows) - n_pos < SELECTIVITY_ROWS - want
+        if not (positive or negative):
+            break
+        entailed = sorted(k for k, c in doc["choices"].items()
+                          if c == "Entailment" and k in doc["evidence"])
+        other = sorted(k for k, c in doc["choices"].items() if c != "Entailment")
+        # A positive row takes the first entailed label whose evidence fits.
+        fits = [k for k in rng.sample(entailed, len(entailed))
+                if doc["evidence"][k][1] - doc["evidence"][k][0] <= size]
+        if positive and fits:
+            k = fits[0]
+            text = _window(doc["text"], size, doc["evidence"][k], rng)
+            rows.append((_cnli_row(text, hypotheses[k]), True))
+        elif negative and other:
+            k = rng.choice(other)
+            rows.append((_cnli_row(_window(doc["text"], size, None, rng), hypotheses[k]), False))
+    if len(rows) < SELECTIVITY_ROWS:
+        raise ValueError(f"{name}: only {len(rows)} usable contracts for {SELECTIVITY_ROWS} rows")
+    rng.shuffle(rows)
+    rows = rows[:_limit(n, len(rows), name)]
+    return Workload(
+        name=name, kind=FILTER,
+        data_path=_cnli_csv(f"{name}_{len(rows)}", [t for t, _ in rows]),
+        instruction=CONTRACTNLI_ENTAILMENT,
+        rows=[Row(i, t) for i, (t, _) in enumerate(rows)],
+        positives=frozenset(i for i, (_, p) in enumerate(rows) if p),
+    )
+
+
+# Row-length sweep for joins and maps, on the same contract windows.
+# Join: CNLI_JOIN_LENGTH_LEFT windows x the CNLI_JOIN_RIGHT hypotheses
+# entailed most often (as cnli_join_high). Each window covers the evidence
+# of one entailed hypothesis when one fits; a pair matches when the contract
+# entails the hypothesis and that evidence lies inside the window.
+# Map: CNLI_MAP_LENGTH_ROWS windows, one per contract; no labels (arms are
+# compared with per-tuple output).
+CNLI_JOIN_LENGTHS = {f"cnli_join_len{n}": n for n in CNLI_LENGTHS.values()}
+CNLI_MAP_LENGTHS = {f"cnli_map_len{n}": n for n in CNLI_LENGTHS.values()}
+CNLI_JOIN_LENGTH_LEFT = 40
+CNLI_MAP_LENGTH_ROWS = 400
+CONTRACT_GIST_INSTRUCTION = ("In one short sentence, state what this part of the contract "
+                             "is about.")
+
+
+def _high_hypotheses(docs: list[dict], hypotheses: dict[str, str]) -> list[str]:
+    rate = {k: sum(d["choices"].get(k) == "Entailment" for d in docs) / len(docs)
+            for k in hypotheses}
+    return sorted(hypotheses, key=lambda k: (rate[k], k))[-CNLI_JOIN_RIGHT:]
+
+
+def load_cnli_join_length(name: str, n: int | None = None) -> Workload:
+    """ContractNLI join at a set left-row length (``CNLI_JOIN_LENGTHS``)."""
+    docs, hypotheses = _contractnli()
+    size = CNLI_JOIN_LENGTHS[name] * CNLI_CHARS_PER_TOKEN
+    right = _high_hypotheses(docs, hypotheses)
+    rng = random.Random(SELECTIVITY_SEED)
+    docs = rng.sample(docs, len(docs))[:_limit(CNLI_JOIN_LENGTH_LEFT if n is None else n,
+                                               len(docs), name)]
+    left, positives = [], set()
+    for i, doc in enumerate(docs):
+        fits = [k for k in right if doc["choices"].get(k) == "Entailment" and k in doc["evidence"]
+                and doc["evidence"][k][1] - doc["evidence"][k][0] <= size]
+        cover = doc["evidence"][rng.choice(fits)] if fits else None
+        text = _window(doc["text"], size, cover, rng)
+        left.append(text)
+        for j, k in enumerate(right):
+            if doc["choices"].get(k) == "Entailment" and k in doc["evidence"]:
+                lo, hi = doc["evidence"][k]
+                if _evidence_in(doc["text"], text, lo, hi):
+                    positives.add((i, j))
+    return Workload(
+        name=name, kind=JOIN,
+        data_path=_cnli_csv(f"{name}_left_{len(left)}", left),
+        right_path=_cnli_csv(f"{name}_right", [hypotheses[k] for k in right]),
+        instruction=scenarios.CONTRACT_NLI_ENTAILMENT_JOIN,
+        rows=[Row(i, t) for i, t in enumerate(left)],
+        right_rows=[Row(j, hypotheses[k]) for j, k in enumerate(right)],
+        positives=frozenset(positives),
+    )
+
+
+def _evidence_in(text: str, window: str, lo: int, hi: int) -> bool:
+    """Whether ``text[lo:hi]`` lies inside ``window``, a stripped slice of ``text``."""
+    return text[lo:hi].strip() in window
+
+
+def load_cnli_map_length(name: str, n: int | None = None) -> Workload:
+    """Map over contract windows of a set length (``CNLI_MAP_LENGTHS``)."""
+    docs, _ = _contractnli()
+    size = CNLI_MAP_LENGTHS[name] * CNLI_CHARS_PER_TOKEN
+    rng = random.Random(SELECTIVITY_SEED)
+    docs = rng.sample(docs, len(docs))[:_limit(CNLI_MAP_LENGTH_ROWS if n is None else n,
+                                               len(docs), name)]
+    texts = [_window(d["text"], size, None, rng) for d in docs]
+    return Workload(
+        name=name, kind=MAP,
+        data_path=_cnli_csv(f"{name}_{len(texts)}", texts),
+        instruction=CONTRACT_GIST_INSTRUCTION,
+        rows=[Row(i, t) for i, t in enumerate(texts)],
+    )
+
+
 # ContractNLI join: contracts x hypotheses, matched when the contract entails
 # the hypothesis. Selectivity is set by which hypotheses form the right table:
 # the CNLI_JOIN_RIGHT hypotheses entailed least often (low) or most often
@@ -603,7 +843,16 @@ WORKLOADS = {
     "pipe_filter_map_map": load_pipe_filter_map_map,
     **{f"{name}_join": (lambda n=None, name=name: load_pipe_filter_join_join(f"{name}_join", n))
        for name in PIPE_FILTER_JOIN},
+    **{name: (lambda n=None, name=name: load_pipe_join_filter(name, n))
+       for name in PIPE_JOIN_FILTER},
+    **{f"{name}_join": (lambda n=None, name=name: load_pipe_join_filter_join(f"{name}_join", n))
+       for name in PIPE_JOIN_FILTER},
     **{name: (lambda n=None, name=name: load_cnli_selectivity(name, n))
        for name in CNLI_SELECTIVITIES},
     **{name: (lambda n=None, name=name: load_cnli_join(name, n)) for name in CNLI_JOINS},
+    **{name: (lambda n=None, name=name: load_cnli_length(name, n)) for name in CNLI_LENGTHS},
+    **{name: (lambda n=None, name=name: load_cnli_join_length(name, n))
+       for name in CNLI_JOIN_LENGTHS},
+    **{name: (lambda n=None, name=name: load_cnli_map_length(name, n))
+       for name in CNLI_MAP_LENGTHS},
 }

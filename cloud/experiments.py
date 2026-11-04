@@ -12,7 +12,9 @@ directly. Results go to the volume under ``experiments/<id>/<part>/``.
 
 Phases follow the study's steps: single operators (``single``, ``map``,
 ``longrows``), pipelines (``pipeline``) and validation of the block-size
-algorithm against static batching and tuple-wise execution (``validate``).
+algorithm against static batching and tuple-wise execution (``validate``,
+chosen by cost model v2; ``validate3``, held out from v3, which is fitted on
+everything before it).
 An experiment whose code is not in this checkout yet is listed as blocked
 with the reason; it runs once that lands.
 
@@ -27,7 +29,8 @@ REPO = Path(__file__).resolve().parents[1]
 EVAL = REPO / "vllm/kalypso/benchmark/eval"
 RESULTS = EVAL / "results"
 # Written by the cost model (eval/costmodel.py): per validation experiment,
-# {"algorithm": arm, "best_in_isolation": arm, "grid": [arms]}.
+# {"algorithm": arm, "algorithm_guarded": arm, "best_in_isolation": arm,
+#  "grid": [arms]} (v2 choices: "algorithm" guarded, "algorithm_latency").
 ALGORITHM_CHOICES = RESULTS / "analysis" / "algorithm_choices.json"
 
 
@@ -155,8 +158,8 @@ PIPELINE = [
 STATIC = blocks(4, 16, 32)
 
 
-def validation(id, workload, n, purpose, requires=()):
-    return experiment(f"validate/{id}", "validate", [part(workload, STATIC, n=n)],
+def validation(id, workload, n, purpose, requires=(), phase="validate", extra=()):
+    return experiment(f"{phase}/{id}", phase, [part(workload, [*STATIC, *extra], n=n)],
                       purpose, requires=["algorithm", *requires])
 
 
@@ -176,16 +179,89 @@ VALIDATE = [
                requires=["contractnli"]),
 ]
 
-EXPERIMENTS = SINGLE + MAP + LONGROWS + PIPELINE + VALIDATE
-PHASES = ("single", "map", "longrows", "pipeline", "validate")
+# --- Step 5: validation of cost model v3 ------------------------------------
+# v3 is fitted on everything above, VALIDATE included; these sizes,
+# selectivities and shapes are new to it, and include cases where blocking
+# should pay (short-row filter at large N, short-row join).
+
+VALIDATE3 = [
+    validation("filter-n1500", "movie_positive", 1500,
+               "Short-row filter at an unseen size: the case blocking should win.",
+               phase="validate3"),
+    validation("join-n48", "movie_fanout50", 48,
+               "Short-row join, 48x48 at fanout 50%: unseen size.", phase="validate3"),
+    validation("filter-join-s75", "pipe_filter_join_s75", 0,
+               "Filter -> join at an unseen selectivity.", phase="validate3"),
+    validation("filter-map-n250", "pipe_filter_map", 250,
+               "Filter -> map at an unseen size.", requires=["block_map"], phase="validate3"),
+    validation("map-filter-n200", "pipe_map_filter", 200,
+               "Map -> filter at an unseen size: the per-tuple map reruns cut-off rows "
+               "when the filter is blocked.", requires=["block_map"], phase="validate3"),
+]
+
+# --- Step 6: held-out rounds after validate3 ---------------------------------
+# Held out like validate3: the cost model picks before the run.
+# validate-jf: join -> filter, a shape the model has never seen. The join
+# expands rows (32 x 32 pairs) and the filter after it shrinks them. Beside
+# the static sizes and the picks, a grid of join x filter sizes finds the
+# oracle; the join alone shares the container.
+# validate4: long rows (~1500 tokens) at a selectivity and size not in the
+# fit, where the algorithm should not block; and row lengths between the
+# short (~31 tokens) and long rows measured so far: where does blocking stop
+# paying?
+
+JOIN_FILTER_GRID = pipe(*[(j, f) for j in (1, 2, 4, 6) for f in (1, 2, 4, 8)
+                          if (j, f) != (1, 1)])
+
+VALIDATE_JF = [
+    experiment(f"validate-jf/join-filter-{tag}", "validate-jf", [
+        part(f"pipe_join_filter_{tag}", STATIC + JOIN_FILTER_GRID),
+        part(f"pipe_join_filter_{tag}_join", blocks(2, 4, 6), name="alone-join"),
+    ], f"Join -> filter ({purpose}): the filter's input is the join's output, "
+       "so the join's block size changes how many pairs the filter sees.",
+       requires=["algorithm"])
+    for tag, purpose in (("j50_f50", "join 50%, filter 50%"),
+                         ("j62_f10", "join 62%, filter 10%"),
+                         ("j62_f90", "join 62%, filter 90%"),
+                         ("j18_f50", "join 18%, filter 50%"))
+]
+
+VALIDATE4 = [
+    validation("cnli-filter-s75-n300", "cnli_sel75", 300,
+               "Long rows at an unseen selectivity and size: the algorithm should not block.",
+               requires=["contractnli"], phase="validate4"),
+    validation("cnli-join-high-n40", "cnli_join_high", 40,
+               "Long-row join at an unseen size (40 x 8): block joins repeat the contract, "
+               "so the algorithm should not block.", requires=["contractnli"], phase="validate4"),
+    *[validation(f"cnli-len{n}", f"cnli_len{n}", 0,
+                 f"Filter on ~{n}-token rows (ContractNLI cut to a window): where between "
+                 "short and long rows blocking stops paying.",
+                 requires=["contractnli"], phase="validate4", extra=blocks(2, 8))
+      for n in (128, 256, 512, 1024)],
+    # The same row lengths for a join (40 contract windows x 8 hypotheses)
+    # and a map (400 windows): when blocking pays, for every operator. Sizes
+    # stop at 8: k = 16 and 32 lose everywhere, and on long rows a block map
+    # that large ran past the client's one-hour timeout.
+    *[experiment(f"validate4/cnli-{op}-len{n}", "validate4",
+                 [part(f"cnli_{op}_len{n}", blocks(2, 4, 8))],
+                 f"{op.capitalize()} on ~{n}-token rows (ContractNLI windows): where blocking "
+                 "stops paying for this operator.", requires=["algorithm", "contractnli"])
+      for op in ("join", "map") for n in (128, 256, 512, 1024)],
+]
+
+EXPERIMENTS = SINGLE + MAP + LONGROWS + PIPELINE + VALIDATE + VALIDATE3 + VALIDATE_JF + VALIDATE4
+PHASES = ("single", "map", "longrows", "pipeline", "validate", "validate3", "validate-jf", "validate4")
 
 
 def arms_for(exp, part_) -> list[str]:
     """The part's arms, plus the cost model's picks for a validation experiment."""
     arms = list(part_["arms"])
-    if exp["phase"] == "validate" and ALGORITHM_CHOICES.exists():
+    # Picks are for the validated (first) part, not an operator run alone.
+    if (exp["phase"].startswith("validate") and part_["name"] == exp["parts"][0]["name"]
+            and ALGORITHM_CHOICES.exists()):
         picks = json.loads(ALGORITHM_CHOICES.read_text(encoding="utf-8")).get(exp["id"], {})
-        arms += [picks[k] for k in ("algorithm", "best_in_isolation") if picks.get(k)]
+        arms += [picks[k] for k in ("algorithm", "algorithm_latency", "algorithm_guarded",
+                                    "best_in_isolation") if picks.get(k)]
         arms += picks.get("grid", [])
     return list(dict.fromkeys(arms))
 

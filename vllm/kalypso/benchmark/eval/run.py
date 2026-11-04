@@ -24,7 +24,7 @@ from pathlib import Path
 import httpx
 
 from . import metrics
-from .arms import DEFAULT_ARMS, ArmError, check_arm, parse_arm, run_arm
+from .arms import DEFAULT_ARMS, ArmError, check_arm, parse_arm, run_arm, split_arms
 from .workloads import WORKLOADS
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
@@ -198,7 +198,7 @@ def main() -> None:
     parser.add_argument("--model", default=None, help="defaults to the server's first model")
     parser.add_argument("--workload", choices=sorted(WORKLOADS), default="biodex")
     parser.add_argument("--n", type=int, default=None, help="rows to use; default all")
-    parser.add_argument("--arms", default=None, type=lambda s: s.split(","),
+    parser.add_argument("--arms", default=None, type=split_arms,
                         help="comma-separated; default: every arm that fits the workload")
     parser.add_argument("--warmup", type=int, default=1)
     parser.add_argument("--repeats", type=int, default=3)

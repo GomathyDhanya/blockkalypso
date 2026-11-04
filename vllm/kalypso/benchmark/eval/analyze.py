@@ -23,6 +23,7 @@ import csv
 import math
 import re
 import statistics
+from collections import Counter
 from pathlib import Path
 
 from . import report
@@ -38,12 +39,17 @@ MEASURED = ("latency_s", "llm_requests", "block_calls", "fallback_calls", "trunc
             "peak_kv_cache_pct", "peak_running", "peak_waiting", "preemptions",
             "mean_prefill_time_s", "mean_decode_time_s", "rows_per_s", "rows_out")
 QUALITY = ("accuracy", "precision", "recall", "f1")
+# A map arm keeps per-tuple's answers when its outputs overlap per-tuple's this
+# much (ROUGE-1); per-tuple maps run in two different pipelines score ~0.92,
+# block maps ~0.35.
+MIN_SIMILARITY = 0.8
 COLUMNS = (
     "source", "experiment", "phase", "part", "workload", "kind", "stages", "items",
     "rows", "right_rows", "positives", "positive_share", "arm", "blocks", "trials",
     "failed_trials", *MEASURED, "speedup", "calls_per_item", "prompt_tokens_per_call",
     "gen_tokens_per_call", "computed_prompt_tokens", "decode_s_per_gen_token",
     "waves", *QUALITY, "f1_delta", "recall_delta", "agreement", "self_agreement",
+    "similarity", "selected_count",
     "model", "gpu", "max_num_seqs", "git_sha",
 )
 
@@ -64,6 +70,30 @@ def _blocks(arm: str, stages: list | None) -> str:
     if kind in ("kalypso_per_tuple", "vllm_direct"):
         return ",".join(["1"] * n)
     return ""
+
+
+def _words(text) -> Counter:
+    return Counter(re.findall(r"\w+", str(text).lower()))
+
+
+def rouge1(reference, candidate) -> float:
+    """Word-overlap F1 between two texts (ROUGE-1)."""
+    ref, cand = _words(reference), _words(candidate)
+    overlap = sum((ref & cand).values())
+    if not overlap:
+        return 0.0
+    precision, recall = overlap / sum(cand.values()), overlap / sum(ref.values())
+    return 2 * precision * recall / (precision + recall)
+
+
+def similarity(group: list[dict], base: list[dict]) -> float | None:
+    """A map arm's mean ROUGE-1 against per-tuple's output for the same row and
+    repeat. Exact agreement is near 0 for free text even when answers match;
+    per-tuple against itself in another pipeline scores about 0.9."""
+    ref = {t["repeat"]: t["outputs"] for t in base if t.get("outputs")}
+    scores = [rouge1(ref[t["repeat"]][k], v) for t in group if t.get("repeat") in ref
+              for k, v in (t.get("outputs") or {}).items() if k in ref[t["repeat"]]]
+    return round(sum(scores) / len(scores), 4) if scores else None
 
 
 def _ratio(a, b, digits=4):
@@ -103,6 +133,10 @@ def run_rows(path: Path, root: Path) -> list[dict]:
         if arm in agree:
             row["agreement"] = agree[arm]["vs_reference"]
             row["self_agreement"] = agree[arm]["self"]
+        if meta.get("kind", "map") == "map" or (meta.get("stages") or [{}])[-1].get("op") == "map":
+            row["similarity"] = similarity(group, groups.get(BASELINE, []))
+        row["selected_count"] = _median(len(t["selected"]) for t in group
+                                        if t.get("selected") is not None)
         calls, hit = row["llm_requests"], row["prefix_cache_hit_rate"]
         row["calls_per_item"] = _ratio(calls, items)
         row["prompt_tokens_per_call"] = _ratio(row["prompt_tokens"], calls, 1)
@@ -134,6 +168,8 @@ def best_arm(rows: list[dict], f1_slack: float, min_agreement: float) -> dict | 
             return False
         if base.get("f1") is not None and r.get("f1") is not None:
             return r["f1"] >= base["f1"] - f1_slack
+        if r.get("similarity") is not None:
+            return r["similarity"] >= MIN_SIMILARITY
         return (r.get("agreement") or 0) >= min_agreement or r is base
 
     return min((r for r in rows if ok(r)), key=lambda r: r["latency_s"])
@@ -157,6 +193,7 @@ RUN_TABLE = (
     ("peak_kv_cache_pct", "Peak KV %", 1), ("preemptions", "Preempt", 0),
     ("recall", "Recall", 2), ("f1", "F1", 2), ("f1_delta", "ΔF1", 2),
     ("agreement", "Agree", 2), ("self_agreement", "Self", 2),
+    ("similarity", "Sim", 2), ("selected_count", "Selected", 0),
 )
 
 
@@ -209,7 +246,8 @@ def summary(all_rows: list[dict], f1_slack: float, min_agreement: float) -> str:
 
     lines = ["# Batching study results", "",
              f"Best arm: fastest with F1 at least per-tuple's minus {f1_slack} "
-             f"(unlabeled maps: agreement with per-tuple at least {min_agreement:.0%}). "
+             f"(unlabeled maps: ROUGE-1 similarity to per-tuple's outputs (Sim) at least "
+             f"{MIN_SIMILARITY}). "
              "Medians over repeats; speedup is against per-tuple in the same container.", ""]
     phases = {}
     for exp, parts in by_experiment.items():

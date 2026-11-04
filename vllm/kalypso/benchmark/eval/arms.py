@@ -102,6 +102,18 @@ def parse_arm(name: str) -> ArmSpec:
         "kalypso_block:N, kalypso_pipe:A,B")
 
 
+def split_arms(text: str) -> list[str]:
+    """Split a comma-separated arm list, keeping a pipeline arm's sizes
+    together: "kalypso_per_tuple,kalypso_pipe:4,1" is two arms."""
+    arms = []
+    for part in (p.strip() for p in text.split(",")):
+        if part.isdigit() and arms and arms[-1].startswith("kalypso_pipe:"):
+            arms[-1] += "," + part
+        elif part:
+            arms.append(part)
+    return arms
+
+
 def stage_blocks(spec: ArmSpec, workload: Workload) -> tuple[int, ...]:
     """Block size per operator (1 = per-tuple) that ``spec`` runs ``workload`` with."""
     n_stages = len(workload.stages) if workload.stages else 1

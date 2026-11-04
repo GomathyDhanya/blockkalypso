@@ -1,0 +1,10 @@
+{
+  "id": "pipeline/filter-join-s90",
+  "started": "2026-10-31T18:31:29+0000",
+  "parts": {
+    "pipe_filter_join_s90": "done",
+    "alone-filter": "done",
+    "alone-join": "done"
+  },
+  "finished": "2026-10-31T18:44:10+0000"
+}

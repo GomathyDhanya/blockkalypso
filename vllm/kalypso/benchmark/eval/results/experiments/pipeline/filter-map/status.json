@@ -1,0 +1,10 @@
+{
+  "id": "pipeline/filter-map",
+  "started": "2026-10-31T18:31:23+0000",
+  "parts": {
+    "pipe_filter_map": "done",
+    "alone-filter": "done",
+    "alone-map": "done"
+  },
+  "finished": "2026-10-31T18:35:17+0000"
+}
