@@ -69,7 +69,8 @@ modal volume get blockkalypso-results research-session1 ./research/baseline/resu
 
 ## Missing measurements
 
-- GPU experiments E0-E3: launched from Xen's Mac on Modal (see status below once they return).
+- GPU experiments E0-E3: running on Modal (app ap-Ml8MVqEIYbNBbFei3QAtSK, launched 06:34 UTC). E1-s05 finished 06:40 UTC; others pending at 06:41 UTC.
+- Push state: origin has `98e03cb`. Later commits (`9959240`+) are in Xen's Mac worktree `../blockkalypso-research` and in the cloud container; the Mac's permission mode blocked `git push` at 06:40 UTC. To publish: `cd blockkalypso-research && git push origin research/session1-baseline` (fast-forward).
 
 ## Commit log
 
