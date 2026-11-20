@@ -2,6 +2,7 @@ import asyncio
 # import math
 import time
 
+from vllm.kalypso import telemetry
 from vllm.kalypso.budget import KVMemoryManager
 from vllm.kalypso.context import RetryTaskResult
 # from vllm.kalypso.controller.map_estimator import MapRatioEstimator
@@ -231,6 +232,49 @@ class AsyncPipelineExecutor:
             retry_counts[stage_id] = retry_counts.get(stage_id, 0) + 1
             total_retries += 1
 
+        trace = telemetry.enabled()
+        last_trace_sample_at = 0.0
+
+        def trace_launch(stage, task, budget, forced):
+            now = time.monotonic()
+            task._t_start = now
+            used, cap = self.manager.stage_usage(stage.stage_id)
+            telemetry.emit(
+                "task_start", stage_id=stage.stage_id, task_id=task.task_id,
+                rows=task.num_rows, op_index=task.op_index, budget_bytes=budget,
+                forced=forced, retry=task.retry_priority is not None,
+                wait_s=now - getattr(task, "_t_enqueue", now),
+                stage_used_bytes=used, stage_cap_bytes=cap,
+                stage_waiting_tasks=len(stage.waiting_tasks),
+                stage_running_tasks=len(stage.running_tasks),
+            )
+
+        def trace_end(stage, task, outcome, rows_out):
+            now = time.monotonic()
+            telemetry.emit(
+                "task_end", stage_id=stage.stage_id, task_id=task.task_id,
+                rows_in=task.num_rows, rows_out=rows_out, outcome=outcome,
+                exec_s=now - getattr(task, "_t_start", now),
+            )
+
+        def trace_sample(force=False):
+            nonlocal last_trace_sample_at
+            now = time.monotonic()
+            if not force and now - last_trace_sample_at < telemetry.SCHEDULER_SAMPLE_INTERVAL_S:
+                return
+            last_trace_sample_at = now
+            telemetry.emit("scheduler_sample", active_tasks=len(active), stages=[{
+                "stage_id": stage.stage_id,
+                "waiting_tasks": len(stage.waiting_tasks),
+                "waiting_rows": stage.ready_rows(),
+                "running_tasks": len(stage.running_tasks),
+                "pending_block_rows": len(pending_block_rows.get(index, ())),
+                "used_bytes": self.manager.stage_usage(stage.stage_id)[0],
+                "cap_bytes": self.manager.stage_usage(stage.stage_id)[1],
+                "retries": retry_counts.get(stage.stage_id, 0),
+                "deferred_parents": deferred_parent_counts.get(stage.stage_id, 0),
+            } for index, stage in enumerate(stages)])
+
         def log_running_tasks(event: str):
             nonlocal last_scheduler_log_at
             if not self.LOG_SCHEDULER:
@@ -400,6 +444,8 @@ class AsyncPipelineExecutor:
 
                     record_input(stage.stage_id)
                     stage.pop_task()
+                    if trace:
+                        trace_launch(stage, task, stage.running_tasks.get(task.task_id), False)
                     log_running_tasks(
                         f"start task={task.task_id} stage={stage.stage_id}"
                     )
@@ -421,6 +467,8 @@ class AsyncPipelineExecutor:
                 stage.pop_task()
                 # refresh_retry_max_tokens(stage, task)
                 await stage.force_accept(task, self.manager)
+                if trace:
+                    trace_launch(stage, task, stage.running_tasks.get(task.task_id), True)
                 log_running_tasks(
                     f"force-start task={task.task_id} stage={stage.stage_id}"
                 )
@@ -456,6 +504,8 @@ class AsyncPipelineExecutor:
             else:
                 children = list(rows)
             record_output(stage.stage_id, len(children))
+            if trace:
+                trace_end(stage, task, "block", len(children))
 
             def downstream_trackers(count):
                 if task.trackers and count > 1:
@@ -497,6 +547,8 @@ class AsyncPipelineExecutor:
             await rebalance_stage_capacity()
 
         while has_pending_work() or active:
+            if trace:
+                trace_sample()
             flush_partial_block_tasks()
             await rebalance_stage_capacity()
             await launch_ready_tasks()
@@ -530,6 +582,13 @@ class AsyncPipelineExecutor:
                     raise
 
                 if isinstance(result, RetryTaskResult):
+                    if trace:
+                        trace_end(stage, task, "retry", 0)
+                        telemetry.emit("task_retry", stage_id=stage.stage_id,
+                                       task_id=task.task_id, op_index=result.op_index,
+                                       retain_budget=result.retain_budget,
+                                       retry_max_tokens=getattr(result.ctx.state,
+                                                                "retry_max_tokens", None))
                     if self.LOG_RETRY_TRACE:
                         print(
                             "[scheduler-retry] "
@@ -561,6 +620,8 @@ class AsyncPipelineExecutor:
                     continue
 
                 if result is None:
+                    if trace:
+                        trace_end(stage, task, "dropped", 0)
                     await stage.release_budget(budget, self.manager)
                     log_running_tasks(
                         f"finish task={task.task_id} stage={stage.stage_id}"
@@ -577,6 +638,8 @@ class AsyncPipelineExecutor:
                 if stage.fanout_op is not None:
                     child_ctxs = stage.fanout_op(result) or []
                     record_output(stage.stage_id, len(child_ctxs))
+                    if trace:
+                        trace_end(stage, task, "fanout", len(child_ctxs))
 
                     if not child_ctxs:
                         if task.ctx.state.pin_req_id is not None:
@@ -648,6 +711,8 @@ class AsyncPipelineExecutor:
                     continue
 
                 record_output(stage.stage_id, 1)
+                if trace:
+                    trace_end(stage, task, "row", 1)
                 next_task = Task(
                     ctx=([result] if next_stage_index < len(stages)
                          and stages[next_stage_index].block_tasks else result),
@@ -668,6 +733,8 @@ class AsyncPipelineExecutor:
                 )
                 await rebalance_stage_capacity()
 
+        if trace:
+            trace_sample(force=True)
         return out, stage_stat
 
 

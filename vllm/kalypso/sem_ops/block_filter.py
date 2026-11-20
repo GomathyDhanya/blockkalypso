@@ -21,6 +21,8 @@ import re
 from dataclasses import asdict, dataclass, field
 from typing import Sequence
 
+from vllm.kalypso import telemetry
+
 from .base import BaseOp, OpBehavior
 from .block_utils import (
     call_llm,
@@ -245,6 +247,14 @@ class BlockSemFilter(BaseOp):
 
         if self.negate:
             verdicts = [None if v is None else not v for v in verdicts]
+        if telemetry.enabled():
+            telemetry.emit(
+                "block_eval", rows=n, block_call=n > 1,
+                answered_by_block=len(answers), fallback_calls=len(missing),
+                undecided=sum(v is None for v in verdicts),
+                truncated=bool(n > 1 and finish == "length"),
+                passed=sum(v is True for v in verdicts),
+            )
         return BlockFilterResult(verdicts=verdicts, raw_outputs=raw)
 
     async def run_block(self, ctxs: list, priority: int = 0) -> list:

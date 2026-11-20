@@ -1,8 +1,10 @@
 # execution/vllm_executor.py
 import json
+import time
 from fastapi import Request
 from vllm.entrypoints.openai.protocol import CompletionRequest, ChatCompletionRequest
 from vllm.entrypoints.openai.api_server import create_completion, create_chat_completion
+from vllm.kalypso import telemetry
 from vllm.kalypso.pin_registry import PinnedRequestRegistry
 
 from .executor import LLMExecutor, CompletionResult
@@ -102,6 +104,7 @@ class VLLMExecutor(LLMExecutor):
             f"prompt_items={prompt_items}"
         )
 
+        started = time.monotonic()
         gen = await create_chat_completion(
             request=req,
             raw_request=raw_request,
@@ -128,6 +131,9 @@ class VLLMExecutor(LLMExecutor):
                 max_tokens=max_tokens,
                 owner_key=self._owner_key(raw_request),
             )
+
+        if telemetry.enabled():
+            trace_llm_call(data, "chat", started, max_tokens, priority, pin)
 
         return CompletionResult(
             text=data['choices'][0]['message']['content'],
@@ -157,6 +163,7 @@ class VLLMExecutor(LLMExecutor):
             f"prompt_len={prompt_len}"
         )
 
+        started = time.monotonic()
         gen = await create_completion(
             request=req,
             raw_request=raw_request,
@@ -184,6 +191,9 @@ class VLLMExecutor(LLMExecutor):
                 owner_key=self._owner_key(raw_request),
             )
 
+        if telemetry.enabled():
+            trace_llm_call(data, "completion", started, max_tokens, priority, pin)
+
         return CompletionResult(
             text=data["choices"][0]["text"],
             request_id=request_id,
@@ -203,3 +213,25 @@ class VLLMExecutor(LLMExecutor):
     async def abort(self, raw_request: Request, request_id: str):
         engine = raw_request.app.state.engine_client
         await engine.abort(request_id)
+
+
+# Calls with at most this many output tokens are predicate calls (filter/join
+# verdicts); their first characters are kept so parse failures can be counted.
+TRACE_HEAD_MAX_TOKENS = 8
+
+
+def trace_llm_call(data, kind, started, max_tokens, priority, pin):
+    """One ``llm_call`` telemetry event from a vLLM response body."""
+    usage = data.get("usage") or {}
+    choice = (data.get("choices") or [{}])[0]
+    text = (choice.get("message") or {}).get("content") if kind == "chat" else choice.get("text")
+    text = text or ""
+    telemetry.emit(
+        "llm_call", kind=kind, latency_s=time.monotonic() - started,
+        prompt_tokens=usage.get("prompt_tokens"),
+        completion_tokens=usage.get("completion_tokens"),
+        cached_tokens=((usage.get("prompt_tokens_details") or {}).get("cached_tokens")),
+        max_tokens=max_tokens, finish_reason=choice.get("finish_reason"),
+        priority=priority, pin=pin, output_chars=len(text),
+        output_head=text[:32] if max_tokens <= TRACE_HEAD_MAX_TOKENS else None,
+    )

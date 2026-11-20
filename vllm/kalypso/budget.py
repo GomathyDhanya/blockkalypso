@@ -5,6 +5,8 @@ import asyncio
 import torch
 from transformers import AutoConfig, AutoTokenizer
 
+from vllm.kalypso import telemetry
+
 
 def compute_bytes_per_token(
     model_name: str,
@@ -92,6 +94,13 @@ class KVMemoryManager:
         self._stage_max_capacity[stage_id] = self._capacity * max_fraction
         self._stage_used[stage_id] = 0
         self._stage_inflight[stage_id] = 0
+        if telemetry.enabled():
+            telemetry.emit("kv_stage_registered", stage_id=stage_id,
+                           capacity_bytes=self._stage_capacity[stage_id],
+                           min_capacity_bytes=self._stage_min_capacity[stage_id],
+                           max_capacity_bytes=self._stage_max_capacity[stage_id],
+                           total_capacity_bytes=self._capacity,
+                           bytes_per_token=self.bytes_per_token)
 
     def _log_rebalance(self, event: str):
         if not self.REBALANCE_LOG:
@@ -215,6 +224,9 @@ class KVMemoryManager:
                 self._stage_used[stage_id] + budget
                 > self._stage_capacity[stage_id]
             ):
+                if telemetry.enabled():
+                    telemetry.count("kv_admit_rejected")
+                    telemetry.count(f"kv_admit_rejected:stage{stage_id}")
                 return False
 
             self._stage_used[stage_id] += budget
@@ -255,6 +267,9 @@ class KVMemoryManager:
         async with self._cond:
             self._stage_used[stage_id] += budget
             self._stage_inflight[stage_id] += 1
+        if telemetry.enabled():
+            telemetry.count("kv_force_admitted")
+            telemetry.count(f"kv_force_admitted:stage{stage_id}")
 
     async def release_stage(self, stage_id: int, budget: int):
         if KVMemoryManager.LOG:

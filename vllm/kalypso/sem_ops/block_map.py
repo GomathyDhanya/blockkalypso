@@ -21,6 +21,7 @@ from .block_utils import BLOCK_SAMPLING, call_llm, first_executor, make_blocks, 
 from .map import SemMap
 from .prompt_utils import add_assistant_prompt
 from vllm.kalypso.budget import KVMemoryManager
+from vllm.kalypso import telemetry
 from vllm.kalypso.controller.map_estimator import MapRatioEstimator
 from vllm.kalypso.context import RETRY_TASK
 
@@ -226,6 +227,10 @@ class BlockSemMap(SemMap):
         if not answers:
             self.stats.malformed_block_calls += 1
         self.stats.rows_from_block += len(answers)
+        if telemetry.enabled():
+            telemetry.emit("block_eval", rows=n, block_call=True,
+                           answered_by_block=len(answers), fallback_calls=n - len(answers),
+                           malformed=not answers, truncated=finish == "length")
         return BlockMapResult(
             outputs=[answers.get(index) for index in range(1, n + 1)],
             raw_outputs=[raw],

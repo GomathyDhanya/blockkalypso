@@ -1,4 +1,5 @@
 import random
+import time
 from itertools import islice
 
 from vllm.kalypso.sem_ops import OpBehavior, OpName, ops
@@ -7,6 +8,7 @@ from vllm.kalypso.data import data
 from vllm.kalypso.budget import KVMemoryManager
 from vllm.kalypso.execution.pipeline_execution import PlanExecutor
 from vllm.kalypso.controller.map_estimator import MapRatioEstimator
+from vllm.kalypso import telemetry
 from .stage import Stage, Task, stage_builder
 
 class SemanticPlan:
@@ -571,15 +573,35 @@ class SemanticPlan:
 
     async def execute(self, raw_request, query: Query):
         
-        ctxs = list(data._data_source(raw_request, query.data_path, self.executor))
-        MapRatioEstimator.instance()
-        physical_ops = self.parse_ops(query.ops)
-        plan = self.build(ctxs, physical_ops)
-        self.print_plan(plan)
+        trace = telemetry.enabled()
+        if trace:
+            token = telemetry.query_id.set(telemetry.new_query_id())
+            started = time.monotonic()
+        try:
+            ctxs = list(data._data_source(raw_request, query.data_path, self.executor))
+            MapRatioEstimator.instance()
+            if trace:
+                telemetry.emit("query_start", n_rows=len(ctxs), ops=query.ops,
+                               data_path=str(query.data_path))
+                plan_started = time.monotonic()
+            physical_ops = self.parse_ops(query.ops)
+            plan = self.build(ctxs, physical_ops)
+            if trace:
+                telemetry.emit("plan_built", plan_s=time.monotonic() - plan_started,
+                               plan=describe_plan(plan))
+            self.print_plan(plan)
 
-        ops.ICPFilter.reset_stats()
-        ops.CascadeOperator.reset_stats()
-        out, _ = await self.plan_executor.execute(ctxs, plan)
+            ops.ICPFilter.reset_stats()
+            ops.CascadeOperator.reset_stats()
+            out, stage_stats = await self.plan_executor.execute(ctxs, plan)
+            if trace:
+                telemetry.emit("query_end", latency_s=time.monotonic() - started,
+                               rows_in=len(ctxs), rows_out=len(out),
+                               stage_stat=stage_stats, op_stats=operator_stats(physical_ops),
+                               counters=telemetry.take_counters())
+        finally:
+            if trace:
+                telemetry.query_id.reset(token)
         MapRatioEstimator.instance().reset()
         icp_stats = ops.ICPFilter.get_stats()
         if icp_stats["called"] > 0:
@@ -589,3 +611,38 @@ class SemanticPlan:
             print(f"[query] CascadeOperator stats={cascade_stats}")
         print(f'len(out){len(out)}')
         return out 
+
+
+def describe_plan(plan) -> list[dict]:
+    """JSON description of a built plan, for telemetry."""
+    out = []
+    for item in plan:
+        if isinstance(item, list):
+            out.append({"segment": [{
+                "stage_id": stage.stage_id,
+                "ops": [type(op).__name__ for op in stage.operators],
+                "positions": [getattr(op, "position", None) for op in stage.operators],
+                "block_size": stage.block_size,
+                "block_tasks": stage.block_tasks,
+                "max_block_tokens": next((getattr(op, "max_block_tokens", None)
+                                          for op in stage.operators
+                                          if getattr(op, "supports_blocks", False)), None),
+                "fanout": type(stage.fanout_op).__name__ if stage.fanout_op else None,
+                "fanout_right_rows": (len(getattr(stage.fanout_op, "right_table", []) or [])
+                                      if stage.fanout_op else None),
+            } for stage in item]})
+        else:
+            out.append({"op": type(item).__name__,
+                        "behavior": getattr(getattr(item, "behavior", None), "name", None)})
+    return out
+
+
+def operator_stats(physical_ops) -> list[dict]:
+    """Block operators' parse/fallback counters, for telemetry."""
+    out = []
+    for op in physical_ops:
+        stats = getattr(op, "stats", None)
+        if stats is not None and hasattr(stats, "as_dict"):
+            out.append({"op": type(op).__name__, "position": getattr(op, "position", None),
+                        **stats.as_dict()})
+    return out

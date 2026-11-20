@@ -1,9 +1,11 @@
 import asyncio
 from dataclasses import dataclass, field
 import math
+import time
 from itertools import count
 from typing import Any
 
+from vllm.kalypso import telemetry
 from vllm.kalypso.budget import KVMemoryManager
 from vllm.kalypso.context import RETRY_TASK, RetryTaskResult
 from vllm.kalypso.sem_ops import OpBehavior, ops
@@ -106,6 +108,13 @@ class Stage:
                 insert_at = idx
                 break
         self.waiting_tasks.insert(insert_at, task)
+        if telemetry.enabled():
+            task._t_enqueue = time.monotonic()
+            telemetry.emit("task_enqueue", stage_id=self.stage_id, task_id=task.task_id,
+                           rows=task.num_rows, op_index=task.op_index,
+                           retry=task.retry_priority is not None,
+                           waiting_tasks=len(self.waiting_tasks),
+                           waiting_rows=self.ready_rows())
 
     def clear_tasks(self) -> None:
         self.waiting_tasks.clear()
@@ -245,6 +254,10 @@ class Stage:
     #     await self.release_budget(budget, manager)
 
     async def run_task(self, task: Task):
+        if telemetry.enabled():
+            # Runs in its own asyncio task, so these do not leak to others.
+            telemetry.stage_id.set(self.stage_id)
+            telemetry.task_id.set(task.task_id)
         if task.is_block:
             return await self._run_block_task(task)
 
@@ -254,6 +267,8 @@ class Stage:
         for idx in range(task.op_index, len(self.operators)):
             op = self.operators[idx]
             if keep_going:
+                if telemetry.enabled():
+                    telemetry.op_name.set(telemetry.op_label(op))
                 priority = (
                     task.retry_priority
                     if idx == task.op_index and task.retry_priority is not None
@@ -292,6 +307,8 @@ class Stage:
                 break
             op = self.operators[idx]
             priority = -(self.priority_offset + idx)
+            if telemetry.enabled():
+                telemetry.op_name.set(telemetry.op_label(op))
             if supports_blocks(op):
                 rows = await op.run_block(rows, priority=priority)
             else:
