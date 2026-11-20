@@ -259,6 +259,38 @@ def _bucket_pipeline(pipe: Pipeline) -> Pipeline:
                     tuple(round(s, 3) for s in pipe.stage_selectivity))
 
 
+# --- KV feasibility gate -------------------------------------------------------
+#
+# A sanity check, not a resource model. With ``kv_budget_tokens`` set,
+# choose_k / choose_pipeline drop any block size k > 1 for which ONE call's
+# KV footprint, predict()'s prompt_per_call + decode_steps, exceeds the
+# budget. Rejected sizes are listed in the result's ``kv_rejected`` field.
+# k = 1 is never rejected (per-tuple is the fallback; a row that cannot fit
+# alone is not this gate's problem).
+#
+# Why it stops here: Session 1 found KV was never the binding constraint at
+# this scale (peak KV <= 17.5%, 22% under load, 0 preemptions;
+# BASELINE_RESULTS.md). Queueing was the visible pressure. So there is no
+# KV-cost term in the latency model, and no concurrency, admission or
+# double-counting modelling here. This only catches pathological inputs,
+# e.g. huge rows with a large k against a small stage budget. It uses mean
+# row tokens (predict's estimate), so it rejects only clear overflows. The
+# context-window bound already exists separately as k_ctx (worst-case row
+# tokens vs max_model_len) inside k_max. Default None: no gate, results
+# unchanged.
+
+
+def kv_budget_tokens(stage_id: int | None = None) -> float:
+    """A KV budget in tokens from Kalypso's KVMemoryManager: the registered
+    capacity of ``stage_id``, or the whole Kalypso budget when None. It reads
+    the static capacity, not live usage."""
+    from vllm.kalypso.budget import KVMemoryManager
+
+    mgr = KVMemoryManager.get_instance()
+    capacity = mgr.capacity() if stage_id is None else mgr.stage_usage(stage_id)[1]
+    return capacity / mgr.bytes_per_token
+
+
 @dataclass
 class Model:
     g: dict                # kind -> fixed seconds per operator (stage)
@@ -319,24 +351,41 @@ class Model:
         return max(1, min(self.k_ctx(kind, items.max_tokens, max_model_len), cap,
                           max(int(items.n), 1)))
 
+    def call_kv_tokens(self, kind: str, items: Items, k: int) -> float:
+        """KV tokens one call at block size k holds: prompt plus answer."""
+        pred = self.predict(kind, items, k)
+        return pred["prompt_per_call"] + pred["decode_steps"]
+
+    def kv_fits(self, kind: str, items: Items, k: int, kv_budget_tokens: float | None) -> bool:
+        """The KV feasibility gate (see the note above Model)."""
+        return (kv_budget_tokens is None or k == 1
+                or self.call_kv_tokens(kind, items, k) <= kv_budget_tokens)
+
     def choose_k(self, kind: str, items: Items,
                  max_num_seqs: int = analyze.DEFAULT_MAX_NUM_SEQS,
                  max_model_len: int = DEFAULT_MAX_MODEL_LEN, tie: float = 0.02,
-                 candidates=None, quality: bool = False, cache: bool = False) -> dict:
+                 candidates=None, quality: bool = False, cache: bool = False,
+                 kv_budget_tokens: float | None = None) -> dict:
         if cache:
             b = _bucket_items(items)
             cands = tuple(candidates) if candidates is not None else None
             key = ("choose_k", self.fingerprint(), kind, b.regime, b.n, b.tokens,
                    b.max_tokens, b.left_rows, b.left_tokens, max_num_seqs, max_model_len,
-                   tie, cands, quality)
+                   tie, cands, quality, kv_budget_tokens)
             return DECISION_CACHE.get_or_compute(key, lambda: self.choose_k(
-                kind, b, max_num_seqs, max_model_len, tie, cands, quality))
+                kind, b, max_num_seqs, max_model_len, tie, cands, quality,
+                kv_budget_tokens=kv_budget_tokens))
         k_max = self.k_max(kind, items, quality, max_model_len)
         ks = [k for k in (candidates or range(1, k_max + 1)) if k <= k_max] or [1]
+        rejected = [k for k in ks if not self.kv_fits(kind, items, k, kv_budget_tokens)]
+        ks = [k for k in ks if k not in rejected] or [1]
         preds = [self.predict(kind, items, k, max_num_seqs) for k in ks]
         pick = _pick(preds, tie)
-        return {**pick, "k_max": k_max,
-                "fastest_k": min(preds, key=lambda x: x["latency_s"])["k"]}
+        out = {**pick, "k_max": k_max,
+               "fastest_k": min(preds, key=lambda x: x["latency_s"])["k"]}
+        if kv_budget_tokens is not None:
+            out["kv_rejected"] = rejected
+        return out
 
     # --- Pipelines ------------------------------------------------------------
 
@@ -397,10 +446,13 @@ class Model:
 
     def choose_pipeline(self, pipe: Pipeline, max_num_seqs: int = analyze.DEFAULT_MAX_NUM_SEQS,
                         tie: float = 0.02, candidates=None, quality: bool = False,
-                        candidate_set: str = "exhaustive", cache: bool = False) -> dict:
+                        candidate_set: str = "exhaustive", cache: bool = False,
+                        kv_budget_tokens=None) -> dict:
         """``candidate_set`` picks the generated per-stage block sizes when no
         explicit ``candidates`` are given: "exhaustive" (default, 1..k_max) or
-        "pow2" (POW2_CANDIDATES up to k_max). ``cache``: see DECISION_CACHE."""
+        "pow2" (POW2_CANDIDATES up to k_max). ``cache``: see DECISION_CACHE.
+        ``kv_budget_tokens``: one budget for every stage, or one per stage
+        (see the KV feasibility gate note above Model)."""
         if cache:
             b = _bucket_pipeline(pipe)
             cands = tuple(tuple(c) for c in candidates) if candidates is not None else None
@@ -408,15 +460,18 @@ class Model:
             key = ("choose_pipeline", self.fingerprint(), b.ops, regimes, b.rows, b.tokens,
                    b.max_tokens, b.selectivity, b.right_rows, b.right_tokens,
                    b.right_max_tokens, b.stage_selectivity, max_num_seqs, tie, quality,
-                   candidate_set, cands)
+                   candidate_set, cands,
+                   tuple(kv_budget_tokens) if isinstance(kv_budget_tokens, (list, tuple))
+                   else kv_budget_tokens)
             return DECISION_CACHE.get_or_compute(key, lambda: self.choose_pipeline(
-                b, max_num_seqs, tie, cands, quality, candidate_set))
+                b, max_num_seqs, tie, cands, quality, candidate_set,
+                kv_budget_tokens=kv_budget_tokens))
         if candidate_set not in CANDIDATE_SETS:
             raise ValueError(f"candidate_set must be one of {CANDIDATE_SETS}, got {candidate_set!r}")
         if candidates is not None and candidate_set != "exhaustive":
             raise ValueError("pass either explicit candidates or candidate_set, not both")
-        k_max = [self.k_max(op, items, quality)
-                 for op, items in zip(pipe.ops, self.stage_items(pipe, pipe.rows))]
+        stage_items = self.stage_items(pipe, pipe.rows)
+        k_max = [self.k_max(op, items, quality) for op, items in zip(pipe.ops, stage_items)]
         if candidates is None and candidate_set == "pow2":
             # Same set (and order) as the full POW2 product with over-k_max
             # combinations dropped, which is how optimizer_scaling.py ran it.
@@ -426,9 +481,27 @@ class Model:
             candidates = itertools.product(*[range(1, k + 1) for k in k_max])
         candidates = [tuple(c) for c in candidates
                       if all(b <= m for b, m in zip(c, k_max))] or [(1,) * len(pipe.ops)]
+        rejected = []
+        if kv_budget_tokens is not None:
+            budgets = (list(kv_budget_tokens) if isinstance(kv_budget_tokens, (list, tuple))
+                       else [kv_budget_tokens] * len(pipe.ops))
+            # A call's prompt per call and decode steps depend on the stage's
+            # row tokens and k only, not on cardinality, so each (stage, k)
+            # is checked once, independent of the other stages' sizes.
+            fits = {}
+            for c in candidates:
+                for i, k in enumerate(c):
+                    if (i, k) not in fits:
+                        fits[(i, k)] = self.kv_fits(pipe.ops[i], stage_items[i], k, budgets[i])
+            rejected = sorted(ik for ik, ok in fits.items() if not ok)
+            candidates = ([c for c in candidates if all(fits[(i, k)] for i, k in enumerate(c))]
+                          or [(1,) * len(pipe.ops)])
         preds = [self.predict_pipeline(pipe, c, max_num_seqs) for c in candidates]
         pick = _pick(preds, tie)
-        return {**pick, "fastest": min(preds, key=lambda x: x["latency_s"])["blocks"]}
+        out = {**pick, "fastest": min(preds, key=lambda x: x["latency_s"])["blocks"]}
+        if kv_budget_tokens is not None:
+            out["kv_rejected"] = rejected  # (stage index, k) pairs dropped by the gate
+        return out
 
 
 def retry_key(ops: tuple, blocks: tuple, i: int) -> str | None:
