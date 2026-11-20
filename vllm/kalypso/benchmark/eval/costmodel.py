@@ -206,8 +206,13 @@ class Pipeline:
 
 # --- Decision cache -----------------------------------------------------------
 #
-# A small bounded LRU of choose_k / choose_pipeline results, opt-in per call
-# (``cache=True``; default off, so existing callers are unchanged). It covers
+# A small bounded LRU of choose_k / choose_pipeline results. Activation
+# (Phase 2 step D): choose_pipeline uses it automatically for pipelines with
+# more than AUTO_CACHE_MIN_STAGES - 1 stages, keyed on the exact inputs so a
+# result is bit-identical to an uncached call; 1-3 stages skip it (the key
+# costs more than the search). ``cache=True`` still forces it with bucketed
+# inputs (below) and ``cache=False`` turns it off; choose_k never uses it
+# unless ``cache=True``. It covers
 # the plan's "cache-based amortization" idea for completeness. It is NOT a
 # fix for a measured bottleneck:
 #
@@ -232,6 +237,7 @@ class Pipeline:
 # key or the value: it caches the model's prediction for its inputs only.
 
 DECISION_CACHE_MAX_SIZE = 1024
+AUTO_CACHE_MIN_STAGES = 4  # choose_pipeline caches automatically from 4 stages
 
 
 @dataclass
@@ -443,7 +449,7 @@ class Model:
     def choose_k(self, kind: str, items: Items,
                  max_num_seqs: int = analyze.DEFAULT_MAX_NUM_SEQS,
                  max_model_len: int = DEFAULT_MAX_MODEL_LEN, tie: float = 0.02,
-                 candidates=None, quality: bool = False, cache: bool = False,
+                 candidates=None, quality: bool = False, cache: bool | None = None,
                  kv_budget_tokens: float | None = None,
                  selectivity: float | None = None) -> dict:
         if cache:
@@ -454,7 +460,7 @@ class Model:
                    b.max_tokens, b.left_rows, b.left_tokens, max_num_seqs, max_model_len,
                    tie, cands, quality, kv_budget_tokens, band)
             return DECISION_CACHE.get_or_compute(key, lambda: self.choose_k(
-                kind, b, max_num_seqs, max_model_len, tie, cands, quality,
+                kind, b, max_num_seqs, max_model_len, tie, cands, quality, cache=False,
                 kv_budget_tokens=kv_budget_tokens, selectivity=selectivity))
         k_max = self.k_max(kind, items, quality, max_model_len, selectivity)
         ks = [k for k in (candidates or range(1, k_max + 1)) if k <= k_max] or [1]
@@ -531,28 +537,36 @@ class Model:
 
     def choose_pipeline(self, pipe: Pipeline, max_num_seqs: int = analyze.DEFAULT_MAX_NUM_SEQS,
                         tie: float = 0.02, candidates=None, quality: bool = False,
-                        candidate_set: str = "exhaustive", cache: bool = False,
+                        candidate_set: str = "exhaustive", cache: bool | None = None,
                         kv_budget_tokens=None, adaptive_selectivity: bool = False) -> dict:
         """``candidate_set`` picks the generated per-stage block sizes when no
         explicit ``candidates`` are given: "exhaustive" (default, 1..k_max) or
-        "pow2" (POW2_CANDIDATES up to k_max). ``cache``: see DECISION_CACHE.
+        "pow2" (POW2_CANDIDATES up to k_max). ``cache``: None (default) caches
+        only pipelines of AUTO_CACHE_MIN_STAGES or more, on exact inputs; True
+        always, on bucketed inputs; False never. See DECISION_CACHE.
         ``kv_budget_tokens``: one budget for every stage, or one per stage
         (see the KV feasibility gate note above Model).
         ``adaptive_selectivity``: see the note above Model (default off)."""
         if adaptive_selectivity:
             pipe = self.adapted_pipeline(pipe)
+        if cache is None:
+            cache, bucket = len(pipe.ops) >= AUTO_CACHE_MIN_STAGES, False
+        else:
+            bucket = cache
         if cache:
-            b = _bucket_pipeline(pipe)
+            b = (_bucket_pipeline(pipe) if bucket
+                 else replace(pipe, ops=tuple(pipe.ops),
+                              stage_selectivity=tuple(pipe.stage_selectivity)))
             cands = tuple(tuple(c) for c in candidates) if candidates is not None else None
             regimes = tuple(it.regime for it in self.stage_items(b, b.rows))
-            key = ("choose_pipeline", self.fingerprint(), b.ops, regimes, b.rows, b.tokens,
+            key = ("choose_pipeline", bucket, self.fingerprint(), b.ops, regimes, b.rows, b.tokens,
                    b.max_tokens, b.selectivity, b.right_rows, b.right_tokens,
                    b.right_max_tokens, b.stage_selectivity, max_num_seqs, tie, quality,
                    candidate_set, cands,
                    tuple(kv_budget_tokens) if isinstance(kv_budget_tokens, (list, tuple))
                    else kv_budget_tokens)
             return DECISION_CACHE.get_or_compute(key, lambda: self.choose_pipeline(
-                b, max_num_seqs, tie, cands, quality, candidate_set,
+                b, max_num_seqs, tie, cands, quality, candidate_set, cache=False,
                 kv_budget_tokens=kv_budget_tokens))
         if candidate_set not in CANDIDATE_SETS:
             raise ValueError(f"candidate_set must be one of {CANDIDATE_SETS}, got {candidate_set!r}")

@@ -151,3 +151,57 @@ def test_lru_is_bounded(monkeypatch):
     assert cm.DECISION_CACHE.stats.evictions == 1
     m.choose_k("filter", cm.Items(100, 31.0, 120.0), cache=True)  # evicted: misses
     assert cm.DECISION_CACHE.stats.hits == 0
+
+
+# --- automatic activation (Phase 2 step D) -------------------------------------------
+
+PIPE4 = cm.Pipeline(("filter", "filter", "join", "filter"), 400, 31.4, 120.0, 0.5,
+                    32, 31.0, 120.0)
+
+
+def _no_key(monkeypatch):
+    """Fail if a call builds a cache key or touches the cache."""
+    def boom(*a, **k):
+        raise AssertionError("cache touched")
+    monkeypatch.setattr(cm.Model, "fingerprint", boom)
+    monkeypatch.setattr(cm.DECISION_CACHE, "get_or_compute", boom)
+
+
+@pytest.mark.parametrize("ops", [("filter",), ("filter", "join"), ("filter", "join", "filter")])
+def test_up_to_three_stages_never_touch_the_cache(monkeypatch, ops):
+    pipe = cm.Pipeline(ops, 400, 31.4, 120.0, 0.5, 32, 31.0, 120.0)
+    want = _model().choose_pipeline(pipe, cache=False)
+    _no_key(monkeypatch)  # no fingerprint, no lookup: the uncached path exactly
+    assert _model().choose_pipeline(pipe, candidate_set="exhaustive") == want
+    assert len(cm.DECISION_CACHE) == 0
+
+
+def test_four_stages_use_the_cache_automatically():
+    m = _model()
+    first = m.choose_pipeline(PIPE4, candidate_set="pow2")
+    second = m.choose_pipeline(PIPE4, candidate_set="pow2")
+    assert _stats() == {"hits": 1, "misses": 1, "evictions": 0}
+    assert first == second
+
+
+def test_automatic_cache_is_bit_identical_to_uncached():
+    # Exact-input key: the fractional 31.4 tokens are not rounded, unlike cache=True.
+    m = _model()
+    auto = m.choose_pipeline(PIPE4, candidate_set="pow2")
+    off = m.choose_pipeline(PIPE4, candidate_set="pow2", cache=False)
+    assert auto == off
+    assert _stats()["misses"] == 1  # cache=False did not count
+
+
+def test_explicit_flags_still_win(monkeypatch):
+    m = _model()
+    m.choose_pipeline(PIPE, cache=True)                          # 2 stages, forced on
+    assert _stats()["misses"] == 1
+    m.choose_pipeline(PIPE4, candidate_set="pow2", cache=False)  # 4 stages, forced off
+    assert _stats()["misses"] == 1
+    assert cm.AUTO_CACHE_MIN_STAGES == 4
+
+
+def test_choose_k_never_caches_by_default(monkeypatch):
+    _no_key(monkeypatch)
+    _model().choose_k("filter", SHORT)
