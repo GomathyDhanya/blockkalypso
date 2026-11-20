@@ -21,10 +21,10 @@ Ground rules for this branch:
 | 0 | Branch + this log | done | `research/PROGRESS.md` |
 | 1 | Repository audit | done | `research/docs/BASELINE_AUDIT.md` |
 | 2 | Environment and reproducibility audit | in progress | `research/docs/ENVIRONMENT.md` (next) |
-| 3 | Opt-in instrumentation + tests | done (executor side); optimizer profiler next | `vllm/kalypso/telemetry.py`, hooks in `controller/`, `execution/`, `sem_ops/block_*`, `budget.py`; tests `vllm/kalypso/tests/test_telemetry.py` |
-| 4 | CPU-only experiments (optimizer scaling, executor simulation) | not started | `research/baseline/` |
-| 5 | Cost-model validation on existing GPU results | not started | `research/docs/COST_MODEL_VALIDATION.md` |
-| 6 | New GPU baseline runs (Modal, via Xen's Mac) | not started | `research/baseline/results/gpu/` |
+| 3 | Opt-in instrumentation + tests | done: executor telemetry + optimizer profiler (`research/baseline/instrumentation/optimizer_profile.py`) | `vllm/kalypso/telemetry.py`, hooks in `controller/`, `execution/`, `sem_ops/block_*`, `budget.py`; tests `vllm/kalypso/tests/test_telemetry.py` |
+| 4 | CPU-only experiments (optimizer scaling, executor simulation) | optimizer scaling running; simulation next | `research/baseline/experiments/` |
+| 5 | Cost-model validation on existing GPU results | analysis done, write-up next | `research/baseline/analysis/costmodel_validation.py` → `research/baseline/results/costmodel_validation/summary.md` |
+| 6 | New GPU baseline runs (Modal, via Xen's Mac) | runner written, launching | `research/baseline/gpu/modal_baseline.py` → volume `blockkalypso-results:research-session1/` → `research/baseline/results/gpu/` |
 | 7 | Protocol, hypotheses, final report | not started | `research/docs/` |
 
 ## How to pick this up
@@ -50,13 +50,28 @@ Telemetry: set `KALYPSO_TRACE=/path/trace.jsonl` (and optionally
 - Found while auditing: downstream block membership is not reproducible run
   to run (audit §4.6); planning uses an unseeded `random.sample` (§4.1).
 
+## Commands (all from the repo root)
+
+```bash
+# CPU: optimizer scaling (about 15 min on 4 cores)
+python -m research.baseline.experiments.optimizer_scaling --out research/baseline/results/optimizer_scaling.jsonl
+# CPU: cost-model validation on the committed GPU results (about 1 min)
+python -m research.baseline.analysis.costmodel_validation --out research/baseline/results/costmodel_validation
+# GPU (Modal): every Session 1 experiment, detached; then download
+modal run --detach research/baseline/gpu/modal_baseline.py::launch
+modal run research/baseline/gpu/modal_baseline.py::status
+modal volume get blockkalypso-results research-session1 ./research/baseline/results/gpu/
+```
+
 ## Missing measurements
 
-(filled in as steps finish)
+- GPU experiments E0-E3: launched from Xen's Mac on Modal (see status below once they return).
 
 ## Commit log
 
 | Commit | What |
 |---|---|
 | `41a3c20` | Branch + progress log |
-| (next) | Audit; opt-in telemetry + tests |
+| `ab03d8d` | Audit |
+| `3d922dd` | Opt-in telemetry + tests |
+| (next) | Optimizer profiler, scaling experiment, cost-model validation, research workloads, Modal runner |
