@@ -24,7 +24,17 @@ Modes of a managed stage:
 - ``static`` (initial): the size the query asked for, until the controller
   has seen enough evidence to decide;
 - ``tuple``: blocks of 1;
-- ``block``: blocks of ``min(small_block_size, requested size)``.
+- ``block``: blocks of the largest size in ``candidate_sizes`` that is
+  <= ``small_block_size``.
+
+Candidate sizes: the search's power-of-two set, ``costmodel.POW2_CANDIDATES``
+(1, 2, 4, 8, 16, 32), up to the stage's requested size. ``tuple`` (1) and
+``block`` are the only sizes the controller switches to, so both are always
+powers of two (a requested size of 3 gives blocks of 2, not 3). ``static``
+is the query's own size and is only the starting mode: the controller never
+switches back to it. The k_max cap applies through the quality veto below
+(``Model.k_max(..., quality=True)`` includes the context-window bound): a
+block size above it is vetoed, and the stage stays per-tuple.
 
 Signal: ``task_end`` telemetry events of the upstream stage, received through
 an in-process subscription (``telemetry.subscribe``; works with no trace sink
@@ -142,6 +152,14 @@ def costmodel_quality_veto(path: Path = _FITTED) -> Callable[[str, int, float], 
     return veto
 
 
+def candidate_sizes(requested_size: int) -> tuple[int, ...]:
+    """Block sizes the controller may use at a stage whose query asked for
+    ``requested_size``: the search's power-of-two set up to that size."""
+    from vllm.kalypso.benchmark.eval.costmodel import POW2_CANDIDATES
+
+    return tuple(k for k in POW2_CANDIDATES if k <= requested_size) or (1,)
+
+
 @dataclass
 class _StageState:
     index: int
@@ -151,6 +169,7 @@ class _StageState:
     op: object
     static_size: int
     small_size: int
+    candidate_sizes: tuple[int, ...] = (1,)
     mode: str = STATIC
     row_tokens: float | None = None
     window: deque = field(default_factory=deque)
@@ -177,11 +196,13 @@ class AdaptiveStageController:
             op = next((o for o in stage.operators if getattr(o, "supports_blocks", False)), None)
             if op is None:
                 continue
+            cands = candidate_sizes(stage.block_size)
             state = _StageState(
                 index=index, stage_id=stage.stage_id,
                 upstream_stage_id=stages[index - 1].stage_id, kind=operator_kind(op), op=op,
                 static_size=stage.block_size,
-                small_size=max(1, min(config.small_block_size, stage.block_size)),
+                small_size=max(k for k in cands if k <= config.small_block_size),
+                candidate_sizes=cands,
                 window=deque(maxlen=config.window_tasks))
             self.states[index] = state
             self._by_upstream[state.upstream_stage_id] = state

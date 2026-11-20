@@ -24,7 +24,7 @@ import pytest
 from vllm.kalypso import telemetry
 from vllm.kalypso.controller.adaptive_stage import (
     BLOCK, STATIC, TUPLE, AdaptiveStageConfig, AdaptiveStageController,
-    costmodel_quality_veto)
+    candidate_sizes, costmodel_quality_veto)
 from vllm.kalypso.controller.plan import SemanticPlan
 from vllm.kalypso.execution import pipeline_execution
 from vllm.kalypso.query import Query
@@ -287,3 +287,58 @@ def test_mid_run_switch_does_not_resize_formed_tasks(fake_kv_manager, monkeypatc
     assert [s for s, _ in sizes].count(1) == 10
     # Output unaffected in content: every passing row comes out once.
     assert sorted(r.state.idx for r in out) == list(range(10)) + list(range(24, 36))
+
+
+# ---------------------------------------------------------------------------
+# 6. Candidate sizes: the search's power-of-two set
+# ---------------------------------------------------------------------------
+
+def _switch_targets(block_size, small_block_size):
+    config = AdaptiveStageConfig(enabled=True, small_block_size=small_block_size,
+                                 quality_veto=lambda *a: False)
+    state = AdaptiveStageController(_stages(block_size), config, token_length=len).states[1]
+    return state, {state.size(TUPLE), state.size(BLOCK)}
+
+
+def test_candidates_are_the_search_pow2_set():
+    from vllm.kalypso.benchmark.eval.costmodel import POW2_CANDIDATES
+    assert candidate_sizes(64) == POW2_CANDIDATES
+    assert candidate_sizes(10) == (1, 2, 4, 8)
+    assert candidate_sizes(3) == (1, 2)
+    assert candidate_sizes(1) == (1,)
+
+
+@pytest.mark.parametrize("block_size", range(1, 41))
+@pytest.mark.parametrize("small_block_size", [2, 3, 4, 5, 6, 8, 12, 16, 40])
+def test_every_switch_target_is_a_power_of_two(block_size, small_block_size):
+    from vllm.kalypso.benchmark.eval.costmodel import POW2_CANDIDATES
+    state, targets = _switch_targets(block_size, small_block_size)
+    assert targets <= set(POW2_CANDIDATES)
+    assert targets <= set(state.candidate_sizes)
+    assert max(targets) <= min(block_size, small_block_size)
+
+
+def test_non_pow2_query_size_now_gives_pow2_block():
+    # Before: min(4, 3) = 3. Now the largest power of two <= 3.
+    assert _switch_targets(3, 4)[0].small_size == 2
+    assert _switch_targets(10, 4)[0].small_size == 4  # default unchanged when size >= 4
+    assert _switch_targets(10, 6)[0].small_size == 4
+
+
+def test_real_quality_veto_rejects_size_from_new_list():
+    # Long rows: the committed fit caps filters at k = 1 there, so the
+    # candidate 4 must be vetoed by the unchanged costmodel guard.
+    config = AdaptiveStageConfig(enabled=True, quality_veto=costmodel_quality_veto())
+    c = AdaptiveStageController(_stages(8), config, token_length=lambda text: 1600)
+    c.formation_size(1, row("x"))
+    assert c.states[1].small_size in c.states[1].candidate_sizes
+    _to_tuple_then_high(c)
+    assert c.states[1].mode == TUPLE
+    assert c.decisions[-1]["action"] == "veto"
+    assert c.decisions[-1]["reason"] == "quality guard"
+    assert c.decisions[-1]["size"] == 4
+    # Same signal on short rows (cap 20): the same candidate is allowed.
+    c = AdaptiveStageController(_stages(8), config, token_length=lambda text: 40)
+    c.formation_size(1, row("x"))
+    _to_tuple_then_high(c)
+    assert c.states[1].mode == BLOCK and c.formation_size(1, row("y")) == 4
