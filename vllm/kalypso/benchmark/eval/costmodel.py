@@ -66,9 +66,12 @@ run again at 512 tokens.
 """
 
 import argparse
+import copy
+import hashlib
 import itertools
 import json
 import math
+from collections import OrderedDict
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
@@ -173,6 +176,89 @@ class Pipeline:
         return self.selectivity if i == 0 else 1.0
 
 
+# --- Decision cache -----------------------------------------------------------
+#
+# A small bounded LRU of choose_k / choose_pipeline results, opt-in per call
+# (``cache=True``; default off, so existing callers are unchanged). It covers
+# the plan's "cache-based amortization" idea for completeness. It is NOT a
+# fix for a measured bottleneck:
+#
+# - The search is only called offline (analysis, experiment choices), never
+#   on a query's path (BASELINE_AUDIT.md finding A).
+# - Measured search cost (research/baseline/results/optimizer_scaling.md):
+#   choose_k and 1-stage pipelines 0.1-0.3 ms; 2 stages 9-11 ms; pow2 4-6 ms
+#   at 3 stages and 28-38 ms at 4. Only exhaustive search at 3+ stages is
+#   slow (0.35 s at 3, 8.6-20 s at 4), and candidate_set="pow2" already
+#   addresses that.
+# - A key includes the model's content fingerprint (~0.1 ms to compute),
+#   which costs more than a single choose_k call (~15 us). A cached choose_k
+#   is therefore slower than an uncached one. Only multi-stage searches can
+#   come out ahead.
+#
+# Key: the model fingerprint (a refit, or any edit to its parameters, misses),
+# the call's own arguments and the inputs, bucketed so near-identical calls
+# hit: item counts and token figures rounded to whole numbers, selectivities
+# to 3 decimals. The regime is in the key explicitly. On a miss the result is
+# computed on those bucketed inputs, so what a key returns does not depend on
+# which call filled it. Nothing about runtime scheduler or KV state is in the
+# key or the value: it caches the model's prediction for its inputs only.
+
+DECISION_CACHE_MAX_SIZE = 1024
+
+
+@dataclass
+class DecisionCacheStats:
+    hits: int = 0
+    misses: int = 0
+    evictions: int = 0
+
+    def as_dict(self) -> dict[str, int]:
+        return asdict(self)
+
+
+class DecisionCache:
+    def __init__(self, max_size: int = DECISION_CACHE_MAX_SIZE):
+        self.max_size = max_size
+        self.stats = DecisionCacheStats()
+        self._entries: OrderedDict = OrderedDict()
+
+    def __len__(self) -> int:
+        return len(self._entries)
+
+    def clear(self) -> None:
+        self._entries.clear()
+        self.stats = DecisionCacheStats()
+
+    def get_or_compute(self, key, compute):
+        if key in self._entries:
+            self._entries.move_to_end(key)
+            self.stats.hits += 1
+            return copy.deepcopy(self._entries[key])
+        self.stats.misses += 1
+        value = compute()
+        self._entries[key] = value
+        if len(self._entries) > self.max_size:
+            self._entries.popitem(last=False)
+            self.stats.evictions += 1
+        return copy.deepcopy(value)
+
+
+DECISION_CACHE = DecisionCache()
+
+
+def _bucket_items(items: Items) -> Items:
+    return Items(n=round(items.n), tokens=round(items.tokens),
+                 max_tokens=round(items.max_tokens), left_rows=round(items.left_rows),
+                 left_tokens=round(items.left_tokens))
+
+
+def _bucket_pipeline(pipe: Pipeline) -> Pipeline:
+    return Pipeline(tuple(pipe.ops), round(pipe.rows), round(pipe.tokens),
+                    round(pipe.max_tokens), round(pipe.selectivity, 3), round(pipe.right_rows),
+                    round(pipe.right_tokens), round(pipe.right_max_tokens),
+                    tuple(round(s, 3) for s in pipe.stage_selectivity))
+
+
 @dataclass
 class Model:
     g: dict                # kind -> fixed seconds per operator (stage)
@@ -188,6 +274,13 @@ class Model:
     # rows a block answer missed) per map row, by the map's position and
     # whether it is blocked: "first:1", "first:block", "after:1", "after:block".
     retry: dict = field(default_factory=dict)
+
+    def fingerprint(self) -> str:
+        """Identity of this fit: a hash of every parameter. Recomputed per
+        call because fitting code mutates a Model in place (main() sets
+        ``retry`` and ``lam`` after ``fit``)."""
+        blob = json.dumps(asdict(self), sort_keys=True, default=str)
+        return hashlib.sha256(blob.encode()).hexdigest()[:16]
 
     def latency(self, kind, computed, waves, decode, calls, per_call) -> float:
         return (self.g.get(kind, 0.0) + self.alpha * computed
@@ -229,7 +322,15 @@ class Model:
     def choose_k(self, kind: str, items: Items,
                  max_num_seqs: int = analyze.DEFAULT_MAX_NUM_SEQS,
                  max_model_len: int = DEFAULT_MAX_MODEL_LEN, tie: float = 0.02,
-                 candidates=None, quality: bool = False) -> dict:
+                 candidates=None, quality: bool = False, cache: bool = False) -> dict:
+        if cache:
+            b = _bucket_items(items)
+            cands = tuple(candidates) if candidates is not None else None
+            key = ("choose_k", self.fingerprint(), kind, b.regime, b.n, b.tokens,
+                   b.max_tokens, b.left_rows, b.left_tokens, max_num_seqs, max_model_len,
+                   tie, cands, quality)
+            return DECISION_CACHE.get_or_compute(key, lambda: self.choose_k(
+                kind, b, max_num_seqs, max_model_len, tie, cands, quality))
         k_max = self.k_max(kind, items, quality, max_model_len)
         ks = [k for k in (candidates or range(1, k_max + 1)) if k <= k_max] or [1]
         preds = [self.predict(kind, items, k, max_num_seqs) for k in ks]
@@ -296,10 +397,20 @@ class Model:
 
     def choose_pipeline(self, pipe: Pipeline, max_num_seqs: int = analyze.DEFAULT_MAX_NUM_SEQS,
                         tie: float = 0.02, candidates=None, quality: bool = False,
-                        candidate_set: str = "exhaustive") -> dict:
+                        candidate_set: str = "exhaustive", cache: bool = False) -> dict:
         """``candidate_set`` picks the generated per-stage block sizes when no
         explicit ``candidates`` are given: "exhaustive" (default, 1..k_max) or
-        "pow2" (POW2_CANDIDATES up to k_max)."""
+        "pow2" (POW2_CANDIDATES up to k_max). ``cache``: see DECISION_CACHE."""
+        if cache:
+            b = _bucket_pipeline(pipe)
+            cands = tuple(tuple(c) for c in candidates) if candidates is not None else None
+            regimes = tuple(it.regime for it in self.stage_items(b, b.rows))
+            key = ("choose_pipeline", self.fingerprint(), b.ops, regimes, b.rows, b.tokens,
+                   b.max_tokens, b.selectivity, b.right_rows, b.right_tokens,
+                   b.right_max_tokens, b.stage_selectivity, max_num_seqs, tie, quality,
+                   candidate_set, cands)
+            return DECISION_CACHE.get_or_compute(key, lambda: self.choose_pipeline(
+                b, max_num_seqs, tie, cands, quality, candidate_set))
         if candidate_set not in CANDIDATE_SETS:
             raise ValueError(f"candidate_set must be one of {CANDIDATE_SETS}, got {candidate_set!r}")
         if candidates is not None and candidate_set != "exhaustive":
