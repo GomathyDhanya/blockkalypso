@@ -24,8 +24,8 @@ Ground rules for this branch:
 | 3 | Opt-in instrumentation + tests | done: executor telemetry + optimizer profiler (`research/baseline/instrumentation/optimizer_profile.py`) | `vllm/kalypso/telemetry.py`, hooks in `controller/`, `execution/`, `sem_ops/block_*`, `budget.py`; tests `vllm/kalypso/tests/test_telemetry.py` |
 | 4 | CPU-only experiments (optimizer scaling, executor simulation) | done: `results/optimizer_scaling.jsonl` (all 3 families, d1-d6), `results/executor_simulation/summary.md` (real scheduler, simulated LLM) | `research/baseline/experiments/` |
 | 5 | Cost-model validation on existing GPU results | analysis done, write-up next | `research/baseline/analysis/costmodel_validation.py` → `research/baseline/results/costmodel_validation/summary.md` |
-| 6 | New GPU baseline runs (Modal, via Xen's Mac) | first launch (fbf9dbc, app ap-6NHHXCkwGhOxoa6o3Z3wnw) crashed at import: `Path(__file__).parents[3]` inside the container; fixed, relaunching | `research/baseline/gpu/modal_baseline.py` → volume `blockkalypso-results:research-session1/` → `research/baseline/results/gpu/` |
-| 7 | Protocol, hypotheses, final report | not started | `research/docs/` |
+| 6 | New GPU baseline runs (Modal, via Xen's Mac) | running: app ap-Ml8MVqEIYbNBbFei3QAtSK at 98e03cb, launched 2026-11-20 06:34 UTC (first launch crashed at import, fixed) | `research/baseline/gpu/modal_baseline.py` → volume `blockkalypso-results:research-session1/` → `research/baseline/results/gpu/` |
+| 7 | Protocol, hypotheses, final report | protocol + hypotheses + cost-model write-up done; results + manifest + report wait on GPU | `research/docs/` |
 
 ## How to pick this up
 
