@@ -118,6 +118,11 @@ EXPERIMENTS = [
     {"id": "E3-load", "load_levels": [0, 32, 128], "parts": [
         {"name": "rpipe_s50", "workload": "rpipe_s50", "n": 0,
          "arms": [BASELINE, *pipe((1, 4), (4, 4))]}]},
+    # E3 v2 (rerun after E3's prefix-cache resets failed under load): the
+    # cache is reset and the reset confirmed before the load starts, per trial.
+    {"id": "E3-load-v2", "load_levels": [0, 32, 128], "load_protocol": "v2", "parts": [
+        {"name": "rpipe_s50", "workload": "rpipe_s50", "n": 0,
+         "arms": [BASELINE, *pipe((1, 4), (4, 4))]}]},
     # E0: telemetry overhead: same arms with KALYPSO_TRACE off, then on.
     {"id": "E0-overhead", "overhead": True, "parts": [
         {"name": "rsel50", "workload": "rsel50", "n": 0,
@@ -273,7 +278,8 @@ open({str(root / 'tokens.json')!r}, "w").write(json.dumps(out))
     print(_sh(["python3", "-c", code]))
 
 
-def _eval(root: Path, part: dict, arms, warmup, repeats, out_name, server_pid) -> None:
+def _eval(root: Path, part: dict, arms, warmup, repeats, out_name, server_pid,
+          extra=()) -> None:
     out = root / part["name"] / out_name
     out.parent.mkdir(parents=True, exist_ok=True)
     subprocess.run([
@@ -281,7 +287,7 @@ def _eval(root: Path, part: dict, arms, warmup, repeats, out_name, server_pid) -
         "--base-url", f"http://127.0.0.1:{PORT}", "--server-pid", str(server_pid),
         "--workload", part["workload"], *(["--n", str(part["n"])] if part["n"] else []),
         "--arms", ",".join(arms), "--warmup", str(warmup), "--repeats", str(repeats),
-        "--out", str(out)], check=True, cwd=SOURCE)
+        "--out", str(out), *extra], check=True, cwd=SOURCE)
     table = _sh(["python3", "-m", "vllm.kalypso.benchmark.eval.report", str(out),
                  "--reference", BASELINE])
     out.with_suffix(".summary.md").write_text(table or "")
@@ -332,6 +338,54 @@ def _load(root: Path, streams: int, tag: str):
         time.sleep(5)  # drain in-flight load requests before the next trial
 
 
+RESET_OK = "Successfully reset prefix cache"
+
+
+def _reset_verified(root: Path, tag: str, tries: int = 10) -> bool:
+    """POST /reset_prefix_cache and confirm it in the server log.
+
+    vLLM answers 200 even when it refuses the reset ("Failed to reset prefix
+    cache because some blocks ... are not freed yet"), which invalidated the
+    first E3 run; the server log is the only reliable signal.
+    """
+    import urllib.request
+    log = root / f"server-{tag}.log"
+    for _ in range(tries):
+        before = log.read_text(errors="ignore").count(RESET_OK)
+        req = urllib.request.Request(f"http://127.0.0.1:{PORT}/reset_prefix_cache",
+                                     method="POST")
+        urllib.request.urlopen(req, timeout=30).read()
+        for _ in range(20):
+            time.sleep(0.25)
+            if log.read_text(errors="ignore").count(RESET_OK) > before:
+                return True
+        time.sleep(2)  # blocks still held by in-flight requests: wait and retry
+    return False
+
+
+def _run_load_v2(root: Path, part: dict, levels, tag: str, server_pid: int) -> None:
+    """E3 protocol v2: per trial, with no background load running, reset the
+    prefix cache and confirm it; then start the load at the level under test,
+    let it reach steady state, run one arm once with eval.run's own reset
+    disabled (it would fail under load), and stop the load. Every trial's
+    reset outcome is logged to resets.jsonl; trials whose reset was not
+    confirmed are kept but marked."""
+    _eval(root, part, part["arms"], WARMUP, 0, "warmup.jsonl", server_pid)
+    resets = open(root / "resets.jsonl", "a")
+    for rep in range(1, REPEATS + 1):
+        for level in levels:
+            for arm in part["arms"]:
+                ok = _reset_verified(root, tag)
+                safe = arm.replace(":", "_").replace(",", "-")
+                resets.write(json.dumps({"rep": rep, "level": level, "arm": arm,
+                                         "reset_confirmed": ok, "t_wall": time.time()}) + "\n")
+                resets.flush()
+                with _load(root, level, f"L{level}-r{rep}-{safe}"):
+                    _eval(root, part, [arm], 0, 1, f"run-L{level}-r{rep}-{safe}.jsonl",
+                          server_pid, extra=("--allow-warm-cache",))
+    resets.close()
+
+
 @app.function(gpu=GPU, timeout=4 * 3600, volumes={"/results": results, "/cache": hf_cache})
 def run_experiment(exp: dict, git_sha: str, git_dirty: bool) -> dict:
     root = Path("/results") / OUT_ROOT / exp["id"]
@@ -353,7 +407,9 @@ def run_experiment(exp: dict, git_sha: str, git_dirty: bool) -> dict:
                     key = f"{part['name']}:{tag}"
                     try:
                         levels = exp.get("load_levels")
-                        if not levels:
+                        if levels and exp.get("load_protocol") == "v2":
+                            _run_load_v2(root, part, levels, tag, proc.pid)
+                        elif not levels:
                             _eval(root, part, part["arms"], WARMUP, REPEATS,
                                   f"run-{tag}.jsonl", proc.pid)
                         else:

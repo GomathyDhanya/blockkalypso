@@ -161,7 +161,7 @@ def analyse_experiment(root: Path) -> dict:
         part = {}
         load_runs = defaultdict(list)
         for run in runs:
-            m = re.match(r"run-L(\d+)-r(\d+)\.jsonl", run.name)
+            m = re.match(r"run-L(\d+)-r(\d+)(?:-.+)?\.jsonl", run.name)
             meta, trials = load_run(run)
             if m:
                 level, rep = int(m.group(1)), int(m.group(2))
@@ -181,6 +181,11 @@ def analyse_experiment(root: Path) -> dict:
                                           "load_streams": level, "repeats": len(lst)},
                                  "arms": arm_stats(meta, trials)}
         exp["parts"][part_dir.name] = part
+    resets = root / "resets.jsonl"
+    if resets.exists():
+        rs = [json.loads(l) for l in resets.read_text().splitlines() if l.strip()]
+        exp["prefix_cache_resets"] = {"trials": len(rs),
+                                      "confirmed": sum(r["reset_confirmed"] for r in rs)}
     exp["traces"] = {}
     plan = exp.get("plan") or {}
     for trace in sorted([*root.glob("trace-*.jsonl"), *root.glob("trace-*.jsonl.gz")]):
@@ -217,6 +222,9 @@ def render(exps: list[dict]) -> str:
         lines += [f"## {e['id']}", "",
                   f"status: {st.get('parts')} {('error: ' + st['error']) if st.get('error') else ''}",
                   ""]
+        if e.get("prefix_cache_resets"):
+            r = e["prefix_cache_resets"]
+            lines += [f"prefix-cache resets confirmed before {r['confirmed']} of {r['trials']} trials", ""]
         for part, tags in e["parts"].items():
             for tag, d in tags.items():
                 lines += [f"### {part} ({tag})", "",
