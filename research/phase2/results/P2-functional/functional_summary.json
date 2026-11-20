@@ -1,0 +1,210 @@
+{
+  "run": "P2-functional",
+  "trace_files": [
+    "trace-on.jsonl"
+  ],
+  "events": {
+    "query_start": 28,
+    "kv_stage_registered": 48,
+    "plan_built": 28,
+    "task_enqueue": 15623,
+    "scheduler_sample": 639,
+    "task_start": 15623,
+    "llm_call": 18821,
+    "task_end": 15623,
+    "query_end": 28,
+    "task_retry": 5,
+    "block_eval": 2198,
+    "adaptive_switch": 4
+  },
+  "queries_started": 28,
+  "queries_finished": 28,
+  "queries_unfinished": [],
+  "controller_decisions": [
+    {
+      "action": "switch",
+      "mode": "tuple",
+      "size": 1,
+      "reason": null,
+      "vetoed": [],
+      "count": 4
+    }
+  ],
+  "controller_decision_examples": [
+    {
+      "query_id": "6cfe7cddc537",
+      "stage_id": 2,
+      "action": "switch",
+      "mode": "tuple",
+      "size": 1,
+      "reason": null,
+      "vetoed": null,
+      "from_mode": "static",
+      "pass_rate": 0.038461538461538464,
+      "after_formations": 16
+    },
+    {
+      "query_id": "5308dc20782f",
+      "stage_id": 2,
+      "action": "switch",
+      "mode": "tuple",
+      "size": 1,
+      "reason": null,
+      "vetoed": null,
+      "from_mode": "static",
+      "pass_rate": 0.03125,
+      "after_formations": 8
+    },
+    {
+      "query_id": "ea938d81571f",
+      "stage_id": 2,
+      "action": "switch",
+      "mode": "tuple",
+      "size": 1,
+      "reason": null,
+      "vetoed": null,
+      "from_mode": "static",
+      "pass_rate": 0.0,
+      "after_formations": 0
+    },
+    {
+      "query_id": "564f45887f16",
+      "stage_id": 2,
+      "action": "switch",
+      "mode": "tuple",
+      "size": 1,
+      "reason": null,
+      "vetoed": null,
+      "from_mode": "static",
+      "pass_rate": 0.0,
+      "after_formations": 0
+    }
+  ],
+  "arms": {
+    "pipe_join_filter_j62_f90 kalypso_per_tuple": {
+      "trials": 2,
+      "with_outputs": 2,
+      "errors": 0
+    },
+    "pipe_join_filter_j62_f90 kalypso_pipe:4,4": {
+      "trials": 2,
+      "with_outputs": 2,
+      "errors": 0
+    },
+    "pipe_join_filter_j62_f90 kalypso_pipe:1,4": {
+      "trials": 2,
+      "with_outputs": 2,
+      "errors": 0
+    },
+    "pipe_map_filter kalypso_per_tuple": {
+      "trials": 2,
+      "with_outputs": 2,
+      "errors": 0
+    },
+    "pipe_map_filter kalypso_pipe:4,4": {
+      "trials": 2,
+      "with_outputs": 2,
+      "errors": 0
+    },
+    "pipe_map_filter kalypso_pipe:1,1": {
+      "trials": 2,
+      "with_outputs": 2,
+      "errors": 0
+    },
+    "rpipe_s05 kalypso_per_tuple": {
+      "trials": 2,
+      "with_outputs": 2,
+      "errors": 0
+    },
+    "rpipe_s05 kalypso_pipe:4,4": {
+      "trials": 2,
+      "with_outputs": 2,
+      "errors": 0
+    },
+    "rpipe_s05 kalypso_pipe:1,1": {
+      "trials": 2,
+      "with_outputs": 2,
+      "errors": 0
+    },
+    "rpipe_s50 kalypso_per_tuple": {
+      "trials": 2,
+      "with_outputs": 2,
+      "errors": 0
+    },
+    "rpipe_s50 kalypso_pipe:4,4": {
+      "trials": 2,
+      "with_outputs": 2,
+      "errors": 0
+    },
+    "rpipe_s50 kalypso_pipe:1,1": {
+      "trials": 2,
+      "with_outputs": 2,
+      "errors": 0
+    }
+  },
+  "optimizer": {
+    "kv_capacity_bytes": 25631373374,
+    "bytes_per_token": 57344,
+    "kv_budget_tokens": 446975.6796526228,
+    "parts": {
+      "rpipe_s05": {
+        "ops": [
+          "filter",
+          "join"
+        ],
+        "blocks": [
+          1,
+          1
+        ],
+        "predicted_latency_s": 1.8520476547094167,
+        "kv_rejected": [],
+        "arm": "kalypso_pipe:1,1"
+      },
+      "rpipe_s50": {
+        "ops": [
+          "filter",
+          "join"
+        ],
+        "blocks": [
+          1,
+          1
+        ],
+        "predicted_latency_s": 11.871704940579566,
+        "kv_rejected": [],
+        "arm": "kalypso_pipe:1,1"
+      },
+      "pipe_join_filter_j62_f90": {
+        "ops": [
+          "join",
+          "filter"
+        ],
+        "blocks": [
+          1,
+          4
+        ],
+        "predicted_latency_s": 14.273917393517449,
+        "kv_rejected": [],
+        "arm": "kalypso_pipe:1,4"
+      },
+      "pipe_map_filter": {
+        "ops": [
+          "map",
+          "filter"
+        ],
+        "blocks": [
+          1,
+          1
+        ],
+        "predicted_latency_s": 12.59120719780161,
+        "kv_rejected": [],
+        "arm": "kalypso_pipe:1,1"
+      }
+    },
+    "decision_cache": {
+      "hits": 0,
+      "misses": 0,
+      "evictions": 0,
+      "entries": 0
+    }
+  }
+}

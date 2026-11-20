@@ -1,0 +1,33 @@
+{
+  "id": "P2-functional",
+  "parts": [
+    {
+      "name": "rpipe_s05",
+      "workload": "rpipe_s05",
+      "n": 0
+    },
+    {
+      "name": "rpipe_s50",
+      "workload": "rpipe_s50",
+      "n": 0
+    },
+    {
+      "name": "pipe_join_filter_j62_f90",
+      "workload": "pipe_join_filter_j62_f90",
+      "n": 0
+    },
+    {
+      "name": "pipe_map_filter",
+      "workload": "pipe_map_filter",
+      "n": 0
+    }
+  ],
+  "static_arms": [
+    "kalypso_per_tuple",
+    "kalypso_pipe:4,4"
+  ],
+  "repeats": 2,
+  "env": {
+    "KALYPSO_ADAPTIVE_STAGE": "1"
+  }
+}

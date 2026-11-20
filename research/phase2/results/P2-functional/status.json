@@ -1,0 +1,43 @@
+{
+  "id": "P2-functional",
+  "git_sha": "48b3508c81a9c85f768af2275ff2dadb63be89db",
+  "git_dirty": false,
+  "started": "2026-11-20T23:09:20+0000",
+  "parts": {
+    "rpipe_s05:on": {
+      "arms": [
+        "kalypso_per_tuple",
+        "kalypso_pipe:4,4",
+        "kalypso_pipe:1,1"
+      ],
+      "result": "done"
+    },
+    "rpipe_s50:on": {
+      "arms": [
+        "kalypso_per_tuple",
+        "kalypso_pipe:4,4",
+        "kalypso_pipe:1,1"
+      ],
+      "result": "done"
+    },
+    "pipe_join_filter_j62_f90:on": {
+      "arms": [
+        "kalypso_per_tuple",
+        "kalypso_pipe:4,4",
+        "kalypso_pipe:1,4"
+      ],
+      "result": "done"
+    },
+    "pipe_map_filter:on": {
+      "arms": [
+        "kalypso_per_tuple",
+        "kalypso_pipe:4,4",
+        "kalypso_pipe:1,1"
+      ],
+      "result": "done"
+    }
+  },
+  "preflight": "preflight ok: controller enabled, veto loads, band caps present",
+  "optimizer": "{\"kv_capacity_bytes\": 25631373374, \"bytes_per_token\": 57344, \"kv_budget_tokens\": 446975.6796526228, \"parts\": {\"rpipe_s05\": {\"ops\": [\"filter\", \"join\"], \"blocks\": [1, 1], \"predicted_latency_s\": 1.8520476547094167, \"kv_rejected\": [], \"arm\": \"kalypso_pipe:1,1\"}, \"rpipe_s50\": {\"ops\": [\"filter\", \"join\"], \"blocks\": [1, 1], \"predicted_latency_s\": 11.871704940579566, \"kv_rejected\": [], \"arm\": \"kalypso_pipe:1,1\"}, \"pipe_join_filter_j62_f90\": {\"ops\": [\"join\", \"filter\"], \"blocks\": [1, 4], \"predicted_latency_s\": 14.273917393517449, \"kv_rejected\": [], \"arm\": \"kalypso_pipe:1,4\"}, \"pipe_map_filter\": {\"ops\": [\"map\", \"filter\"], \"blocks\": [1, 1], \"predicted_latency_s\": 12.59120719780161, \"kv_rejected\": [], \"arm\": \"kalypso_pipe:1,1\"}}, \"decision_cache\": {\"hits\": 0, \"misses\": 0, \"evictions\": 0, \"entries\": 0}}",
+  "finished": "2026-11-20T23:19:20+0000"
+}

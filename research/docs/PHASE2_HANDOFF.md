@@ -94,26 +94,57 @@ How the controller behaves:
    stage's own tasks have finished, its selectivity is unknown and the pooled
    cap (1 for joins) applies.
 
-## Part 2: functional run (prepared, not yet run)
+## Part 2: functional run (done, 2026-11-20)
 
-`research/phase2/gpu/modal_phase2.py` runs the finished mechanisms on real
-workloads, with the Session 1 image and settings and telemetry on:
+`research/phase2/gpu/modal_phase2.py`, Modal job `fc-01M7XKD5TWFSQX7YK73FK8VP9T`,
+at commit `48b3508`. It ran 23:09-23:19 UTC on an L40S with the Session 1
+image and settings, telemetry on, the controller on and adaptive selectivity
+off. This is a functional check only: the run recorded latency and F1 in
+`*/run-on.summary.md`, but nothing here interprets them.
 
-- **Setup:** controller on, KV check and automatic cache through a real
-  optimizer step, adaptive selectivity off.
-- **Workloads:** four 2-stage workloads; arms are per-tuple, static (4,4)
-  and the optimizer's choice; 1 warmup and 2 repeats.
-- **Output:** a functional check only. The summary counts finished queries,
-  controller decisions and arms with outputs.
+Raw output is in `research/phase2/results/P2-functional/`:
 
-```
-modal run --detach research/phase2/gpu/modal_phase2.py::launch
-modal run research/phase2/gpu/modal_phase2.py::status
-modal volume get blockkalypso-results research-phase2 ./research/phase2/results/
-python -m research.phase2.functional_summary research/phase2/results/P2-functional
-```
+- `trace-on.jsonl.gz` and `server-on.log.gz`;
+- GPU and `/metrics` samples;
+- `env.json`, `tokens.json` and `optimizer.json`;
+- per-part `run-on.jsonl` and `warmup.jsonl`;
+- `functional_summary.json` and `status.json`.
 
-Raw output lands under `research-phase2/P2-functional/`: traces, GPU and
-`/metrics` samples, `env.json`, `tokens.json`, `optimizer.json`, per-part
-`run-on.jsonl` and `functional_summary.json`. **Status: not yet launched.**
-Record the result here once it has run.
+Reproduce the summary with
+`python -m research.phase2.functional_summary research/phase2/results/P2-functional`.
+(`modal volume get` puts the files under `research-phase2/P2-functional/`;
+they were moved up one level and the trace and log were gzipped.)
+
+What ran:
+
+- **Every query finished.** 28 started, 28 finished (4 warmups plus 4
+  workloads x 3 arms x 2 repeats), all 4 parts `done`, and the preflight
+  passed.
+- **Every arm produced output.** All 12 (workload, arm) pairs had outputs in
+  every trial and 0 errors: per-tuple, fixed (4,4), and the optimizer's
+  choice.
+- **The KV check and the cache ran as expected.** The optimizer step read
+  Kalypso's real KV capacity (25,631,373,374 B / 57,344 B per token =
+  446,976 tokens), so the KV check was live: it rejected nothing. Its choice
+  was (1,1) for rpipe_s05, rpipe_s50 and pipe_map_filter, which is
+  per-tuple, so those arms have no managed stage. For
+  pipe_join_filter_j62_f90 it chose (1,4). The automatic cache engaged 0
+  times, as expected, since every workload has 2 stages.
+- **The controller observed and switched, but never vetoed or switched to
+  blocks.** It made 4 decisions, all `static -> tuple`:
+  - 2 in rpipe_s05 (4,4), after 16 and 8 blocks had formed, at an upstream
+    filter pass rate of 3-4%;
+  - 2 in pipe_join_filter_j62_f90 (1,4), before any block formed, at an
+    upstream pass rate of 0.0. That join ran per-tuple there and passed
+    31 / 1,024 pairs, against 399 / 1,024 for the block join in the (4,4)
+    arm.
+
+  No stage ever switched back to block. That means the quality veto, the
+  step-down (step B) and the selectivity-band caps (step A) **were not
+  exercised on real data**; only unit tests cover them. Getting there needs
+  a stage that drops below 5% pass rate and then recovers above 20%.
+- **Engine error at shutdown only.** The server log's one `EngineDeadError`
+  came at shutdown, 8 s after the last query, when the harness sent SIGTERM.
+  It is not a query failure.
+- **5 `task_retry` events,** all on pipe_map_filter's map stage
+  (`retry_max_tokens` 512), the existing map rerun path.
