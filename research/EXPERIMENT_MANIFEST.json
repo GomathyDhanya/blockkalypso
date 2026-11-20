@@ -152,7 +152,7 @@
       ]
      }
     ],
-    "status": "running"
+    "status": "executed"
    },
    {
     "id": "E1-s20",
@@ -179,7 +179,7 @@
       ]
      }
     ],
-    "status": "running"
+    "status": "executed"
    },
    {
     "id": "E1-s50",
@@ -206,7 +206,7 @@
       ]
      }
     ],
-    "status": "running"
+    "status": "executed"
    },
    {
     "id": "E1-s80",
@@ -233,7 +233,7 @@
       ]
      }
     ],
-    "status": "running"
+    "status": "executed"
    },
    {
     "id": "E1-s95",
@@ -260,7 +260,7 @@
       ]
      }
     ],
-    "status": "running"
+    "status": "executed"
    },
    {
     "id": "E2-filter",
@@ -280,7 +280,7 @@
       ]
      }
     ],
-    "status": "running"
+    "status": "executed"
    },
    {
     "id": "E2-join",
@@ -299,7 +299,7 @@
       ]
      }
     ],
-    "status": "running"
+    "status": "executed"
    },
    {
     "id": "E2-map",
@@ -316,7 +316,7 @@
       ]
      }
     ],
-    "status": "running"
+    "status": "executed"
    },
    {
     "id": "E3-load",
@@ -337,7 +337,7 @@
       ]
      }
     ],
-    "status": "running"
+    "status": "executed; L32/L128 invalid (prefix-cache reset failed under load), L0 valid"
    },
    {
     "id": "E0-overhead",
@@ -353,8 +353,15 @@
       ]
      }
     ],
-    "status": "running"
+    "status": "executed"
    }
-  ]
+  ],
+  "container_minutes_l40s": 82.3,
+  "results": "research/baseline/results/gpu/research-session1/",
+  "analysis_outputs": [
+   "research/baseline/results/gpu_analysis/summary.md",
+   "research/baseline/results/gpu_analysis/summary.json"
+  ],
+  "model_revision": "a09a35458c702b33eeacc393d103063234e8bc28"
  }
 }

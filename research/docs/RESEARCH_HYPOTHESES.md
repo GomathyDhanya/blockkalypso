@@ -53,7 +53,7 @@ Cost-model validation (Step 5) gives the historical q-error.
 **Reject if** the measured-best k is the same at all five selectivities and
 the model's pick is within 5% of it everywhere.
 
-**Status: open (needs E1).** Evidence so far: held-out join pass q-error
+**Status after E1 (GPU): weakly supported.** pipe:1,4 is best at 20-95% (1.25-1.52x) but nothing beats per-tuple at 5% (0.97x), so the best configuration changes with selectivity. Stronger finding: k itself changes cardinality (block filters pass 25-40% more rows than per-tuple; pipe:4,1 is 0.63-0.84x because of the extra join work). See BASELINE_RESULTS.md §2. Earlier evidence: Evidence so far: held-out join pass q-error
 median 1.83, max 15.2; held-out pipeline top-1 0%, regret up to 24%; and
 supplying the true cardinality does *not* reduce held-out pipeline error
 (20.3% → 20.2%), which points at the composition term rather than the
@@ -76,7 +76,7 @@ preemptions (vLLM metrics, 0.5 s) and Kalypso's admission counters
 ordering of plans are the same at all three load levels, and KV use stays
 under 50% with zero preemptions.
 
-**Status: open (needs E3).** Historical evidence leans towards rejection at
+**Status after GPU runs: KV part rejected at this scale, load part not answered.** Peak KV ≤ 17.5% (22% under load), 0 preemptions in all runs, KV admission rejections only in E1-s95; the queue is the visible pressure. E3 under load is invalid (prefix-cache resets failed under load; BASELINE_RESULTS.md §5). Earlier evidence: Historical evidence leans towards rejection at
 the scale measured so far: peak KV median 6.9%, max 75%, 0 preemptions in
 484 arms; queueing (median 151, max 2011 waiting requests) was the visible
 pressure.
@@ -106,4 +106,4 @@ identical outputs and call multisets). Timing: on CPU with zero-cost LLM
 calls, tracing adds ~21-22 µs per event (37-63% of an otherwise near-empty
 run, 1.7-5.1k events per query); with real calls of 0.1-10 s this is
 expected to be ~1% or less. E0 on the GPU measures it directly; **reject
-H5 if E0 shows > 3% median latency increase with tracing on.**
+H5 if E0 shows > 3% median latency increase with tracing on.** E0 result: +5.0% on per-tuple (400 calls), 0% on block:8; H5 **rejected for per-tuple** at the 3% threshold (part may be server-instance drift). Compare traced arms only with traced arms.

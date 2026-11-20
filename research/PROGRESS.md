@@ -24,8 +24,8 @@ Ground rules for this branch:
 | 3 | Opt-in instrumentation + tests | done: executor telemetry + optimizer profiler (`research/baseline/instrumentation/optimizer_profile.py`) | `vllm/kalypso/telemetry.py`, hooks in `controller/`, `execution/`, `sem_ops/block_*`, `budget.py`; tests `vllm/kalypso/tests/test_telemetry.py` |
 | 4 | CPU-only experiments (optimizer scaling, executor simulation) | done: `results/optimizer_scaling.jsonl` (all 3 families, d1-d6), `results/executor_simulation/summary.md` (real scheduler, simulated LLM) | `research/baseline/experiments/` |
 | 5 | Cost-model validation on existing GPU results | analysis done, write-up next | `research/baseline/analysis/costmodel_validation.py` → `research/baseline/results/costmodel_validation/summary.md` |
-| 6 | New GPU baseline runs (Modal, via Xen's Mac) | running: app ap-Ml8MVqEIYbNBbFei3QAtSK at 98e03cb, launched 2026-11-20 06:34 UTC (first launch crashed at import, fixed) | `research/baseline/gpu/modal_baseline.py` → volume `blockkalypso-results:research-session1/` → `research/baseline/results/gpu/` |
-| 7 | Protocol, hypotheses, manifest, final report | methodology, hypotheses, cost-model write-up, manifest (`research/EXPERIMENT_MANIFEST.json`), GPU analysis script done; BASELINE_RESULTS + report wait on GPU | `research/docs/` |
+| 6 | New GPU baseline runs (Modal) | done: 10/10 experiments, 82.3 L40S container-minutes; E3 under load invalid (cache reset failed) | `research/baseline/results/gpu/research-session1/`, analysis `research/baseline/results/gpu_analysis/summary.md`, write-up `research/docs/BASELINE_RESULTS.md` |
+| 7 | Protocol, hypotheses, results, manifest, final report | done except final report (next) | `research/docs/` |
 
 ## How to pick this up
 
@@ -61,16 +61,18 @@ python -m research.baseline.experiments.executor_simulation --out research/basel
 python -m research.baseline.analysis.trace_summary TRACE.jsonl --json out.json
 # CPU: cost-model validation on the committed GPU results (about 1 min)
 python -m research.baseline.analysis.costmodel_validation --out research/baseline/results/costmodel_validation
-# GPU (Modal): every Session 1 experiment, detached; then download
+# GPU (Modal): every Session 1 experiment, detached; then download and analyse
 modal run --detach research/baseline/gpu/modal_baseline.py::launch
 modal run research/baseline/gpu/modal_baseline.py::status
 modal volume get blockkalypso-results research-session1 ./research/baseline/results/gpu/
+python -m research.baseline.analysis.gpu_results research/baseline/results/gpu/research-session1 --out research/baseline/results/gpu_analysis
 ```
 
 ## Missing measurements
 
-- GPU experiments E0-E3: running on Modal (app ap-Ml8MVqEIYbNBbFei3QAtSK, launched 06:34 UTC). E1-s05 finished 06:40 UTC; others pending at 06:41 UTC.
-- Push state: origin has `98e03cb`. Later commits (`9959240`+) are in Xen's Mac worktree `../blockkalypso-research` and in the cloud container; the Mac's permission mode blocked `git push` at 06:40 UTC. To publish: `cd blockkalypso-research && git push origin research/session1-baseline` (fast-forward).
+- E3 load sensitivity at 32/128 streams: run but invalid (prefix-cache reset fails under load); rerun needs the fix in BASELINE_RESULTS.md §5 (~17 L40S minutes).
+
+- Push state: origin has `9e9daf2` (2026-11-20 09:05 UTC); later commits pushed the same way.
 
 ## Commit log
 
