@@ -66,6 +66,7 @@ run again at 512 tokens.
 """
 
 import argparse
+import bisect
 import copy
 import hashlib
 import itertools
@@ -116,6 +117,29 @@ class Items:
         return "long" if self.tokens > LONG_ROW_TOKENS else "short"
 
 
+# --- Join quality caps by selectivity band (Phase 2 step A) ---------------------
+#
+# The pooled per-(kind, regime) cap put joins at k = 1 because it averaged
+# workloads whose block-join quality moves in opposite directions with join
+# selectivity (research/docs/QUALITY_CAP_DECISION.md). Joins now also get a cap
+# per (regime, selectivity band), fitted the same way as ``_cap`` (grow k from
+# 2, stop at the first failing k) over per-workload mean ΔF1 within the band.
+# Two guards against fitting noise (repeat-level ΔF1 variance is unknown):
+# - one edge only, at 0.6: between the 0.47-0.50 joins (mixed, mostly failing)
+#   and the 0.65-0.91 joins. No edge is fitted inside the 0.47-0.50 cluster;
+# - a k counts only when at least MIN_BAND_WORKLOADS workloads in the band were
+#   measured there; fewer stops the band at the previous k.
+# Callers that pass no selectivity get the pooled cap, unchanged. Maps and
+# filters have no band caps.
+
+JOIN_SELECTIVITY_EDGES = (0.6,)
+MIN_BAND_WORKLOADS = 2
+
+
+def selectivity_band(selectivity: float) -> str:
+    return str(bisect.bisect_right(JOIN_SELECTIVITY_EDGES, selectivity))
+
+
 @dataclass
 class KindParams:
     a_pt: float = 0.0      # per-tuple: computed prompt tokens per item beyond its row
@@ -128,11 +152,15 @@ class KindParams:
     d0: float = 0.0        # block: decode steps per call ...
     d1: float = 0.0        # ... plus d1 per item
     caps: dict = field(default_factory=dict)        # regime -> accuracy cap k
+    band_caps: dict = field(default_factory=dict)   # joins: regime -> {band: cap k}
     measured_k: dict = field(default_factory=dict)  # regime -> measured sizes
     recall: dict = field(default_factory=dict)      # filters: regime -> {k: recall}
     fpr: dict = field(default_factory=dict)         # filters: regime -> {k: false-positive rate}
 
-    def cap(self, regime: str) -> int:
+    def cap(self, regime: str, selectivity: float | None = None) -> int:
+        bands = self.band_caps.get(regime) if selectivity is not None else None
+        if bands:
+            return bands.get(selectivity_band(selectivity), 1)
         return self.caps.get(regime, 1)
 
     @staticmethod
@@ -342,11 +370,14 @@ class Model:
         return max(1, int((max_model_len - p.q - p.d0) // per_item)) if per_item > 0 else 1
 
     def k_max(self, kind: str, items: Items, quality: bool = False,
-              max_model_len: int = DEFAULT_MAX_MODEL_LEN) -> int:
+              max_model_len: int = DEFAULT_MAX_MODEL_LEN,
+              selectivity: float | None = None) -> int:
+        """``selectivity``: the operator's own match rate, when known; with
+        ``quality`` it selects a join's selectivity-band cap."""
         p = self.kinds[kind]
         # Without the accuracy cap, stay within the sizes measured for the
         # regime: the model is not checked beyond them.
-        cap = (p.cap(items.regime) if quality
+        cap = (p.cap(items.regime, selectivity) if quality
                else max(p.measured_k.get(items.regime) or [MAX_K]))
         return max(1, min(self.k_ctx(kind, items.max_tokens, max_model_len), cap,
                           max(int(items.n), 1)))
@@ -365,17 +396,19 @@ class Model:
                  max_num_seqs: int = analyze.DEFAULT_MAX_NUM_SEQS,
                  max_model_len: int = DEFAULT_MAX_MODEL_LEN, tie: float = 0.02,
                  candidates=None, quality: bool = False, cache: bool = False,
-                 kv_budget_tokens: float | None = None) -> dict:
+                 kv_budget_tokens: float | None = None,
+                 selectivity: float | None = None) -> dict:
         if cache:
             b = _bucket_items(items)
             cands = tuple(candidates) if candidates is not None else None
+            band = None if selectivity is None else selectivity_band(selectivity)
             key = ("choose_k", self.fingerprint(), kind, b.regime, b.n, b.tokens,
                    b.max_tokens, b.left_rows, b.left_tokens, max_num_seqs, max_model_len,
-                   tie, cands, quality, kv_budget_tokens)
+                   tie, cands, quality, kv_budget_tokens, band)
             return DECISION_CACHE.get_or_compute(key, lambda: self.choose_k(
                 kind, b, max_num_seqs, max_model_len, tie, cands, quality,
-                kv_budget_tokens=kv_budget_tokens))
-        k_max = self.k_max(kind, items, quality, max_model_len)
+                kv_budget_tokens=kv_budget_tokens, selectivity=selectivity))
+        k_max = self.k_max(kind, items, quality, max_model_len, selectivity)
         ks = [k for k in (candidates or range(1, k_max + 1)) if k <= k_max] or [1]
         rejected = [k for k in ks if not self.kv_fits(kind, items, k, kv_budget_tokens)]
         ks = [k for k in ks if k not in rejected] or [1]
@@ -680,6 +713,45 @@ def _cap(rows: list[dict], measured: list[int], f1_slack: float) -> int:
     return cap
 
 
+def _band_cap(rows: list[dict], measured: list[int], f1_slack: float) -> int:
+    """``_cap`` within one join selectivity band: the mean of per-workload mean
+    ΔF1 at each k, and a k with fewer than MIN_BAND_WORKLOADS measured
+    workloads ends the band (too little evidence to raise it further)."""
+    cap = 1
+    for k in measured:
+        if k == 1:
+            continue
+        per = {}
+        for r in rows:
+            if r["k"] == k and r.get("f1_delta") is not None:
+                per.setdefault(r["workload"], []).append(r["f1_delta"])
+        if not per:
+            continue
+        if len(per) < MIN_BAND_WORKLOADS:
+            break
+        if np.mean([np.mean(v) for v in per.values()]) < -f1_slack:
+            break
+        cap = k
+    return cap
+
+
+def fit_band_caps(rows: list[dict], f1_slack: float) -> dict:
+    """Join caps per (regime, selectivity band); see the note above KindParams.
+    A workload's selectivity is positives / items of its per-tuple run."""
+    sel = {r["workload"]: r["positives"] / r["items"] for r in rows
+           if r["k"] == 1 and r.get("positives") is not None and r.get("items")}
+    out = {}
+    for regime in ("short", "long"):
+        at = [r for r in rows if _regime(r) == regime and r["workload"] in sel]
+        if not at:
+            continue
+        measured = sorted({r["k"] for r in at})
+        bands = sorted({selectivity_band(sel[r["workload"]]) for r in at})
+        out[regime] = {b: _band_cap([r for r in at if selectivity_band(sel[r["workload"]]) == b],
+                                    measured, f1_slack) for b in bands}
+    return out
+
+
 def fit_kind(rows: list[dict], f1_slack: float) -> KindParams:
     pt = [r for r in rows if r["k"] == 1]
     blk = [r for r in rows if r["k"] > 1]
@@ -725,6 +797,8 @@ def fit_kind(rows: list[dict], f1_slack: float) -> KindParams:
             p.recall[regime] = {str(k): round(a[0] / a[1], 4) for k, a in sorted(sums.items())}
             p.fpr[regime] = {str(k): round(a[2] / a[3], 4) if a[3] else 0.0
                              for k, a in sorted(sums.items())}
+    if rows and all(r.get("kind") == "join" for r in rows):
+        p.band_caps = fit_band_caps(rows, f1_slack)
     return p
 
 

@@ -119,7 +119,7 @@ def _end(passed, rows_in=1, stage_id=1, outcome="row"):
             "rows_out": passed, "rows_passed": passed, "outcome": outcome}
 
 
-def _controller(veto=lambda kind, k, tokens: False, **cfg):
+def _controller(veto=lambda kind, k, tokens, selectivity=None: False, **cfg):
     config = AdaptiveStageConfig(enabled=True, quality_veto=veto, **cfg)
     c = AdaptiveStageController(_stages(), config, token_length=len)
     c.formation_size(1, row("x"))  # a row has reached the stage: regime known
@@ -196,7 +196,7 @@ def _to_tuple_then_high(c):
 
 
 def test_quality_veto_blocks_switch():
-    c = _controller(veto=lambda kind, k, tokens: True)
+    c = _controller(veto=lambda kind, k, tokens, selectivity=None: True)
     _to_tuple_then_high(c)
     assert c.states[1].mode == TUPLE
     assert c.decisions[-1]["action"] == "veto"
@@ -205,7 +205,7 @@ def test_quality_veto_blocks_switch():
 
 
 def test_same_signal_without_veto_switches():
-    c = _controller(veto=lambda kind, k, tokens: False)
+    c = _controller(veto=lambda kind, k, tokens, selectivity=None: False)
     _to_tuple_then_high(c)
     assert c.states[1].mode == BLOCK
 

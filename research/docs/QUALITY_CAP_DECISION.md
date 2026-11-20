@@ -146,3 +146,20 @@ cap says.
 
 No evaluation was run for this step; all numbers come from existing results
 under `vllm/kalypso/benchmark/eval/results/`.
+
+## Update: fix 1 implemented (Phase 2 step A)
+
+Joins now also carry `band_caps` per (regime, selectivity band), fitted by
+`costmodel.fit_band_caps` and stored in `costmodel.json`. One edge, at 0.6, and
+a k only counts when at least 2 workloads in the band were measured there. The
+fitted result: short rows at selectivity >= 0.6 (movie_fanout75, movie_fanout90)
+cap at k = 6; every other band stays at 1. `k_max(..., selectivity=None)` and
+the pooled `caps` are unchanged.
+
+The two open questions above are still open, and this fix sidesteps rather
+than answers them. No edge sits inside the 0.47-0.50 cluster, so
+movie_fanout50 and movie_opposite stay at 1. fanout50 also fails at k = 2
+before it passes at 4, so the stop-at-first-failure rule keeps it at 1. Long
+rows stay at 1, because each band has only one long-row workload. The
+adaptive controller passes the managed stage's own pass rate as the
+selectivity; maps are unchanged.

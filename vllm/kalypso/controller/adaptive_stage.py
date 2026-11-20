@@ -54,10 +54,16 @@ past a threshold for up to ``window_tasks`` later observations, but it can
 cast only one vote, so one noisy block cannot flip the mode.
 
 Quality veto: before switching *to* the small block size, the controller asks
-``quality_veto(kind, k, row_tokens)``. The default reuses the cost model's
-existing guard from ``choose_k(quality=True)``: ``k`` must not exceed
-``Model.k_max(kind, items, quality=True)`` (the learned per-(kind, regime) cap
-from ``f1_slack`` / ``analyze.MIN_SIMILARITY``, plus the context-window bound).
+``quality_veto(kind, k, row_tokens, selectivity)``. The default reuses the cost
+model's existing guard from ``choose_k(quality=True)``: ``k`` must not exceed
+``Model.k_max(kind, items, quality=True, selectivity=...)`` (the learned
+per-(kind, regime) cap from ``f1_slack`` / ``analyze.MIN_SIMILARITY``, for
+joins per selectivity band, plus the context-window bound). ``selectivity`` is
+the managed stage's *own* pass rate (rows_passed / rows_in of its own
+``task_end`` events, same subscription and window length), or None before any
+of its tasks has finished, which gives the pooled cap. It is not the
+upstream rate used for voting: for a join fed by a filter, the upstream rate
+is the filter's pass rate and says nothing about the join's match rate.
 If vetoed, or if no row has reached the stage yet so its regime is unknown,
 the stage stays per-tuple. Switching to per-tuple is never vetoed: per-tuple
 is the quality reference those caps are measured against.
@@ -96,8 +102,9 @@ class AdaptiveStageConfig:
     high_pass_rate: float = 0.20
     min_consecutive: int = 3
     window_tasks: int = 16
-    # (kind, k, row_tokens) -> True to forbid blocks of k. None: cost model guard.
-    quality_veto: Callable[[str, int, float], bool] | None = None
+    # (kind, k, row_tokens, selectivity) -> True to forbid blocks of k.
+    # selectivity: the stage's own pass rate so far, or None. None: cost model guard.
+    quality_veto: Callable[[str, int, float, float | None], bool] | None = None
 
     def __post_init__(self):
         if not 0.0 <= self.low_pass_rate <= self.high_pass_rate <= 1.0:
@@ -128,9 +135,10 @@ _FITTED = (Path(__file__).resolve().parents[1]
            / "benchmark/eval/results/analysis/costmodel.json")
 
 
-def costmodel_quality_veto(path: Path = _FITTED) -> Callable[[str, int, float], bool]:
+def costmodel_quality_veto(path: Path = _FITTED) -> Callable[[str, int, float, float | None], bool]:
     """The existing choose_k quality guard as a veto: forbid k when it exceeds
-    ``Model.k_max(kind, items, quality=True)`` for the row's regime."""
+    ``Model.k_max(kind, items, quality=True, selectivity=...)`` for the row's
+    regime. With a selectivity, joins use their selectivity-band cap."""
     from dataclasses import fields as dc_fields
 
     from vllm.kalypso.benchmark.eval import costmodel as cm
@@ -143,11 +151,11 @@ def costmodel_quality_veto(path: Path = _FITTED) -> Callable[[str, int, float], 
                      delta=d["delta"], tail=d["tail"], kinds=kinds,
                      f1_slack=d["f1_slack"], lam=d["lambda"], retry=d["retry"])
 
-    def veto(kind: str, k: int, row_tokens: float) -> bool:
+    def veto(kind: str, k: int, row_tokens: float, selectivity: float | None = None) -> bool:
         if kind not in model.kinds:
             return True  # no guard for this kind: do not block
         items = cm.Items(n=k, tokens=row_tokens, max_tokens=row_tokens)
-        return k > model.k_max(kind, items, quality=True)
+        return k > model.k_max(kind, items, quality=True, selectivity=selectivity)
 
     return veto
 
@@ -173,8 +181,14 @@ class _StageState:
     mode: str = STATIC
     row_tokens: float | None = None
     window: deque = field(default_factory=deque)
+    own_window: deque = field(default_factory=deque)  # this stage's (passed, rows_in)
     vote: str | None = None
     streak: int = 0
+
+    def selectivity(self) -> float | None:
+        """This stage's own pass rate over its last ``window_tasks`` tasks."""
+        n = sum(r for _, r in self.own_window)
+        return sum(p for p, _ in self.own_window) / n if n else None
 
     def size(self, mode: str | None = None) -> int:
         mode = mode or self.mode
@@ -188,6 +202,7 @@ class AdaptiveStageController:
         self._token_length = token_length
         self.states: dict[int, _StageState] = {}
         self._by_upstream: dict[int, _StageState] = {}
+        self._by_stage: dict[int, _StageState] = {}
         self.decisions: list[dict] = []   # switches and vetoes, in order
         self.formations: list[tuple[int, int]] = []  # (stage index, size) per new block
         for index, stage in enumerate(stages):
@@ -203,20 +218,27 @@ class AdaptiveStageController:
                 static_size=stage.block_size,
                 small_size=max(k for k in cands if k <= config.small_block_size),
                 candidate_sizes=cands,
-                window=deque(maxlen=config.window_tasks))
+                window=deque(maxlen=config.window_tasks),
+                own_window=deque(maxlen=config.window_tasks))
             self.states[index] = state
             self._by_upstream[state.upstream_stage_id] = state
+            self._by_stage[state.stage_id] = state
 
     # -- telemetry subscriber -------------------------------------------------
 
     def observe(self, record: dict) -> None:
-        if record.get("event") != "task_end":
-            return
-        state = self._by_upstream.get(record.get("stage_id"))
-        if state is None or record.get("outcome") == "retry":
+        if record.get("event") != "task_end" or record.get("outcome") == "retry":
             return
         rows_in, passed = record.get("rows_in") or 0, record.get("rows_passed")
         if passed is None or rows_in <= 0:
+            return
+        own = self._by_stage.get(record.get("stage_id"))
+        if own is not None:
+            # The managed stage's own pass rate: its selectivity for the
+            # quality veto (a join's match rate over the pairs it judged).
+            own.own_window.append((passed, rows_in))
+        state = self._by_upstream.get(record.get("stage_id"))
+        if state is None:
             return
         state.window.append((passed, rows_in))
         rate = sum(p for p, _ in state.window) / sum(n for _, n in state.window)
@@ -252,7 +274,7 @@ class AdaptiveStageController:
         else:
             if self._veto is None:
                 self._veto = costmodel_quality_veto()
-            if self._veto(state.kind, k, state.row_tokens):
+            if self._veto(state.kind, k, state.row_tokens, state.selectivity()):
                 reason = "quality guard"
         if reason is None:
             return False
