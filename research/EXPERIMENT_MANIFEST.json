@@ -1,0 +1,360 @@
+{
+ "session": "Session 1: research baseline and experimental foundation",
+ "branch": "research/session1-baseline",
+ "base_commit": "21c9ee8",
+ "system_under_test": "BlockKalypso main@21c9ee8 + opt-in telemetry (KALYPSO_TRACE), semantics unchanged",
+ "status_legend": {
+  "executed": "measured, results committed",
+  "running": "launched on Modal, results pending",
+  "not_executed": "not run; no numbers reported"
+ },
+ "experiments": [
+  {
+   "id": "A-optimizer-scaling",
+   "hypothesis": "H1",
+   "where": "CPU",
+   "status": "executed",
+   "script": "research/baseline/experiments/optimizer_scaling.py",
+   "command": "python -m research.baseline.experiments.optimizer_scaling --out research/baseline/results/optimizer_scaling.jsonl",
+   "parameters": {
+    "families": [
+     "filters",
+     "filter_join",
+     "mixed"
+    ],
+    "depths": [
+     1,
+     2,
+     3,
+     4,
+     5,
+     6
+    ],
+    "candidate_sets": [
+     "exhaustive",
+     "pow2 {1,2,4,8,16,32}",
+     "small {1..4}"
+    ],
+    "repeats": 5,
+    "max_candidates": 2000000,
+    "rows": 400,
+    "tokens_per_row": 31,
+    "right_rows": 32,
+    "selectivity": 0.5
+   },
+   "outputs": [
+    "research/baseline/results/optimizer_scaling.jsonl",
+    "research/baseline/results/optimizer_scaling.md"
+   ],
+   "not_executed": "exhaustive search at depth 5-6 (3.2M-262M candidates): reported as extrapolations, labelled"
+  },
+  {
+   "id": "Sim-executor",
+   "hypothesis": "H2, H4",
+   "where": "CPU",
+   "status": "executed",
+   "script": "research/baseline/experiments/executor_simulation.py",
+   "command": "python -m research.baseline.experiments.executor_simulation --out research/baseline/results/executor_simulation",
+   "parameters": {
+    "selectivities": [
+     0.05,
+     0.2,
+     0.5,
+     0.8,
+     0.95
+    ],
+    "configs": [
+     "1x1",
+     "4x1",
+     "1x4",
+     "4x4",
+     "8x8"
+    ],
+    "n_left": 100,
+    "n_right": 32,
+    "repeats": 5,
+    "warmup": 1,
+    "llm_cost": "20 ms + 2 ms/item, 64 slots"
+   },
+   "outputs": [
+    "research/baseline/results/executor_simulation/runs.jsonl",
+    "research/baseline/results/executor_simulation/summary.md",
+    "research/baseline/results/executor_simulation/traces/s50_4x4_r0.jsonl.gz"
+   ]
+  },
+  {
+   "id": "Overhead-cpu",
+   "hypothesis": "H5",
+   "where": "CPU",
+   "status": "executed",
+   "script": "research/baseline/experiments/telemetry_overhead_cpu.py",
+   "command": "python -m research.baseline.experiments.telemetry_overhead_cpu --out research/baseline/results/telemetry_overhead_cpu.json",
+   "outputs": [
+    "research/baseline/results/telemetry_overhead_cpu.json"
+   ]
+  },
+  {
+   "id": "Val-costmodel",
+   "hypothesis": "H2, H3",
+   "where": "CPU on committed GPU results",
+   "status": "executed",
+   "script": "research/baseline/analysis/costmodel_validation.py",
+   "command": "python -m research.baseline.analysis.costmodel_validation --out research/baseline/results/costmodel_validation",
+   "outputs": [
+    "research/baseline/results/costmodel_validation/summary.md",
+    "research/baseline/results/costmodel_validation/summary.json",
+    "research/baseline/results/costmodel_validation/arms.jsonl"
+   ]
+  }
+ ],
+ "gpu": {
+  "runner": "research/baseline/gpu/modal_baseline.py",
+  "launch": "modal run --detach research/baseline/gpu/modal_baseline.py::launch",
+  "download": "modal volume get blockkalypso-results research-session1 ./research/baseline/results/gpu/",
+  "analysis": "python -m research.baseline.analysis.gpu_results research/baseline/results/gpu/research-session1 --out research/baseline/results/gpu_analysis",
+  "launched_commit": "98e03cb",
+  "modal_app": "ap-Ml8MVqEIYbNBbFei3QAtSK",
+  "launched_utc": "2026-11-20T06:34Z",
+  "server": {
+   "model": "Qwen/Qwen2.5-7B-Instruct",
+   "gpu": "L40S",
+   "max_num_seqs": 256,
+   "max_num_batched_tokens": 2048,
+   "max_model_len": 32768,
+   "prefix_caching": true,
+   "vllm": "0.29.0 + Kalypso overlay"
+  },
+  "warmup": 1,
+  "repeats": 5,
+  "experiments": [
+   {
+    "id": "E1-s05",
+    "parts": [
+     {
+      "name": "rsel05",
+      "workload": "rsel05",
+      "n": 0,
+      "arms": [
+       "kalypso_per_tuple",
+       "kalypso_block:4",
+       "kalypso_block:8"
+      ]
+     },
+     {
+      "name": "rpipe_s05",
+      "workload": "rpipe_s05",
+      "n": 0,
+      "arms": [
+       "kalypso_per_tuple",
+       "kalypso_pipe:4,1",
+       "kalypso_pipe:1,4",
+       "kalypso_pipe:4,4"
+      ]
+     }
+    ],
+    "status": "running"
+   },
+   {
+    "id": "E1-s20",
+    "parts": [
+     {
+      "name": "rsel20",
+      "workload": "rsel20",
+      "n": 0,
+      "arms": [
+       "kalypso_per_tuple",
+       "kalypso_block:4",
+       "kalypso_block:8"
+      ]
+     },
+     {
+      "name": "rpipe_s20",
+      "workload": "rpipe_s20",
+      "n": 0,
+      "arms": [
+       "kalypso_per_tuple",
+       "kalypso_pipe:4,1",
+       "kalypso_pipe:1,4",
+       "kalypso_pipe:4,4"
+      ]
+     }
+    ],
+    "status": "running"
+   },
+   {
+    "id": "E1-s50",
+    "parts": [
+     {
+      "name": "rsel50",
+      "workload": "rsel50",
+      "n": 0,
+      "arms": [
+       "kalypso_per_tuple",
+       "kalypso_block:4",
+       "kalypso_block:8"
+      ]
+     },
+     {
+      "name": "rpipe_s50",
+      "workload": "rpipe_s50",
+      "n": 0,
+      "arms": [
+       "kalypso_per_tuple",
+       "kalypso_pipe:4,1",
+       "kalypso_pipe:1,4",
+       "kalypso_pipe:4,4"
+      ]
+     }
+    ],
+    "status": "running"
+   },
+   {
+    "id": "E1-s80",
+    "parts": [
+     {
+      "name": "rsel80",
+      "workload": "rsel80",
+      "n": 0,
+      "arms": [
+       "kalypso_per_tuple",
+       "kalypso_block:4",
+       "kalypso_block:8"
+      ]
+     },
+     {
+      "name": "rpipe_s80",
+      "workload": "rpipe_s80",
+      "n": 0,
+      "arms": [
+       "kalypso_per_tuple",
+       "kalypso_pipe:4,1",
+       "kalypso_pipe:1,4",
+       "kalypso_pipe:4,4"
+      ]
+     }
+    ],
+    "status": "running"
+   },
+   {
+    "id": "E1-s95",
+    "parts": [
+     {
+      "name": "rsel95",
+      "workload": "rsel95",
+      "n": 0,
+      "arms": [
+       "kalypso_per_tuple",
+       "kalypso_block:4",
+       "kalypso_block:8"
+      ]
+     },
+     {
+      "name": "rpipe_s95",
+      "workload": "rpipe_s95",
+      "n": 0,
+      "arms": [
+       "kalypso_per_tuple",
+       "kalypso_pipe:4,1",
+       "kalypso_pipe:1,4",
+       "kalypso_pipe:4,4"
+      ]
+     }
+    ],
+    "status": "running"
+   },
+   {
+    "id": "E2-filter",
+    "parts": [
+     {
+      "name": "movie_positive-n1000",
+      "workload": "movie_positive",
+      "n": 1000,
+      "arms": [
+       "kalypso_per_tuple",
+       "kalypso_block:2",
+       "kalypso_block:4",
+       "kalypso_block:8",
+       "kalypso_block:16",
+       "kalypso_block:32",
+       "kalypso_block:64"
+      ]
+     }
+    ],
+    "status": "running"
+   },
+   {
+    "id": "E2-join",
+    "parts": [
+     {
+      "name": "movie_fanout50",
+      "workload": "movie_fanout50",
+      "n": 0,
+      "arms": [
+       "kalypso_per_tuple",
+       "kalypso_block:2",
+       "kalypso_block:4",
+       "kalypso_block:8",
+       "kalypso_block:16",
+       "kalypso_block:32"
+      ]
+     }
+    ],
+    "status": "running"
+   },
+   {
+    "id": "E2-map",
+    "parts": [
+     {
+      "name": "movie_map-n200",
+      "workload": "movie_map",
+      "n": 200,
+      "arms": [
+       "kalypso_per_tuple",
+       "kalypso_block:2",
+       "kalypso_block:4",
+       "kalypso_block:8"
+      ]
+     }
+    ],
+    "status": "running"
+   },
+   {
+    "id": "E3-load",
+    "load_levels": [
+     0,
+     32,
+     128
+    ],
+    "parts": [
+     {
+      "name": "rpipe_s50",
+      "workload": "rpipe_s50",
+      "n": 0,
+      "arms": [
+       "kalypso_per_tuple",
+       "kalypso_pipe:1,4",
+       "kalypso_pipe:4,4"
+      ]
+     }
+    ],
+    "status": "running"
+   },
+   {
+    "id": "E0-overhead",
+    "overhead": true,
+    "parts": [
+     {
+      "name": "rsel50",
+      "workload": "rsel50",
+      "n": 0,
+      "arms": [
+       "kalypso_per_tuple",
+       "kalypso_block:8"
+      ]
+     }
+    ],
+    "status": "running"
+   }
+  ]
+ }
+}
