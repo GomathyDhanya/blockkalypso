@@ -40,7 +40,11 @@ from pathlib import Path
 
 import modal
 
-REPO = Path(__file__).resolve().parents[3]
+# The repo root on the launching machine. Inside a Modal container this file
+# is /root/modal_baseline.py (no repo around it); the image steps that use
+# REPO only run locally, so any placeholder path works there.
+_HERE = Path(__file__).resolve()
+REPO = _HERE.parents[3] if len(_HERE.parents) > 3 else _HERE.parent
 SOURCE = "/opt/kalypso-source"
 VLLM_PKG = ("$(python3 -c 'import importlib.util; print(next(iter(importlib.util"
             ".find_spec(\"vllm\").submodule_search_locations)))')")
