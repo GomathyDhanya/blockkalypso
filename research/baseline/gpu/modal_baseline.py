@@ -72,7 +72,8 @@ image = (
                     f"{SOURCE}/vllm/entrypoints/openai/api_server.py", copy=True)
     .add_local_dir(REPO / "docker/kalypso", f"{SOURCE}/docker/kalypso", copy=True)
     .add_local_dir(REPO / "research", f"{SOURCE}/research", copy=True,
-                   ignore=["**/__pycache__", "baseline/results", "baseline/results/**"])
+                   ignore=["**/__pycache__", "baseline/results", "baseline/results/**",
+                           "phase2/results", "phase2/results/**"])
     .run_commands(
         "python3 -c \"from importlib.metadata import version; "
         "assert version('vllm').split('+')[0] == '0.29.0', version('vllm')\"",
