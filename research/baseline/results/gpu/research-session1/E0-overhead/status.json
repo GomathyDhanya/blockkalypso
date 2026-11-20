@@ -1,0 +1,11 @@
+{
+  "id": "E0-overhead",
+  "git_sha": "98e03cbfbad3c714c4d4614476cc0801ebf5777c",
+  "git_dirty": false,
+  "started": "2026-11-20T06:41:06+0000",
+  "parts": {
+    "rsel50:off": "done",
+    "rsel50:on": "done"
+  },
+  "finished": "2026-11-20T06:45:31+0000"
+}

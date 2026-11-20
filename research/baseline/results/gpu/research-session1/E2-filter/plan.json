@@ -1,0 +1,19 @@
+{
+  "id": "E2-filter",
+  "parts": [
+    {
+      "name": "movie_positive-n1000",
+      "workload": "movie_positive",
+      "n": 1000,
+      "arms": [
+        "kalypso_per_tuple",
+        "kalypso_block:2",
+        "kalypso_block:4",
+        "kalypso_block:8",
+        "kalypso_block:16",
+        "kalypso_block:32",
+        "kalypso_block:64"
+      ]
+    }
+  ]
+}

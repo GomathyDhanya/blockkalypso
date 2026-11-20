@@ -1,0 +1,26 @@
+{
+  "id": "E1-s20",
+  "parts": [
+    {
+      "name": "rsel20",
+      "workload": "rsel20",
+      "n": 0,
+      "arms": [
+        "kalypso_per_tuple",
+        "kalypso_block:4",
+        "kalypso_block:8"
+      ]
+    },
+    {
+      "name": "rpipe_s20",
+      "workload": "rpipe_s20",
+      "n": 0,
+      "arms": [
+        "kalypso_per_tuple",
+        "kalypso_pipe:4,1",
+        "kalypso_pipe:1,4",
+        "kalypso_pipe:4,4"
+      ]
+    }
+  ]
+}

@@ -183,11 +183,11 @@ def analyse_experiment(root: Path) -> dict:
         exp["parts"][part_dir.name] = part
     exp["traces"] = {}
     plan = exp.get("plan") or {}
-    for trace in sorted(root.glob("trace-*.jsonl")):
+    for trace in sorted([*root.glob("trace-*.jsonl"), *root.glob("trace-*.jsonl.gz")]):
         arms_order = None
         if len(plan.get("parts", [])) == 1 and not plan.get("load_levels"):
             arms_order = plan["parts"][0]["arms"]
-        exp["traces"][trace.stem] = trace_stats(trace, arms_order, 1, 5)
+        exp["traces"][trace.name.split(".")[0]] = trace_stats(trace, arms_order, 1, 5)
     exp["vllm_metrics"] = {}
     for mf in sorted(root.glob("vllm-metrics-*.jsonl")):
         rows = [json.loads(l) for l in mf.read_text().splitlines() if l.strip()]

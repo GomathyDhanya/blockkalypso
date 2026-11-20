@@ -1,0 +1,20 @@
+{
+  "id": "E3-load",
+  "load_levels": [
+    0,
+    32,
+    128
+  ],
+  "parts": [
+    {
+      "name": "rpipe_s50",
+      "workload": "rpipe_s50",
+      "n": 0,
+      "arms": [
+        "kalypso_per_tuple",
+        "kalypso_pipe:1,4",
+        "kalypso_pipe:4,4"
+      ]
+    }
+  ]
+}

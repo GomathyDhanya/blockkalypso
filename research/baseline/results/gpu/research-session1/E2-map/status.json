@@ -1,0 +1,10 @@
+{
+  "id": "E2-map",
+  "git_sha": "98e03cbfbad3c714c4d4614476cc0801ebf5777c",
+  "git_dirty": false,
+  "started": "2026-11-20T06:40:43+0000",
+  "parts": {
+    "movie_map-n200:on": "done"
+  },
+  "finished": "2026-11-20T06:44:25+0000"
+}

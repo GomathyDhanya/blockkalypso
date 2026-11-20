@@ -1,0 +1,18 @@
+{
+  "id": "E2-join",
+  "parts": [
+    {
+      "name": "movie_fanout50",
+      "workload": "movie_fanout50",
+      "n": 0,
+      "arms": [
+        "kalypso_per_tuple",
+        "kalypso_block:2",
+        "kalypso_block:4",
+        "kalypso_block:8",
+        "kalypso_block:16",
+        "kalypso_block:32"
+      ]
+    }
+  ]
+}

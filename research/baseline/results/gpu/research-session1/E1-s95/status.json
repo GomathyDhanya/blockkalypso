@@ -1,0 +1,11 @@
+{
+  "id": "E1-s95",
+  "git_sha": "98e03cbfbad3c714c4d4614476cc0801ebf5777c",
+  "git_dirty": false,
+  "started": "2026-11-20T06:36:29+0000",
+  "parts": {
+    "rsel95:on": "done",
+    "rpipe_s95:on": "done"
+  },
+  "finished": "2026-11-20T06:48:48+0000"
+}

@@ -1,0 +1,15 @@
+{
+  "id": "E0-overhead",
+  "overhead": true,
+  "parts": [
+    {
+      "name": "rsel50",
+      "workload": "rsel50",
+      "n": 0,
+      "arms": [
+        "kalypso_per_tuple",
+        "kalypso_block:8"
+      ]
+    }
+  ]
+}

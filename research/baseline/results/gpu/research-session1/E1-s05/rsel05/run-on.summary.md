@@ -1,0 +1,8 @@
+Model `Qwen/Qwen2.5-7B-Instruct` on unknown (Linux-4.19.0-gvisor-x86_64-with-glibc2.39); workload `rsel05` (filter), 400 rows, 20 positive; 5 repeats after 1 warmup; prefix cache reset per trial: yes; git `?`.
+Server: `python3 -m vllm.entrypoints.cli.main serve Qwen/Qwen2.5-7B-Instruct --host 127.0.0.1 --port 8000 --enable-prefix-caching --no-async-scheduling --api-server-count 1 --max-model-len 32768 --max-num-seqs 256 --max-num-batched-tokens 2048` (started Fri Nov 20 06:36:47 2026).
+
+| Arm | Latency (s) | LLM requests | Block calls | Fallback calls | Prompt tokens | Gen tokens | Prefix hit rate | Peak KV % | Peak running | Peak waiting | Preemptions | Peak RSS (MiB) | Items/s | Truncated | Mean prefill (s) | Mean decode (s) | Accuracy | Precision | Recall | F1 | Agrees w/ kalypso_per_tuple | Self-agreement |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| `kalypso_per_tuple` | 3.84 [3.80-3.86] | 400 | n/a | n/a | 65269 | 1191 | 0.29 | 1.0 | 38 | 346 | 0 | 11337 [11337-11337] | 104.25 [103.55-105.26] | 0 | 0.152 [0.150-0.154] | 0.272 [0.269-0.275] | 0.97 | 0.70 | 0.70 | 0.70 | 100% | 100% |
+| `kalypso_block:4` | 2.05 [2.02-2.06] | 100 | 100 | 0 | 21565 | 1600 | 0.15 | 4.5 [4.5-4.5] | 100 [99-100] | 66 | 0 | 11337 [11337-11337] | 195.41 [194.36-197.63] | 0 | 0.156 [0.154-0.158] | 0.922 [0.912-0.929] | 0.96 | 0.61 | 0.85 | 0.71 | 96% | 100% |
+| `kalypso_block:8` | 2.22 [2.19-2.25] | 50 | 50 | 0 | 17415 | 1600 | 0.09 | 3.9 [3.8-3.9] | 50 | 41 [37-42] | 0 | 11337 [11337-11337] | 180.10 [177.70-182.23] | 0 | 0.158 [0.156-0.162] | 1.276 [1.267-1.292] | 0.95 | 0.54 | 0.65 | 0.59 | 96% | 100% |

@@ -27,8 +27,11 @@ def _pct(values, q):
 
 
 def load(path: Path) -> list[dict]:
+    import gzip
+    path = Path(path)
+    text = (gzip.open(path, "rt").read() if path.suffix == ".gz" else path.read_text())
     out = []
-    for line in Path(path).read_text().splitlines():
+    for line in text.splitlines():
         if line.strip():
             try:
                 out.append(json.loads(line))

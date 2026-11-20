@@ -1,0 +1,11 @@
+{
+  "id": "E1-s50",
+  "git_sha": "98e03cbfbad3c714c4d4614476cc0801ebf5777c",
+  "git_dirty": false,
+  "started": "2026-11-20T06:36:27+0000",
+  "parts": {
+    "rsel50:on": "done",
+    "rpipe_s50:on": "done"
+  },
+  "finished": "2026-11-20T06:44:22+0000"
+}

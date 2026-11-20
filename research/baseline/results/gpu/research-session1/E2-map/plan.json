@@ -1,0 +1,16 @@
+{
+  "id": "E2-map",
+  "parts": [
+    {
+      "name": "movie_map-n200",
+      "workload": "movie_map",
+      "n": 200,
+      "arms": [
+        "kalypso_per_tuple",
+        "kalypso_block:2",
+        "kalypso_block:4",
+        "kalypso_block:8"
+      ]
+    }
+  ]
+}
