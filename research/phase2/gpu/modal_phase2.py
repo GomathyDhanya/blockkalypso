@@ -162,3 +162,95 @@ def status():
         print(json.dumps(json.loads(data), indent=2))
     except Exception:  # noqa: BLE001
         print(EXPERIMENT["id"], "no status yet")
+
+
+# --- Comparison: static vs adaptive (P2-compare) ------------------------------
+#
+#     modal run --detach research/phase2/gpu/modal_phase2.py::launch_compare
+#     modal run research/phase2/gpu/modal_phase2.py::status_compare
+#     python -m research.phase2.compare_summary research/phase2/results/P2-compare
+#
+# Each part runs ONE arm, the cost model's default choice (choose_pipeline,
+# exhaustive, unguarded, real Session 1 token counts; computed before the run
+# and fixed here). It runs under two server configurations: static
+# (KALYPSO_ADAPTIVE_STAGE unset, so the controller is off) and adaptive
+# (controller on). The controller is a server-level setting, so the server
+# restarts between configurations, in the order off, on, off, on. Each phase
+# runs 1 warmup and 2 repeats per part, giving 4 measured repeats per
+# configuration, interleaved against drift. The model, revision, GPU, plan seed
+# (DEFAULT_PLAN_SEED 0), temperature and prefix-cache reset per trial are all
+# the same.
+
+COMPARE_PARTS = [
+    # Drop then recover: rpipe_s50's own rows, negatives first (research/phase2/workloads.py).
+    {"name": "rpipe_s50_drift", "workload": "rpipe_s50_drift", "n": 0, "arm": "kalypso_pipe:1,2"},
+    # Drop with no recovery (2% true filter selectivity).
+    {"name": "rpipe_s05", "workload": "rpipe_s05", "n": 0, "arm": "kalypso_pipe:1,2"},
+    # No drift (48%, shuffled): the controller should stay static.
+    {"name": "rpipe_s50", "workload": "rpipe_s50", "n": 0, "arm": "kalypso_pipe:1,2"},
+    # Join first, managed filter after a block join (where the model's error concentrates).
+    {"name": "pipe_join_filter_j62_f90", "workload": "pipe_join_filter_j62_f90", "n": 0,
+     "arm": "kalypso_pipe:10,2"},
+]
+COMPARE = {"id": "P2-compare", "parts": COMPARE_PARTS, "warmup": 1, "repeats": 2,
+           "phases": [("off-1", False), ("on-1", True), ("off-2", False), ("on-2", True)]}
+
+
+@app.function(gpu=mb.GPU, timeout=4 * 3600,
+              volumes={"/results": mb.results, "/cache": mb.hf_cache})
+def run_compare(exp: dict, git_sha: str, git_dirty: bool) -> dict:
+    root = Path("/results") / OUT_ROOT / exp["id"]
+    root.mkdir(parents=True, exist_ok=True)
+    status = {"id": exp["id"], "git_sha": git_sha, "git_dirty": git_dirty,
+              "started": time.strftime("%Y-%m-%dT%H:%M:%S%z"), "phases": {}}
+    (root / "plan.json").write_text(json.dumps(exp, indent=2))
+    try:
+        mb._environment(root)
+        # tokens.json for the catalog workloads (the drift one has rpipe_s50's rows).
+        mb._tokens(root, [p for p in exp["parts"] if p["workload"] != "rpipe_s50_drift"])
+        for tag, adaptive in exp["phases"]:
+            if adaptive:
+                os.environ["KALYPSO_ADAPTIVE_STAGE"] = "1"
+            else:
+                os.environ.pop("KALYPSO_ADAPTIVE_STAGE", None)
+            pre = subprocess.run(["python3", "-c", PREFLIGHT], cwd=mb.SOURCE,
+                                 capture_output=True, text=True)
+            if adaptive and pre.returncode != 0:
+                raise RuntimeError("preflight failed: " + (pre.stdout + pre.stderr)[-2000:])
+            phase = status["phases"][tag] = {"adaptive": adaptive, "parts": {}}
+            with mb._server(root, True, tag) as proc, mb._samplers(root, tag):
+                for part in exp["parts"]:
+                    try:
+                        mb._eval(root, part, [part["arm"]], exp["warmup"], exp["repeats"],
+                                 f"run-{tag}.jsonl", proc.pid)
+                        phase["parts"][part["name"]] = "done"
+                    except subprocess.CalledProcessError as exc:
+                        phase["parts"][part["name"]] = f"failed: {exc}"
+            (root / "status.json").write_text(json.dumps(status, indent=2))
+            mb.results.commit()
+    except Exception as exc:  # noqa: BLE001 -- record and return
+        status["error"] = f"{type(exc).__name__}: {exc}"
+    status["finished"] = time.strftime("%Y-%m-%dT%H:%M:%S%z")
+    (root / "status.json").write_text(json.dumps(status, indent=2))
+    mb.results.commit()
+    return status
+
+
+@app.local_entrypoint()
+def launch_compare(wait: bool = False):
+    sha = mb._git("rev-parse", "HEAD")
+    dirty = bool(mb._git("status", "--porcelain", "--untracked-files=no"))
+    print(f"launching {COMPARE['id']} at {sha[:9]}{' (dirty)' if dirty else ''}")
+    call = run_compare.spawn(COMPARE, sha, dirty)
+    print(COMPARE["id"], "spawned", call.object_id)
+    if wait:
+        print(json.dumps(call.get(), indent=2))
+
+
+@app.local_entrypoint()
+def status_compare():
+    try:
+        data = b"".join(mb.results.read_file(f"{OUT_ROOT}/{COMPARE['id']}/status.json"))
+        print(json.dumps(json.loads(data), indent=2))
+    except Exception:  # noqa: BLE001
+        print(COMPARE["id"], "no status yet")

@@ -8,6 +8,7 @@ Same CLI and output as ``python -m vllm.kalypso.benchmark.eval.run``.
 import sys
 
 from research.baseline import workloads  # noqa: F401  (registers rsel*, rpipe_*)
+from research.phase2 import workloads as _phase2  # noqa: F401  (registers rpipe_s50_drift)
 from vllm.kalypso.benchmark.eval import run
 
 if __name__ == "__main__":
