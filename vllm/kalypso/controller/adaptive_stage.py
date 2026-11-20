@@ -64,8 +64,11 @@ the managed stage's *own* pass rate (rows_passed / rows_in of its own
 of its tasks has finished, which gives the pooled cap. It is not the
 upstream rate used for voting: for a join fed by a filter, the upstream rate
 is the filter's pass rate and says nothing about the join's match rate.
-If vetoed, or if no row has reached the stage yet so its regime is unknown,
-the stage stays per-tuple. Switching to per-tuple is never vetoed: per-tuple
+If the preferred size is vetoed, the controller steps down through the
+smaller power-of-two candidates and switches to the first one the veto allows
+(the switch record lists the vetoed sizes). If every candidate above 1 is
+vetoed, or no row has reached the stage yet so its regime is unknown, the
+stage stays per-tuple. Switching to per-tuple is never vetoed: per-tuple
 is the quality reference those caps are measured against.
 
 Where it applies: ``formation_size`` is called by the executor only when a
@@ -178,6 +181,7 @@ class _StageState:
     static_size: int
     small_size: int
     candidate_sizes: tuple[int, ...] = (1,)
+    block_size: int | None = None  # block size chosen at the last switch to block
     mode: str = STATIC
     row_tokens: float | None = None
     window: deque = field(default_factory=deque)
@@ -192,7 +196,8 @@ class _StageState:
 
     def size(self, mode: str | None = None) -> int:
         mode = mode or self.mode
-        return {STATIC: self.static_size, TUPLE: 1, BLOCK: self.small_size}[mode]
+        return {STATIC: self.static_size, TUPLE: 1,
+                BLOCK: self.block_size or self.small_size}[mode]
 
 
 class AdaptiveStageController:
@@ -205,6 +210,7 @@ class AdaptiveStageController:
         self._by_stage: dict[int, _StageState] = {}
         self.decisions: list[dict] = []   # switches and vetoes, in order
         self.formations: list[tuple[int, int]] = []  # (stage index, size) per new block
+        self.veto_checks = 0  # quality-veto calls made (cheap, CPU-only)
         for index, stage in enumerate(stages):
             if index == 0 or not stage.block_tasks:
                 continue
@@ -258,14 +264,22 @@ class AdaptiveStageController:
         if state.streak < self.config.min_consecutive:
             return
         state.vote, state.streak = None, 0
-        if vote == BLOCK and self._vetoed(state):
-            return
-        self._switch(state, vote, rate)
+        vetoed = []
+        if vote == BLOCK:
+            k, vetoed = self._block_size(state)
+            if k is None:
+                return
+            state.block_size = k
+        self._switch(state, vote, rate, vetoed)
 
-    def _vetoed(self, state: _StageState) -> bool:
-        k = state.small_size
-        reason = None
-        if k <= 1:
+    def _block_size(self, state: _StageState) -> tuple[int | None, list[int]]:
+        """Block size for a switch to block: the largest candidate up to
+        ``small_size`` that the quality veto allows, stepping down through
+        the power-of-two candidates. None (stay per-tuple) when every
+        candidate above 1 is vetoed or the veto cannot be asked."""
+        state.block_size = None  # a veto record reports the preferred size
+        reason, vetoed = None, []
+        if state.small_size <= 1:
             reason = "requested block size is 1"
         elif state.row_tokens is None:
             reason = "regime unknown: no row has reached the stage yet"
@@ -274,17 +288,22 @@ class AdaptiveStageController:
         else:
             if self._veto is None:
                 self._veto = costmodel_quality_veto()
-            if self._veto(state.kind, k, state.row_tokens, state.selectivity()):
-                reason = "quality guard"
-        if reason is None:
-            return False
-        self._record(state, "veto", BLOCK, reason=reason)
-        return True
+            selectivity = state.selectivity()
+            for k in sorted((c for c in state.candidate_sizes if 1 < c <= state.small_size),
+                            reverse=True):
+                self.veto_checks += 1
+                if not self._veto(state.kind, k, state.row_tokens, selectivity):
+                    return k, vetoed
+                vetoed.append(k)
+            reason = "quality guard"
+        self._record(state, "veto", BLOCK, reason=reason, vetoed=vetoed)
+        return None, vetoed
 
-    def _switch(self, state: _StageState, mode: str, rate: float) -> None:
+    def _switch(self, state: _StageState, mode: str, rate: float, vetoed=()) -> None:
         old = state.mode
         state.mode = mode
-        self._record(state, "switch", mode, from_mode=old, pass_rate=rate)
+        extra = {"vetoed": list(vetoed)} if vetoed else {}
+        self._record(state, "switch", mode, from_mode=old, pass_rate=rate, **extra)
 
     def _record(self, state, action, mode, **extra):
         entry = {"action": action, "stage_index": state.index, "stage_id": state.stage_id,

@@ -342,3 +342,77 @@ def test_real_quality_veto_rejects_size_from_new_list():
     c.formation_size(1, row("x"))
     _to_tuple_then_high(c)
     assert c.states[1].mode == BLOCK and c.formation_size(1, row("y")) == 4
+
+
+# ---------------------------------------------------------------------------
+# 7. Over-cap fallback: step down through the power-of-two candidates
+# ---------------------------------------------------------------------------
+
+def _block_controller(veto, block_size=16, small_block_size=8, row_tokens=len):
+    config = AdaptiveStageConfig(enabled=True, small_block_size=small_block_size,
+                                 quality_veto=veto)
+    c = AdaptiveStageController(_stages(block_size), config, token_length=row_tokens)
+    c.formation_size(1, row("x"))
+    return c
+
+
+def test_vetoed_top_candidate_steps_down_not_to_one():
+    asked = []
+
+    def veto(kind, k, tokens, selectivity=None):
+        asked.append(k)
+        return k > 2
+    c = _block_controller(veto)
+    _to_tuple_then_high(c)
+    assert c.states[1].mode == BLOCK
+    assert asked == [8, 4, 2]                      # largest first, stops at the first pass
+    assert c.decisions[-1]["action"] == "switch"
+    assert c.decisions[-1]["size"] == 2
+    assert c.decisions[-1]["vetoed"] == [8, 4]
+    assert c.formation_size(1, row("y")) == 2
+
+
+def test_real_veto_steps_down_to_the_join_band_cap():
+    # Short-row join at selectivity 0.8: band cap 6, so 8 is vetoed and 4 passes.
+    c = _block_controller(costmodel_quality_veto(), row_tokens=lambda text: 100)
+    c.states[1].kind = "join"
+    c.observe({"event": "task_end", "stage_id": 2, "rows_in": 10, "rows_out": 8,
+               "rows_passed": 8, "outcome": "block"})
+    _to_tuple_then_high(c)
+    assert c.states[1].mode == BLOCK and c.formation_size(1, row("y")) == 4
+    assert c.decisions[-1]["vetoed"] == [8]
+
+
+def test_all_candidates_vetoed_stays_per_tuple():
+    c = _block_controller(lambda kind, k, tokens, selectivity=None: True)
+    _to_tuple_then_high(c)
+    assert c.states[1].mode == TUPLE
+    assert c.decisions[-1]["action"] == "veto"
+    assert c.decisions[-1]["reason"] == "quality guard"
+    assert c.decisions[-1]["vetoed"] == [8, 4, 2]
+    assert c.decisions[-1]["size"] == 8            # reports the preferred size
+    assert c.formation_size(1, row("y")) == 1
+
+
+def test_step_down_cost_is_a_few_cpu_veto_calls():
+    # Worst case: one veto call per candidate in (1, small_size], i.e. at most
+    # five for the largest set (32, 16, 8, 4, 2); no GPU call, no new signal.
+    c = _block_controller(lambda *a: True, block_size=64, small_block_size=32)
+    _to_tuple_then_high(c)
+    assert c.veto_checks == 5
+    assert c.decisions[-1]["vetoed"] == [32, 16, 8, 4, 2]
+
+
+def test_switch_back_recomputes_size():
+    allowed = {"max": 2}
+    c = _block_controller(lambda kind, k, tokens, selectivity=None: k > allowed["max"])
+    _to_tuple_then_high(c)
+    assert c.formation_size(1, row("a")) == 2
+    allowed["max"] = 8
+    for _ in range(18):  # 16 to flush the rolling window, then 3 votes below 5%
+        c.observe(_end(0))
+    assert c.states[1].mode == TUPLE
+    for _ in range(6):  # the rolling rate reaches 20% at the 4th, then 3 votes
+        c.observe(_end(1))
+    assert c.states[1].mode == BLOCK
+    assert c.formation_size(1, row("b")) == 8
