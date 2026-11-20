@@ -380,14 +380,20 @@ def _git(*args):
 
 
 @app.local_entrypoint()
-def launch(only: str = "", parallel: int = 6):
+def launch(only: str = "", wait: bool = False):
+    """Spawn every experiment (or the ids in --only) in its own container.
+
+    With ``modal run --detach`` and no ``--wait`` this returns as soon as all
+    are spawned; the containers keep running. Check with ::status.
+    """
     todo = [e for e in EXPERIMENTS if not only or e["id"] in only.split(",")]
     sha = _git("rev-parse", "HEAD")
     dirty = bool(_git("status", "--porcelain", "--untracked-files=no"))
     print(f"launching {len(todo)} experiment(s) at {sha[:9]}{' (dirty)' if dirty else ''}")
-    for start in range(0, len(todo), parallel):
-        batch = todo[start:start + parallel]
-        calls = [(e, run_experiment.spawn(e, sha, dirty)) for e in batch]
+    calls = [(e, run_experiment.spawn(e, sha, dirty)) for e in todo]
+    for e, call in calls:
+        print(e["id"], "spawned", call.object_id)
+    if wait:
         for e, call in calls:
             try:
                 print(e["id"], json.dumps(call.get()))
