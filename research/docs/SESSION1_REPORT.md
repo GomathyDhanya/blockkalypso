@@ -44,9 +44,11 @@ artifact; anything not measured says so.
    dirty trees; the model revision is not pinned; the Modal overlay gives
    Kalypso 2x the KV budget the fork's server does. [BASELINE_AUDIT.md §4,
    ENVIRONMENT.md]
-8. **Prefix-cache resets silently fail under concurrent load** (vLLM returns
-   HTTP 200 and logs a warning), which invalidated the E3 load runs and
-   would affect any loaded benchmark that relies on `/reset_prefix_cache`.
+8. **Background load slows every plan but does not change the best one**
+   (E3 rerun, 0/32/128 streams: pipe:1,4 best throughout; its speedup
+   1.35x → 1.43x → 1.13x). The first E3 run was invalid because vLLM
+   silently refuses prefix-cache resets under load (HTTP 200 plus a log
+   warning); the rerun confirms every reset in the server log (45/45).
    [BASELINE_RESULTS.md §5]
 
 ## B. The three proposed criticisms
@@ -55,7 +57,7 @@ artifact; anything not measured says so.
 |---|---|---|
 | RQ1: exhaustive optimization is costly as depth and candidates grow | **Supported** for the offline optimizer. Not a runtime cost today: the search runs once per experiment, and Kalypso's runtime planner takes 27-88 ms per query because it takes k from the query. | optimizer_scaling.md; GPU traces `plan_s` |
 | RQ2: static configurations cannot react to cardinality changes | **Partly supported.** Block *membership* already adapts at run time (rows are packed as they arrive; no partial blocks except the final one). What is static is k and the selectivity estimate, and both matter: the best pipeline configuration changes between 5% and ≥ 20% selectivity, and k itself shifts downstream cardinality by 25-40%. | BASELINE_RESULTS.md §2; audit §2.8 |
-| RQ3: resource metrics (KV, queueing, preemption) are ignored | **Supported for the optimizer** (no resource term). **KV pressure itself was not observed** at ≤ 1,000 rows on one L40S (0 preemptions); queueing was. The executor already admits stages by reserved KV. Effect of load on plan choice: not answered (E3 invalid). | COST_MODEL_VALIDATION.md §2; BASELINE_RESULTS.md §4-5 |
+| RQ3: resource metrics (KV, queueing, preemption) are ignored | **Supported for the optimizer** (no resource term). **KV pressure itself was not observed** at ≤ 1,000 rows on one L40S (0 preemptions); queueing was. The executor already admits stages by reserved KV. Under 32/128 background streams the best plan does not change (E3 rerun), though its advantage shrinks at 128. | COST_MODEL_VALIDATION.md §2; BASELINE_RESULTS.md §4-5 |
 
 ## C. Files changed (vs `main`)
 
@@ -89,6 +91,7 @@ python -m research.baseline.experiments.telemetry_overhead_cpu --out research/ba
 python -m research.baseline.analysis.costmodel_validation --out research/baseline/results/costmodel_validation
 modal run --detach research/baseline/gpu/modal_baseline.py::launch     # from Xen's Mac, commit 98e03cb
 modal run research/baseline/gpu/modal_baseline.py::status
+modal run --detach research/baseline/gpu/modal_baseline.py::launch --only E3-load-v2   # rerun, commit 18da93f
 modal volume get blockkalypso-results research-session1 ./research/baseline/results/gpu/
 python -m research.baseline.analysis.gpu_results research/baseline/results/gpu/research-session1 --out research/baseline/results/gpu_analysis
 ```
@@ -110,19 +113,20 @@ python -m research.baseline.analysis.gpu_results research/baseline/results/gpu/r
 
 | Result | Path |
 |---|---|
-| GPU E0-E3 raw (run records, traces, vLLM metrics, nvidia-smi, server logs, env) | `research/baseline/results/gpu/research-session1/` |
+| GPU E0-E3 raw (run records, traces, vLLM metrics, nvidia-smi, server logs, env), incl. the E3 rerun `E3-load-v2/` | `research/baseline/results/gpu/research-session1/` |
 | GPU analysis | `research/baseline/results/gpu_analysis/summary.md`, `summary.json` |
 | Optimizer scaling | `research/baseline/results/optimizer_scaling.jsonl`, `.md` |
 | Executor simulation | `research/baseline/results/executor_simulation/` |
 | CPU telemetry overhead | `research/baseline/results/telemetry_overhead_cpu.json` |
 | Cost-model validation | `research/baseline/results/costmodel_validation/` |
 
-GPU budget used: 82.3 L40S container-minutes (10 containers).
+GPU budget used: 120.8 L40S container-minutes (10 containers, 82.3 min, plus the E3 rerun, 38.5 min).
 
 ## G. Remaining limitations
 
-- **E3 load at 32/128 streams is invalid** (prefix-cache resets failed under
-  load). Not re-run; fix described in BASELINE_RESULTS.md §5 (~17 L40S min).
+- Load was tested only up to 128 synthetic background streams on one
+  pipeline (E3 rerun); the first E3 run is invalid and kept only for the
+  record.
 - Telemetry adds ~5% on 400-call per-tuple runs (E0); traced vs untraced
   comparisons are not valid at that precision.
 - One GPU type, one model, ≤ 1,000 rows, ≤ 2 semantic stages on GPU; KV
@@ -160,8 +164,8 @@ Ordered by evidence strength.
 5. **Cap join and map blocks.** Join k > 4 and map k > 2 lose quality or
    speed in every measurement; a quality constraint (F1 drop vs per-tuple)
    must be part of the feasible set F_t.
-6. **Fix measurement before the adaptive experiments:** verify prefix-cache
-   resets (re-run E3 with the fix), seed the planner's sampling, pin the
+6. **Fix measurement before the adaptive experiments:** verify every
+   prefix-cache reset (as E3-load-v2 does; vLLM returns 200 on failure), seed the planner's sampling, pin the
    model revision, choose one KV budget factor, and report block-membership
    variance.
 7. **Replanning trigger (for the proposed adaptive mechanism):** the data
@@ -180,5 +184,4 @@ trace summariser, full scaling results (GPU runs launched from here) ·
 `71d72a1` ENVIRONMENT.md · `65d8f98` scaling table · `55548fc`
 COST_MODEL_VALIDATION.md · `f598b7a` CPU overhead · `2044028` methodology +
 hypotheses · `5b75c81` GPU analysis script · `9959240` manifest · `dd6208a`
-progress · `9e9daf2` GPU results · `813ef24` BASELINE_RESULTS.md · (this
-report: next commit).
+progress · `9e9daf2` GPU results · `813ef24` BASELINE_RESULTS.md · `754c066` report · `18da93f` E3 rerun protocol (rerun launched from here) · (E3 rerun results: next commit).

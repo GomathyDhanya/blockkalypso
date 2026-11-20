@@ -336,3 +336,46 @@ status: {'rpipe_s50:on': 'done'}
 
 - vllm-metrics-on: 1736 samples, KV % max 22.0, waiting max 832, preemptions 0.0
 
+## E3-load-v2
+
+status: {'rpipe_s50:on': 'done'} 
+
+prefix-cache resets confirmed before 45 of 45 trials
+
+### rpipe_s50 (L0)
+
+| arm | n | latency s | CI95 | speedup | LLM req | F1 | achieved sel | rows out | peak KV % | peak waiting | preempt |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| kalypso_per_tuple | 5 | 10.03 [9.96, 10.63] | [9.96, 10.63] | - | 996 | 0.63 | 0.139 | 445 | 1.0 | 757 | 0 |
+| kalypso_pipe:1,4 | 5 | 7.53 [7.32, 7.99] | [7.32, 7.99] | 1.35x ✓ | 324 | 0.54 | 0.167 | 534 | 7.1 | 191 | 0 |
+| kalypso_pipe:4,4 | 5 | 9.73 [9.68, 10.09] | [9.68, 10.09] | 1.03x | 313 | 0.62 | 0.220 | 704 | 7.0 | 267 | 0 |
+
+### rpipe_s50 (L32)
+
+| arm | n | latency s | CI95 | speedup | LLM req | F1 | achieved sel | rows out | peak KV % | peak waiting | preempt |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| kalypso_per_tuple | 5 | 10.93 [10.58, 11.24] | [10.58, 11.24] | - | 996 | 0.63 | 0.139 | 445 | 4.3 | 763 | 0 |
+| kalypso_pipe:1,4 | 5 | 7.77 [7.52, 7.81] | [7.52, 7.81] | 1.43x ✓ | 324 | 0.55 | 0.166 | 531 | 10.1 | 193 | 0 |
+| kalypso_pipe:4,4 | 5 | 11.16 [10.55, 11.77] | [10.55, 11.77] | 1.00x | 345 | 0.62 | 0.219 | 702 | 10.4 | 263 | 0 |
+
+### rpipe_s50 (L128)
+
+| arm | n | latency s | CI95 | speedup | LLM req | F1 | achieved sel | rows out | peak KV % | peak waiting | preempt |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| kalypso_per_tuple | 5 | 11.65 [11.00, 12.39] | [11.00, 12.39] | - | 1096 | 0.63 | 0.139 | 445 | 11.7 | 785 | 0 |
+| kalypso_pipe:1,4 | 5 | 10.14 [10.07, 10.92] | [10.07, 10.92] | 1.13x ✓ | 424 | 0.55 | 0.167 | 534 | 17.6 | 195 | 0 |
+| kalypso_pipe:4,4 | 5 | 12.11 [11.87, 12.54] | [11.87, 12.54] | 0.97x ✗ | 413 | 0.62 | 0.219 | 702 | 12.4 | 269 | 0 |
+
+### Trace trace-on
+
+48 queries (48 complete); KV admission counters none; plan time median 0.0907 s; not attributed: 48 queries vs 0 arms x 6 trials (each arm may issue more than one query).
+
+| stage:k | out/in median [min,max] | partial blocks max | forced launches max | retries max | wait p95 s median | truncated max | block fallbacks max |
+|---|---|---|---|---|---|---|---|
+| stage1:k1 | 8.960 [8.960, 8.960] | - | 0 | 0 | 0.054 | 0 | 0 |
+| stage1:k4 | 11.520 [11.520, 11.520] | 0 | 0 | 0 | 0.036 | 0 | 0 |
+| stage2:k1 | 0.497 [0.494, 0.498] | - | 0 | 0 | 0.167 | 0 | 0 |
+| stage2:k4 | 0.603 [0.593, 0.613] | 0 | 0 | 0 | 0.230 | 0 | 0 |
+
+- vllm-metrics-on: 4226 samples, KV % max 17.7, waiting max 844, preemptions 0.0
+

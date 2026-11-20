@@ -12,7 +12,7 @@ Protocol: BASELINE_METHODOLOGY.md. Hypotheses: RESEARCH_HYPOTHESES.md.
 torch 2.13.0+cu130, driver 620.70.06, Python 3.12.3,
 Qwen/Qwen2.5-7B-Instruct revision `a09a35458c70`, bf16. 1 warm-up + 5
 repeats per arm, arms interleaved, prefix cache reset before every trial.
-**82.3 container-minutes of L40S in total** (plus image build and model load
+**82.3 container-minutes of L40S for the first 10 experiments, plus 38.5 for the E3 rerun (120.8 in total)** (plus image build and model load
 before each container's start time). Raw data:
 `research/baseline/results/gpu/research-session1/` (traces gzipped).
 
@@ -29,7 +29,7 @@ before each container's start time). Raw data:
 | KV memory is not the binding resource at this scale | peak KV ≤ 17.5% without load (≤ 22% with), **0 preemptions** in every experiment |
 | Queueing is | per-tuple join stage wait p95 rises 0.04 s → 3.2 s from 5% to 95% selectivity; vLLM waiting queue up to 1,896 |
 | Telemetry overhead: ~5% on per-tuple (400 calls), ~0% on block:8 | E0: 3.77 → 3.96 s; 2.14 → 2.14 s |
-| **E3 (load) is invalid as run** | prefix cache reset failed under load (§5) |
+| Background load slows every plan but does not change which plan is best | E3 rerun (v2): pipe:1,4 stays best at 0/32/128 streams; its speedup is 1.35x → 1.43x → 1.13x; first E3 run was invalid (§5) |
 
 ## 2. Cardinality: the block size changes the selectivity (H2)
 
@@ -95,26 +95,45 @@ COST_MODEL_VALIDATION.md).
   80-95%; blocking cuts it 4-8x (e.g. 1,596 → 390 at 95%, pipe:1,4).
 
 **H3 verdict:** at this scale (≤ 1,000 rows, 7B, one L40S) KV memory is not
-the limiting resource; queueing is. Whether the best plan shifts under
-load is **not answered** (E3 invalid, §5).
+the limiting resource; queueing is. Under 32 and 128 background streams the
+best plan does not change (E3 rerun, §5), so H3 is **rejected at this scale**;
+load does shrink the best plan's advantage (1.35x → 1.13x at 128 streams).
 
-## 5. E3 load experiment: invalid as run
+## 5. Load sensitivity (E3, rerun with confirmed cache resets)
 
-vLLM refuses to reset the prefix cache while background requests hold KV
-blocks ("Failed to reset prefix cache because some blocks (961) are not
-freed yet") but still answers HTTP 200, so `eval.run` did not notice. The
-server log shows 18 successful resets (all L0 trials) and 30 failures (all
-L32 and L128 trials). Under load the block arms therefore ran with a warm
-cache from the previous level's identical prompts: prefix hit rate 0.94 at
-L32 vs 0.20 at L0, which is why pipe:1,4 appears 3.7x *faster* under load
-(2.12 s vs 7.90 s). These L32/L128 numbers must not be used.
+**First run (E3-load, invalid).** vLLM refuses to reset the prefix cache
+while background requests hold KV blocks ("Failed to reset prefix cache
+because some blocks (961) are not freed yet") but still answers HTTP 200,
+so `eval.run` did not notice. 30 of 48 resets failed (all L32/L128 trials);
+the block arms then ran on a warm cache (prefix hit rate 0.94 vs 0.20) and
+looked 3.7x faster under load. Those numbers are kept in
+`gpu/research-session1/E3-load/` but must not be used.
 
-L0 is valid and reproduces E1-s50 within 5-6% (per-tuple 10.75 vs 10.20 s;
-pipe:1,4 7.90 vs 7.45 s), which is a useful estimate of between-server
-variance. Fix for a rerun: pause the background client around each reset
-and confirm success from the server (or `/metrics` prefix-cache counters)
-before each trial; reject the trial otherwise. Rerun cost about 17 L40S
-minutes. **Not re-run in Session 1.**
+**Rerun (E3-load-v2, commit `18da93f`, 38.5 L40S minutes).** Per trial: no
+background load running, reset the prefix cache and confirm it in the
+server log, start the background load and let it settle for 20 s, run one
+arm once (eval.run's own reset disabled), stop the load. **45 of 45 resets
+confirmed.** rpipe_s50 (filter → join, 100 × 32), 5 repeats per arm and
+level:
+
+| arm | 0 streams | 32 streams | 128 streams |
+|---|---|---|---|
+| per-tuple | 10.03 s [9.96, 10.63] | 10.93 s [10.58, 11.24] (+9%) | 11.65 s [11.00, 12.39] (+16%) |
+| pipe:1,4 | 7.53 s [7.32, 7.99] · 1.35x ✓ | 7.77 s [7.52, 7.81] · 1.43x ✓ | 10.14 s [10.07, 10.92] · 1.13x ✓ |
+| pipe:4,4 | 9.73 s [9.68, 10.09] · 1.03x | 11.16 s [10.55, 11.77] · 1.00x | 12.11 s [11.87, 12.54] · 0.97x ✗ |
+
+(✓/✗ = faster/slower than per-tuple in all 5 paired repeats.) Peak KV
+17.7%, 0 preemptions, no Kalypso KV admission rejections at any level.
+
+- The ordering of plans is the same at every load level: pipe:1,4 is best,
+  per-tuple and pipe:4,4 are close. Load does not change the best block
+  configuration here.
+- Load hurts the block-join plan most at 128 streams (+35% vs +16% for
+  per-tuple), so the block plan's advantage shrinks from 1.35x to 1.13x.
+  Larger blocks hold more KV per request and wait longer for a batch slot
+  when the server is shared; a resource-aware model would need this.
+- The rerun's L0 matches E1-s50 within 2% (per-tuple 10.03 vs 10.20 s;
+  pipe:1,4 7.53 vs 7.45 s).
 
 ## 6. Telemetry overhead (H5)
 
@@ -150,7 +169,7 @@ See RESEARCH_HYPOTHESES.md H1 (supported): 4-stage exhaustive search takes
 
 ## 9. What is not measured
 
-- Load sensitivity under controlled load (E3 L32/L128): invalid, not re-run.
+- Load above 128 streams, or load from other Kalypso queries rather than synthetic traffic.
 - Cost-model predictions for the new GPU arms (the model was validated on
   historical data only; scoring E1/E2 against it is the first Session 2
   check).

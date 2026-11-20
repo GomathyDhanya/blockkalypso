@@ -337,7 +337,7 @@
       ]
      }
     ],
-    "status": "executed; L32/L128 invalid (prefix-cache reset failed under load), L0 valid"
+    "status": "executed; invalid (prefix-cache reset failed under load); superseded by E3-load-v2"
    },
    {
     "id": "E0-overhead",
@@ -354,9 +354,34 @@
      }
     ],
     "status": "executed"
+   },
+   {
+    "id": "E3-load-v2",
+    "load_levels": [
+     0,
+     32,
+     128
+    ],
+    "load_protocol": "v2",
+    "status": "executed; 45/45 resets confirmed",
+    "launched_commit": "18da93f",
+    "modal_app": "ap-my1K5FIy5BYPT7UkqIlX9Z",
+    "container_minutes_l40s": 38.5,
+    "parts": [
+     {
+      "name": "rpipe_s50",
+      "workload": "rpipe_s50",
+      "n": 0,
+      "arms": [
+       "kalypso_per_tuple",
+       "kalypso_pipe:1,4",
+       "kalypso_pipe:4,4"
+      ]
+     }
+    ]
    }
   ],
-  "container_minutes_l40s": 82.3,
+  "container_minutes_l40s": 120.8,
   "results": "research/baseline/results/gpu/research-session1/",
   "analysis_outputs": [
    "research/baseline/results/gpu_analysis/summary.md",

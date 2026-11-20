@@ -76,7 +76,7 @@ preemptions (vLLM metrics, 0.5 s) and Kalypso's admission counters
 ordering of plans are the same at all three load levels, and KV use stays
 under 50% with zero preemptions.
 
-**Status after GPU runs: KV part rejected at this scale, load part not answered.** Peak KV ≤ 17.5% (22% under load), 0 preemptions in all runs, KV admission rejections only in E1-s95; the queue is the visible pressure. E3 under load is invalid (prefix-cache resets failed under load; BASELINE_RESULTS.md §5). Earlier evidence: Historical evidence leans towards rejection at
+**Status after GPU runs: rejected at this scale.** The E3 rerun (confirmed cache resets) keeps the same best plan (pipe:1,4) and plan ordering at 0, 32 and 128 streams, with peak KV 17.7% and 0 preemptions; load shrinks the best plan's advantage from 1.35x to 1.13x. The first E3 run was invalid (failed cache resets). Peak KV ≤ 17.5% (22% under load), 0 preemptions in all runs, KV admission rejections only in E1-s95; the queue is the visible pressure. E3 under load is invalid (prefix-cache resets failed under load; BASELINE_RESULTS.md §5). Earlier evidence: Historical evidence leans towards rejection at
 the scale measured so far: peak KV median 6.9%, max 75%, 0 preemptions in
 484 arms; queueing (median 151, max 2011 waiting requests) was the visible
 pressure.

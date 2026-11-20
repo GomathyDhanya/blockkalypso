@@ -24,7 +24,7 @@ Ground rules for this branch:
 | 3 | Opt-in instrumentation + tests | done: executor telemetry + optimizer profiler (`research/baseline/instrumentation/optimizer_profile.py`) | `vllm/kalypso/telemetry.py`, hooks in `controller/`, `execution/`, `sem_ops/block_*`, `budget.py`; tests `vllm/kalypso/tests/test_telemetry.py` |
 | 4 | CPU-only experiments (optimizer scaling, executor simulation) | done: `results/optimizer_scaling.jsonl` (all 3 families, d1-d6), `results/executor_simulation/summary.md` (real scheduler, simulated LLM) | `research/baseline/experiments/` |
 | 5 | Cost-model validation on existing GPU results | analysis done, write-up next | `research/baseline/analysis/costmodel_validation.py` → `research/baseline/results/costmodel_validation/summary.md` |
-| 6 | New GPU baseline runs (Modal) | done: 10/10 experiments, 82.3 L40S container-minutes; E3 under load invalid (cache reset failed) | `research/baseline/results/gpu/research-session1/`, analysis `research/baseline/results/gpu_analysis/summary.md`, write-up `research/docs/BASELINE_RESULTS.md` |
+| 6 | New GPU baseline runs (Modal) | done: 10/10 experiments (82.3 L40S min) + E3 rerun E3-load-v2 (38.5 min, valid); first E3 invalid | `research/baseline/results/gpu/research-session1/`, analysis `research/baseline/results/gpu_analysis/summary.md`, write-up `research/docs/BASELINE_RESULTS.md` |
 | 7 | Protocol, hypotheses, results, manifest, final report | done: `research/docs/SESSION1_REPORT.md` (sections A-H) | `research/docs/` |
 
 ## How to pick this up
@@ -70,7 +70,7 @@ python -m research.baseline.analysis.gpu_results research/baseline/results/gpu/r
 
 ## Missing measurements
 
-- E3 load sensitivity at 32/128 streams: run but invalid (prefix-cache reset fails under load); rerun needs the fix in BASELINE_RESULTS.md §5 (~17 L40S minutes).
+- None outstanding for Session 1. E3 was rerun as E3-load-v2 (45/45 confirmed cache resets); the first E3 run is kept but invalid.
 
 - Push state: origin has `9e9daf2` (2026-11-20 09:05 UTC); later commits pushed the same way.
 

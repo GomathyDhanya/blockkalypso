@@ -12655,5 +12655,1484 @@
     "preemptions_total": 0.0
    }
   }
+ },
+ {
+  "id": "E3-load-v2",
+  "status": {
+   "id": "E3-load-v2",
+   "git_sha": "18da93f839c545dfeacc7979bef66d76ec4f8e40",
+   "git_dirty": false,
+   "started": "2026-11-20T09:36:40+0000",
+   "parts": {
+    "rpipe_s50:on": "done"
+   },
+   "finished": "2026-11-20T10:15:10+0000"
+  },
+  "env": {
+   "vllm": "0.29.0",
+   "torch": "2.13.0+cu130",
+   "transformers": "5.16.1",
+   "tokenizers": "0.23.2",
+   "numpy": "2.2.6",
+   "httpx": "0.28.1",
+   "huggingface-hub": null,
+   "torch_cuda": "13.0",
+   "cudnn": 92000,
+   "python": "3.12.3 (main, Jul 15 2026, 23:46:41) [GCC 13.3.0]",
+   "nvidia_smi": "NVIDIA L40S, 46068 MiB, 620.70.06",
+   "nvidia_smi_processes": "",
+   "model": "Qwen/Qwen2.5-7B-Instruct",
+   "model_revision": "a09a35458c702b33eeacc393d103063234e8bc28",
+   "server": {
+    "max_num_seqs": 256,
+    "max_num_batched_tokens": 2048,
+    "max_model_len": 32768,
+    "prefix_caching": true,
+    "dtype": "auto (model config: bfloat16)",
+    "gpu": "L40S"
+   },
+   "seeds": {
+    "VLLMExecutor.DEFAULT_SAMPLING.seed": 42,
+    "workload SELECTIVITY_SEED": 0,
+    "temperature": 0.0
+   },
+   "kv_cache_log": "(EngineCore pid=49) INFO 11-20 09:37:50 [core.py:123] Initializing a V1 LLM engine (v0.29.0) with config: model='Qwen/Qwen2.5-7B-Instruct', speculative_config=None, tokenizer='Qwen/Qwen2.5-7B-Instruct', skip_tokenizer_init=False, tokenizer_mode=auto, revision=main, tokenizer_revision=main, trust_remote_code=False, dtype=torch.bfloat16, max_seq_len=32768, download_dir=None, load_format=auto, tensor_parallel_size=1, pipeline_parallel_size=1, data_parallel_size=1, decode_context_parallel_size=1, dcp_comm_backend=ag_rs, disable_custom_all_reduce=False, quantization=None, quantization_config=None, enforce_eager=False, enable_return_routed_experts=False, kv_cache_dtype=auto, device_config=cuda, structured_outputs_config=StructuredOutputsConfig(backend='auto', disable_any_whitespace=False, disable_additional_properties=False, reasoning_parser='', reasoning_parser_plugin='', enable_in_reasoning=False), observability_config=ObservabilityConfig(show_hidden_metrics_for_version=None, otlp_traces_endpoint=None, collect_detailed_traces=None, per_request_spec_decode_metrics='none', kv_cache_metrics=False, kv_cache_metrics_sample=0.01, cudagraph_metrics=False, enable_layerwise_nvtx_tracing=False, enable_mfu_metrics=False, enable_mm_processor_stats=False, enable_logging_iteration_details=False, jit_monitor_mode='warn', jit_monitor_verbose=False), seed=0, served_model_name=Qwen/Qwen2.5-7B-Instruct, enable_prefix_caching=True, enable_chunked_prefill=True, pooler_config=None, compilation_config={'mode': <CompilationMode.VLLM_COMPILE: 3>, 'debug_dump_path': None, 'cache_dir': '', 'compile_cache_save_format': 'binary', 'backend': 'inductor', 'custom_ops': ['none'], 'ir_enable_torch_wrap': True, 'splitting_ops': ['vllm::unified_attention_with_output', 'vllm::unified_mla_attention_with_output', 'vllm::mamba_mixer2', 'vllm::mamba_mixer', 'vllm::short_conv', 'vllm::qwen4_exp_compute_ple_ngram_ids', 'vllm::qwen4_exp_ple_short_conv', 'vllm::qwen4_exp_qsa_with_output', 'vllm::linear_attention', 'vllm::qwen_gdn_attention_core', 'vllm::qwen_gdn_attention_core_fused_norm_packed', 'vllm::gdn_attention_core_xpu', 'vllm::olmo_hybrid_gdn_full_forward', 'vllm::sparse_attn_indexer', 'vllm::rocm_aiter_sparse_attn_indexer', 'vllm::deepseek_v4_attention', 'vllm::hpc_rope_norm_forward', 'vllm::unified_kv_cache_update', 'vllm::unified_mla_kv_cache_update'], 'compile_mm_encoder': False, 'cudagraph_mm_encoder': False, 'encoder_cudagraph_token_budgets': [], 'encoder_cudagraph_max_vision_items_per_batch': 0, 'encoder_cudagraph_max_frames_per_batch': None, 'compile_sizes': [], 'compile_ranges_endpoints': [2048], 'inductor_compile_config': {'enable_auto_functionalized_v2': False, 'combo_kernels': True, 'benchmark_combo_kernel': True}, 'inductor_passes': {}, 'cudagraph_mode': <CUDAGraphMode.FULL_AND_PIECEWISE: (2, 1)>, 'cudagraph_num_of_warmups': 1, 'cudagraph_capture_sizes': [1, 2, 4, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80, 88, 96, 104, 112, 120, 128, 136, 144, 152, 160, 168, 176, 184, 192, 200, 208, 216, 224, 232, 240, 248, 256, 272, 288, 304, 320, 336, 352, 368, 384, 400, 416, 432, 448, 464, 480, 496, 512], 'cudagraph_copy_inputs': False, 'cudagraph_specialize_lora': True, 'use_inductor_graph_partition': False, 'pass_config': {'fuse_norm_quant': False, 'fuse_act_quant': False, 'fuse_attn_quant': False, 'enable_sp': False, 'fuse_gemm_comms': False, 'fuse_allreduce_rms': False, 'enable_qk_norm_rope_fusion': False, 'fuse_rope_kvcache_cat_mla': False, 'fuse_act_padding': False, 'fuse_qk_norm_rope_kvcache': False}, 'max_cudagraph_capture_size': 512, 'dynamic_shapes_config': {'type': <DynamicShapesType.BACKED: 'backed'>, 'evaluate_guards': False, 'assume_32_bit_indexing': False}, 'local_cache_dir': None, 'fast_moe_cold_start': False, 'static_all_moe_layers': []}, kernel_config=KernelConfig(ir_op_priority=IrOpPriorityConfig(rms_norm=['native'], fused_add_rms_norm=['native']), enable_flashinfer_autotune=True, enable_cutedsl_warmup=True, enable_jit_warmup=True, enable_bf16x3_router_gemm=False, moe_backend='auto', linear_backend='auto')\n(EngineCore pid=49) INFO 11-20 09:38:07 [utils.py:306] Using LBNHC KV cache layout.\n(EngineCore pid=49) INFO 11-20 09:38:34 [gpu_worker.py:625] Available KV cache memory: 23.87 GiB\n(EngineCore pid=49) INFO 11-20 09:38:34 [gpu_worker.py:640] CUDA graph memory profiling is enabled (default since v0.21.0). The current --gpu-memory-utilization=0.9200 is equivalent to --gpu-memory-utilization=0.9109 without CUDA graph memory profiling. To maintain the same effective KV cache size as before, increase --gpu-memory-utilization to 0.9291. To disable, set VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=0.\n(EngineCore pid=49) INFO 11-20 09:38:34 [kv_cache_utils.py:2032] GPU KV cache size: 446,960 tokens, Maximum concurrency for 32,768 tokens per request: 13.64x\n(EngineCore pid=49) INFO 11-20 09:38:40 [gpu_worker.py:860] Free memory on device (44.01/44.44 GiB) on startup. Desired GPU memory utilization is (0.92, 40.89 GiB). Actual usage is 15.57 GiB for consumed memory (weights + non-torch), 1.44 GiB for peak activation, and 0.24 GiB for CUDAGraph memory. Replace gpu_memory_utilization config with `--kv-cache-memory=25216137278` (23.48 GiB) to fit into requested memory, or `--kv-cache-memory=28572888576` (26.61 GiB) to fully utilize gpu memory. Current kv cache memory in use is 23.87 GiB.\n(EngineCore pid=49) INFO 11-20 09:38:45 [core.py:361] init engine (profile, create kv cache, warmup model) took 37.58 s (compilation: 18.79 s)"
+  },
+  "plan": {
+   "id": "E3-load-v2",
+   "load_levels": [
+    0,
+    32,
+    128
+   ],
+   "load_protocol": "v2",
+   "parts": [
+    {
+     "name": "rpipe_s50",
+     "workload": "rpipe_s50",
+     "n": 0,
+     "arms": [
+      "kalypso_per_tuple",
+      "kalypso_pipe:1,4",
+      "kalypso_pipe:4,4"
+     ]
+    }
+   ]
+  },
+  "parts": {
+   "rpipe_s50": {
+    "L0": {
+     "meta": {
+      "workload": "rpipe_s50",
+      "load_streams": 0,
+      "repeats": 15
+     },
+     "arms": {
+      "kalypso_per_tuple": {
+       "repeats": 5,
+       "errors": 0,
+       "latency_s": {
+        "median": 10.027,
+        "min": 9.965,
+        "max": 10.626,
+        "n": 5
+       },
+       "latency_ci95": [
+        9.965,
+        10.626
+       ],
+       "latency_by_repeat": {
+        "1": 9.965,
+        "2": 10.027,
+        "3": 10.626,
+        "4": 10.2,
+        "5": 9.967
+       },
+       "llm_requests": {
+        "median": 996,
+        "min": 996,
+        "max": 996,
+        "n": 5
+       },
+       "fallback_calls": null,
+       "prompt_tokens": {
+        "median": 220786,
+        "min": 220786,
+        "max": 220786,
+        "n": 5
+       },
+       "generation_tokens": {
+        "median": 2327,
+        "min": 2319,
+        "max": 2327,
+        "n": 5
+       },
+       "prefix_cache_hit_rate": {
+        "median": 0.4018,
+        "min": 0.4018,
+        "max": 0.4018,
+        "n": 5
+       },
+       "peak_kv_cache_pct": {
+        "median": 0.97,
+        "min": 0.96,
+        "max": 0.97,
+        "n": 5
+       },
+       "peak_waiting": {
+        "median": 757,
+        "min": 743,
+        "max": 760,
+        "n": 5
+       },
+       "peak_running": {
+        "median": 34,
+        "min": 34,
+        "max": 34,
+        "n": 5
+       },
+       "preemptions": {
+        "median": 0,
+        "min": 0,
+        "max": 0,
+        "n": 5
+       },
+       "truncated": {
+        "median": 0,
+        "min": 0,
+        "max": 0,
+        "n": 5
+       },
+       "rows_out": {
+        "median": 445,
+        "min": 443,
+        "max": 445,
+        "n": 5
+       },
+       "achieved_selectivity": {
+        "median": 0.1390625,
+        "min": 0.1384375,
+        "max": 0.1390625,
+        "n": 5
+       },
+       "f1": {
+        "median": 0.6300429184549355,
+        "min": 0.6300429184549355,
+        "max": 0.6311263972484952,
+        "n": 5
+       },
+       "precision": {
+        "median": 0.8247191011235955,
+        "min": 0.8247191011235955,
+        "max": 0.8284424379232506,
+        "n": 5
+       },
+       "recall": {
+        "median": 0.5097222222222222,
+        "min": 0.5097222222222222,
+        "max": 0.5097222222222222,
+        "n": 5
+       },
+       "accuracy": {
+        "median": 0.8653125,
+        "min": 0.8653125,
+        "max": 0.8659375,
+        "n": 5
+       }
+      },
+      "kalypso_pipe:1,4": {
+       "repeats": 5,
+       "errors": 0,
+       "latency_s": {
+        "median": 7.525,
+        "min": 7.316,
+        "max": 7.993,
+        "n": 5
+       },
+       "latency_ci95": [
+        7.316,
+        7.993
+       ],
+       "latency_by_repeat": {
+        "1": 7.563,
+        "2": 7.316,
+        "3": 7.993,
+        "4": 7.525,
+        "5": 7.372
+       },
+       "llm_requests": {
+        "median": 324,
+        "min": 324,
+        "max": 324,
+        "n": 5
+       },
+       "fallback_calls": {
+        "median": 0,
+        "min": 0,
+        "max": 0,
+        "n": 5
+       },
+       "prompt_tokens": {
+        "median": 108250,
+        "min": 108250,
+        "max": 108250,
+        "n": 5
+       },
+       "generation_tokens": {
+        "median": 3882,
+        "min": 3882,
+        "max": 3882,
+        "n": 5
+       },
+       "prefix_cache_hit_rate": {
+        "median": 0.2038,
+        "min": 0.2038,
+        "max": 0.2038,
+        "n": 5
+       },
+       "peak_kv_cache_pct": {
+        "median": 7.07,
+        "min": 7.07,
+        "max": 7.08,
+        "n": 5
+       },
+       "peak_waiting": {
+        "median": 191,
+        "min": 189,
+        "max": 197,
+        "n": 5
+       },
+       "peak_running": {
+        "median": 93,
+        "min": 91,
+        "max": 94,
+        "n": 5
+       },
+       "preemptions": {
+        "median": 0,
+        "min": 0,
+        "max": 0,
+        "n": 5
+       },
+       "truncated": {
+        "median": 0,
+        "min": 0,
+        "max": 0,
+        "n": 5
+       },
+       "rows_out": {
+        "median": 534,
+        "min": 532,
+        "max": 535,
+        "n": 5
+       },
+       "achieved_selectivity": {
+        "median": 0.166875,
+        "min": 0.16625,
+        "max": 0.1671875,
+        "n": 5
+       },
+       "f1": {
+        "median": 0.543859649122807,
+        "min": 0.5434262948207171,
+        "max": 0.5447284345047922,
+        "n": 5
+       },
+       "precision": {
+        "median": 0.6385767790262172,
+        "min": 0.6373831775700934,
+        "max": 0.6409774436090225,
+        "n": 5
+       },
+       "recall": {
+        "median": 0.4736111111111111,
+        "min": 0.4736111111111111,
+        "max": 0.4736111111111111,
+        "n": 5
+       },
+       "accuracy": {
+        "median": 0.82125,
+        "min": 0.8209375,
+        "max": 0.821875,
+        "n": 5
+       },
+       "speedup_vs_baseline": {
+        "median": 1.3520075963103637,
+        "min": 1.317598836440566,
+        "max": 1.3705576817933296,
+        "n": 5
+       },
+       "all_repeats_faster": true,
+       "all_repeats_slower": false
+      },
+      "kalypso_pipe:4,4": {
+       "repeats": 5,
+       "errors": 0,
+       "latency_s": {
+        "median": 9.735,
+        "min": 9.683,
+        "max": 10.089,
+        "n": 5
+       },
+       "latency_ci95": [
+        9.683,
+        10.089
+       ],
+       "latency_by_repeat": {
+        "1": 9.683,
+        "2": 9.702,
+        "3": 9.735,
+        "4": 9.896,
+        "5": 10.089
+       },
+       "llm_requests": {
+        "median": 313,
+        "min": 313,
+        "max": 313,
+        "n": 5
+       },
+       "fallback_calls": {
+        "median": 0,
+        "min": 0,
+        "max": 0,
+        "n": 5
+       },
+       "prompt_tokens": {
+        "median": 123597,
+        "min": 123597,
+        "max": 123597,
+        "n": 5
+       },
+       "generation_tokens": {
+        "median": 5008,
+        "min": 5008,
+        "max": 5008,
+        "n": 5
+       },
+       "prefix_cache_hit_rate": {
+        "median": 0.1876,
+        "min": 0.1876,
+        "max": 0.1876,
+        "n": 5
+       },
+       "peak_kv_cache_pct": {
+        "median": 7.02,
+        "min": 7.0,
+        "max": 7.04,
+        "n": 5
+       },
+       "peak_waiting": {
+        "median": 267,
+        "min": 261,
+        "max": 267,
+        "n": 5
+       },
+       "peak_running": {
+        "median": 94,
+        "min": 93,
+        "max": 95,
+        "n": 5
+       },
+       "preemptions": {
+        "median": 0,
+        "min": 0,
+        "max": 0,
+        "n": 5
+       },
+       "truncated": {
+        "median": 0,
+        "min": 0,
+        "max": 0,
+        "n": 5
+       },
+       "rows_out": {
+        "median": 704,
+        "min": 704,
+        "max": 706,
+        "n": 5
+       },
+       "achieved_selectivity": {
+        "median": 0.22,
+        "min": 0.22,
+        "max": 0.220625,
+        "n": 5
+       },
+       "f1": {
+        "median": 0.6165730337078652,
+        "min": 0.6165730337078652,
+        "max": 0.6175438596491228,
+        "n": 5
+       },
+       "precision": {
+        "median": 0.6235795454545454,
+        "min": 0.623229461756374,
+        "max": 0.624113475177305,
+        "n": 5
+       },
+       "recall": {
+        "median": 0.6097222222222223,
+        "min": 0.6097222222222223,
+        "max": 0.6111111111111112,
+        "n": 5
+       },
+       "accuracy": {
+        "median": 0.829375,
+        "min": 0.829375,
+        "max": 0.8296875,
+        "n": 5
+       },
+       "speedup_vs_baseline": {
+        "median": 1.03071948261924,
+        "min": 0.9879076221627515,
+        "max": 1.0915254237288134,
+        "n": 5
+       },
+       "all_repeats_faster": false,
+       "all_repeats_slower": false
+      }
+     }
+    },
+    "L32": {
+     "meta": {
+      "workload": "rpipe_s50",
+      "load_streams": 32,
+      "repeats": 15
+     },
+     "arms": {
+      "kalypso_per_tuple": {
+       "repeats": 5,
+       "errors": 0,
+       "latency_s": {
+        "median": 10.933,
+        "min": 10.584,
+        "max": 11.243,
+        "n": 5
+       },
+       "latency_ci95": [
+        10.584,
+        11.243
+       ],
+       "latency_by_repeat": {
+        "1": 10.933,
+        "2": 10.788,
+        "3": 10.584,
+        "4": 11.128,
+        "5": 11.243
+       },
+       "llm_requests": {
+        "median": 996,
+        "min": 996,
+        "max": 1028,
+        "n": 5
+       },
+       "fallback_calls": null,
+       "prompt_tokens": {
+        "median": 220786,
+        "min": 220786,
+        "max": 226205,
+        "n": 5
+       },
+       "generation_tokens": {
+        "median": 4973,
+        "min": 3876,
+        "max": 5326,
+        "n": 5
+       },
+       "prefix_cache_hit_rate": {
+        "median": 0.4018,
+        "min": 0.393,
+        "max": 0.4018,
+        "n": 5
+       },
+       "peak_kv_cache_pct": {
+        "median": 4.26,
+        "min": 4.05,
+        "max": 4.4,
+        "n": 5
+       },
+       "peak_waiting": {
+        "median": 763,
+        "min": 735,
+        "max": 796,
+        "n": 5
+       },
+       "peak_running": {
+        "median": 66,
+        "min": 66,
+        "max": 67,
+        "n": 5
+       },
+       "preemptions": {
+        "median": 0,
+        "min": 0,
+        "max": 0,
+        "n": 5
+       },
+       "truncated": {
+        "median": 0,
+        "min": 0,
+        "max": 32,
+        "n": 5
+       },
+       "rows_out": {
+        "median": 445,
+        "min": 445,
+        "max": 446,
+        "n": 5
+       },
+       "achieved_selectivity": {
+        "median": 0.1390625,
+        "min": 0.1390625,
+        "max": 0.139375,
+        "n": 5
+       },
+       "f1": {
+        "median": 0.6300429184549355,
+        "min": 0.6295025728987993,
+        "max": 0.6300429184549355,
+        "n": 5
+       },
+       "precision": {
+        "median": 0.8247191011235955,
+        "min": 0.8228699551569507,
+        "max": 0.8247191011235955,
+        "n": 5
+       },
+       "recall": {
+        "median": 0.5097222222222222,
+        "min": 0.5097222222222222,
+        "max": 0.5097222222222222,
+        "n": 5
+       },
+       "accuracy": {
+        "median": 0.8653125,
+        "min": 0.865,
+        "max": 0.8653125,
+        "n": 5
+       }
+      },
+      "kalypso_pipe:1,4": {
+       "repeats": 5,
+       "errors": 0,
+       "latency_s": {
+        "median": 7.772,
+        "min": 7.521,
+        "max": 7.809,
+        "n": 5
+       },
+       "latency_ci95": [
+        7.521,
+        7.809
+       ],
+       "latency_by_repeat": {
+        "1": 7.809,
+        "2": 7.521,
+        "3": 7.772,
+        "4": 7.781,
+        "5": 7.743
+       },
+       "llm_requests": {
+        "median": 324,
+        "min": 324,
+        "max": 324,
+        "n": 5
+       },
+       "fallback_calls": {
+        "median": 0,
+        "min": 0,
+        "max": 0,
+        "n": 5
+       },
+       "prompt_tokens": {
+        "median": 108250,
+        "min": 108250,
+        "max": 108250,
+        "n": 5
+       },
+       "generation_tokens": {
+        "median": 6154,
+        "min": 6122,
+        "max": 6154,
+        "n": 5
+       },
+       "prefix_cache_hit_rate": {
+        "median": 0.204,
+        "min": 0.204,
+        "max": 0.204,
+        "n": 5
+       },
+       "peak_kv_cache_pct": {
+        "median": 10.06,
+        "min": 10.04,
+        "max": 10.3,
+        "n": 5
+       },
+       "peak_waiting": {
+        "median": 193,
+        "min": 191,
+        "max": 195,
+        "n": 5
+       },
+       "peak_running": {
+        "median": 123,
+        "min": 122,
+        "max": 124,
+        "n": 5
+       },
+       "preemptions": {
+        "median": 0,
+        "min": 0,
+        "max": 0,
+        "n": 5
+       },
+       "truncated": {
+        "median": 0,
+        "min": 0,
+        "max": 0,
+        "n": 5
+       },
+       "rows_out": {
+        "median": 531,
+        "min": 531,
+        "max": 535,
+        "n": 5
+       },
+       "achieved_selectivity": {
+        "median": 0.1659375,
+        "min": 0.1659375,
+        "max": 0.1671875,
+        "n": 5
+       },
+       "f1": {
+        "median": 0.545019920318725,
+        "min": 0.5431309904153354,
+        "max": 0.545163868904876,
+        "n": 5
+       },
+       "precision": {
+        "median": 0.64030131826742,
+        "min": 0.6390977443609023,
+        "max": 0.6421845574387948,
+        "n": 5
+       },
+       "recall": {
+        "median": 0.4736111111111111,
+        "min": 0.4722222222222222,
+        "max": 0.475,
+        "n": 5
+       },
+       "accuracy": {
+        "median": 0.8215625,
+        "min": 0.82125,
+        "max": 0.8221875,
+        "n": 5
+       },
+       "speedup_vs_baseline": {
+        "median": 1.4301503662768282,
+        "min": 1.3618116314976838,
+        "max": 1.4520211804210252,
+        "n": 5
+       },
+       "all_repeats_faster": true,
+       "all_repeats_slower": false
+      },
+      "kalypso_pipe:4,4": {
+       "repeats": 5,
+       "errors": 0,
+       "latency_s": {
+        "median": 11.158,
+        "min": 10.554,
+        "max": 11.772,
+        "n": 5
+       },
+       "latency_ci95": [
+        10.554,
+        11.772
+       ],
+       "latency_by_repeat": {
+        "1": 11.158,
+        "2": 10.554,
+        "3": 11.772,
+        "4": 11.17,
+        "5": 10.99
+       },
+       "llm_requests": {
+        "median": 345,
+        "min": 319,
+        "max": 345,
+        "n": 5
+       },
+       "fallback_calls": {
+        "median": 0,
+        "min": 0,
+        "max": 0,
+        "n": 5
+       },
+       "prompt_tokens": {
+        "median": 135992,
+        "min": 123597,
+        "max": 135998,
+        "n": 5
+       },
+       "generation_tokens": {
+        "median": 8569,
+        "min": 7733,
+        "max": 8815,
+        "n": 5
+       },
+       "prefix_cache_hit_rate": {
+        "median": 0.177,
+        "min": 0.1769,
+        "max": 0.1877,
+        "n": 5
+       },
+       "peak_kv_cache_pct": {
+        "median": 10.41,
+        "min": 10.3,
+        "max": 10.42,
+        "n": 5
+       },
+       "peak_waiting": {
+        "median": 263,
+        "min": 262,
+        "max": 266,
+        "n": 5
+       },
+       "peak_running": {
+        "median": 125,
+        "min": 123,
+        "max": 127,
+        "n": 5
+       },
+       "preemptions": {
+        "median": 0,
+        "min": 0,
+        "max": 0,
+        "n": 5
+       },
+       "truncated": {
+        "median": 32,
+        "min": 6,
+        "max": 32,
+        "n": 5
+       },
+       "rows_out": {
+        "median": 702,
+        "min": 701,
+        "max": 703,
+        "n": 5
+       },
+       "achieved_selectivity": {
+        "median": 0.219375,
+        "min": 0.2190625,
+        "max": 0.2196875,
+        "n": 5
+       },
+       "f1": {
+        "median": 0.6188466947960619,
+        "min": 0.61841180604357,
+        "max": 0.6220971147079523,
+        "n": 5
+       },
+       "precision": {
+        "median": 0.6267806267806267,
+        "min": 0.6258890469416786,
+        "max": 0.630527817403709,
+        "n": 5
+       },
+       "recall": {
+        "median": 0.6111111111111112,
+        "min": 0.6111111111111112,
+        "max": 0.6138888888888889,
+        "n": 5
+       },
+       "accuracy": {
+        "median": 0.830625,
+        "min": 0.8303125,
+        "max": 0.8321875,
+        "n": 5
+       },
+       "speedup_vs_baseline": {
+        "median": 0.9962399283795882,
+        "min": 0.8990825688073394,
+        "max": 1.0230209281164695,
+        "n": 5
+       },
+       "all_repeats_faster": false,
+       "all_repeats_slower": false
+      }
+     }
+    },
+    "L128": {
+     "meta": {
+      "workload": "rpipe_s50",
+      "load_streams": 128,
+      "repeats": 15
+     },
+     "arms": {
+      "kalypso_per_tuple": {
+       "repeats": 5,
+       "errors": 0,
+       "latency_s": {
+        "median": 11.649,
+        "min": 11.004,
+        "max": 12.395,
+        "n": 5
+       },
+       "latency_ci95": [
+        11.004,
+        12.395
+       ],
+       "latency_by_repeat": {
+        "1": 11.737,
+        "2": 11.004,
+        "3": 11.444,
+        "4": 11.649,
+        "5": 12.395
+       },
+       "llm_requests": {
+        "median": 1096,
+        "min": 1048,
+        "max": 1096,
+        "n": 5
+       },
+       "fallback_calls": null,
+       "prompt_tokens": {
+        "median": 225836,
+        "min": 225447,
+        "max": 238233,
+        "n": 5
+       },
+       "generation_tokens": {
+        "median": 9040,
+        "min": 6256,
+        "max": 10004,
+        "n": 5
+       },
+       "prefix_cache_hit_rate": {
+        "median": 0.394,
+        "min": 0.3773,
+        "max": 0.3946,
+        "n": 5
+       },
+       "peak_kv_cache_pct": {
+        "median": 11.71,
+        "min": 9.31,
+        "max": 11.75,
+        "n": 5
+       },
+       "peak_waiting": {
+        "median": 785,
+        "min": 781,
+        "max": 844,
+        "n": 5
+       },
+       "peak_running": {
+        "median": 133,
+        "min": 113,
+        "max": 133,
+        "n": 5
+       },
+       "preemptions": {
+        "median": 0,
+        "min": 0,
+        "max": 0,
+        "n": 5
+       },
+       "truncated": {
+        "median": 100,
+        "min": 52,
+        "max": 100,
+        "n": 5
+       },
+       "rows_out": {
+        "median": 445,
+        "min": 445,
+        "max": 445,
+        "n": 5
+       },
+       "achieved_selectivity": {
+        "median": 0.1390625,
+        "min": 0.1390625,
+        "max": 0.1390625,
+        "n": 5
+       },
+       "f1": {
+        "median": 0.6300429184549355,
+        "min": 0.6300429184549355,
+        "max": 0.6300429184549355,
+        "n": 5
+       },
+       "precision": {
+        "median": 0.8247191011235955,
+        "min": 0.8247191011235955,
+        "max": 0.8247191011235955,
+        "n": 5
+       },
+       "recall": {
+        "median": 0.5097222222222222,
+        "min": 0.5097222222222222,
+        "max": 0.5097222222222222,
+        "n": 5
+       },
+       "accuracy": {
+        "median": 0.8653125,
+        "min": 0.8653125,
+        "max": 0.8653125,
+        "n": 5
+       }
+      },
+      "kalypso_pipe:1,4": {
+       "repeats": 5,
+       "errors": 0,
+       "latency_s": {
+        "median": 10.14,
+        "min": 10.066,
+        "max": 10.918,
+        "n": 5
+       },
+       "latency_ci95": [
+        10.066,
+        10.918
+       ],
+       "latency_by_repeat": {
+        "1": 10.066,
+        "2": 10.14,
+        "3": 10.091,
+        "4": 10.918,
+        "5": 10.308
+       },
+       "llm_requests": {
+        "median": 424,
+        "min": 419,
+        "max": 424,
+        "n": 5
+       },
+       "fallback_calls": {
+        "median": 0,
+        "min": 0,
+        "max": 0,
+        "n": 5
+       },
+       "prompt_tokens": {
+        "median": 140827,
+        "min": 140436,
+        "max": 147032,
+        "n": 5
+       },
+       "generation_tokens": {
+        "median": 9864,
+        "min": 7184,
+        "max": 10745,
+        "n": 5
+       },
+       "prefix_cache_hit_rate": {
+        "median": 0.1745,
+        "min": 0.1708,
+        "max": 0.1747,
+        "n": 5
+       },
+       "peak_kv_cache_pct": {
+        "median": 17.63,
+        "min": 11.95,
+        "max": 17.7,
+        "n": 5
+       },
+       "peak_waiting": {
+        "median": 195,
+        "min": 191,
+        "max": 282,
+        "n": 5
+       },
+       "peak_running": {
+        "median": 188,
+        "min": 134,
+        "max": 189,
+        "n": 5
+       },
+       "preemptions": {
+        "median": 0,
+        "min": 0,
+        "max": 0,
+        "n": 5
+       },
+       "truncated": {
+        "median": 100,
+        "min": 95,
+        "max": 100,
+        "n": 5
+       },
+       "rows_out": {
+        "median": 534,
+        "min": 534,
+        "max": 535,
+        "n": 5
+       },
+       "achieved_selectivity": {
+        "median": 0.166875,
+        "min": 0.166875,
+        "max": 0.1671875,
+        "n": 5
+       },
+       "f1": {
+        "median": 0.5454545454545453,
+        "min": 0.545019920318725,
+        "max": 0.5454545454545453,
+        "n": 5
+       },
+       "precision": {
+        "median": 0.6404494382022472,
+        "min": 0.6392523364485981,
+        "max": 0.6404494382022472,
+        "n": 5
+       },
+       "recall": {
+        "median": 0.475,
+        "min": 0.475,
+        "max": 0.475,
+        "n": 5
+       },
+       "accuracy": {
+        "median": 0.821875,
+        "min": 0.8215625,
+        "max": 0.821875,
+        "n": 5
+       },
+       "speedup_vs_baseline": {
+        "median": 1.134079873154296,
+        "min": 1.066953654515479,
+        "max": 1.2024641055490881,
+        "n": 5
+       },
+       "all_repeats_faster": true,
+       "all_repeats_slower": false
+      },
+      "kalypso_pipe:4,4": {
+       "repeats": 5,
+       "errors": 0,
+       "latency_s": {
+        "median": 12.11,
+        "min": 11.874,
+        "max": 12.54,
+        "n": 5
+       },
+       "latency_ci95": [
+        11.874,
+        12.54
+       ],
+       "latency_by_repeat": {
+        "1": 12.11,
+        "2": 12.478,
+        "3": 12.007,
+        "4": 11.874,
+        "5": 12.54
+       },
+       "llm_requests": {
+        "median": 413,
+        "min": 413,
+        "max": 413,
+        "n": 5
+       },
+       "fallback_calls": {
+        "median": 0,
+        "min": 0,
+        "max": 0,
+        "n": 5
+       },
+       "prompt_tokens": {
+        "median": 155783,
+        "min": 155781,
+        "max": 157327,
+        "n": 5
+       },
+       "generation_tokens": {
+        "median": 11939,
+        "min": 11173,
+        "max": 12280,
+        "n": 5
+       },
+       "prefix_cache_hit_rate": {
+        "median": 0.1647,
+        "min": 0.1639,
+        "max": 0.1647,
+        "n": 5
+       },
+       "peak_kv_cache_pct": {
+        "median": 12.36,
+        "min": 11.67,
+        "max": 14.42,
+        "n": 5
+       },
+       "peak_waiting": {
+        "median": 269,
+        "min": 262,
+        "max": 293,
+        "n": 5
+       },
+       "peak_running": {
+        "median": 125,
+        "min": 125,
+        "max": 150,
+        "n": 5
+       },
+       "preemptions": {
+        "median": 0,
+        "min": 0,
+        "max": 0,
+        "n": 5
+       },
+       "truncated": {
+        "median": 100,
+        "min": 100,
+        "max": 100,
+        "n": 5
+       },
+       "rows_out": {
+        "median": 702,
+        "min": 702,
+        "max": 702,
+        "n": 5
+       },
+       "achieved_selectivity": {
+        "median": 0.219375,
+        "min": 0.219375,
+        "max": 0.219375,
+        "n": 5
+       },
+       "f1": {
+        "median": 0.6188466947960619,
+        "min": 0.6188466947960619,
+        "max": 0.6188466947960619,
+        "n": 5
+       },
+       "precision": {
+        "median": 0.6267806267806267,
+        "min": 0.6267806267806267,
+        "max": 0.6267806267806267,
+        "n": 5
+       },
+       "recall": {
+        "median": 0.6111111111111112,
+        "min": 0.6111111111111112,
+        "max": 0.6111111111111112,
+        "n": 5
+       },
+       "accuracy": {
+        "median": 0.830625,
+        "min": 0.830625,
+        "max": 0.830625,
+        "n": 5
+       },
+       "speedup_vs_baseline": {
+        "median": 0.9691990090834022,
+        "min": 0.8818720948870011,
+        "max": 0.9884370015948963,
+        "n": 5
+       },
+       "all_repeats_faster": false,
+       "all_repeats_slower": true
+      }
+     }
+    }
+   }
+  },
+  "prefix_cache_resets": {
+   "trials": 45,
+   "confirmed": 45
+  },
+  "traces": {
+   "trace-on": {
+    "queries": 48,
+    "complete": 48,
+    "counters": {},
+    "stages": {
+     "stage1:k1": {
+      "out_per_in": {
+       "median": 8.96,
+       "min": 8.96,
+       "max": 8.96,
+       "n": 32
+      },
+      "tasks": {
+       "median": 100.0,
+       "min": 100,
+       "max": 100,
+       "n": 32
+      },
+      "forced_launches": {
+       "median": 0.0,
+       "min": 0,
+       "max": 0,
+       "n": 32
+      },
+      "retries": {
+       "median": 0.0,
+       "min": 0,
+       "max": 0,
+       "n": 32
+      },
+      "wait_s_p95": {
+       "median": 0.05376676250006085,
+       "min": 0.05185372100004315,
+       "max": 0.07391838900002767,
+       "n": 32
+      },
+      "exec_s_p50": {
+       "median": 1.0430287414999952,
+       "min": 0.8365003570000056,
+       "max": 1.3778424340000583,
+       "n": 32
+      },
+      "truncated_calls": {
+       "median": 0.0,
+       "min": 0,
+       "max": 0,
+       "n": 32
+      },
+      "block_fallback_calls": {
+       "median": 0.0,
+       "min": 0,
+       "max": 0,
+       "n": 32
+      },
+      "block_undecided_rows": {
+       "median": 0.0,
+       "min": 0,
+       "max": 0,
+       "n": 32
+      },
+      "prompt_tokens": {
+       "median": 16394.0,
+       "min": 16394,
+       "max": 16394,
+       "n": 32
+      }
+     },
+     "stage2:k1": {
+      "out_per_in": {
+       "median": 0.4966517857142857,
+       "min": 0.49441964285714285,
+       "max": 0.49776785714285715,
+       "n": 16
+      },
+      "tasks": {
+       "median": 896.0,
+       "min": 896,
+       "max": 896,
+       "n": 16
+      },
+      "forced_launches": {
+       "median": 0.0,
+       "min": 0,
+       "max": 0,
+       "n": 16
+      },
+      "retries": {
+       "median": 0.0,
+       "min": 0,
+       "max": 0,
+       "n": 16
+      },
+      "wait_s_p95": {
+       "median": 0.1670631309999635,
+       "min": 0.1205016170001727,
+       "max": 0.2911540939999213,
+       "n": 16
+      },
+      "exec_s_p50": {
+       "median": 5.057415478500047,
+       "min": 4.500102550000008,
+       "max": 5.676190000000133,
+       "n": 16
+      },
+      "truncated_calls": {
+       "median": 0.0,
+       "min": 0,
+       "max": 0,
+       "n": 16
+      },
+      "block_fallback_calls": {
+       "median": 0.0,
+       "min": 0,
+       "max": 0,
+       "n": 16
+      },
+      "block_undecided_rows": {
+       "median": 0.0,
+       "min": 0,
+       "max": 0,
+       "n": 16
+      },
+      "prompt_tokens": {
+       "median": 204392.0,
+       "min": 204392,
+       "max": 204392,
+       "n": 16
+      }
+     },
+     "stage2:k4": {
+      "out_per_in": {
+       "median": 0.6028025793650793,
+       "min": 0.5926339285714286,
+       "max": 0.6128472222222222,
+       "n": 32
+      },
+      "partial_blocks": {
+       "median": 0.0,
+       "min": 0,
+       "max": 0,
+       "n": 32
+      },
+      "tasks": {
+       "median": 256.0,
+       "min": 224,
+       "max": 288,
+       "n": 32
+      },
+      "forced_launches": {
+       "median": 0.0,
+       "min": 0,
+       "max": 0,
+       "n": 32
+      },
+      "retries": {
+       "median": 0.0,
+       "min": 0,
+       "max": 0,
+       "n": 32
+      },
+      "wait_s_p95": {
+       "median": 0.2300635860000142,
+       "min": 0.09392379599989908,
+       "max": 0.6914104449999741,
+       "n": 32
+      },
+      "exec_s_p50": {
+       "median": 6.441917730500009,
+       "min": 5.123019093000011,
+       "max": 7.984349264000002,
+       "n": 32
+      },
+      "truncated_calls": {
+       "median": 0.0,
+       "min": 0,
+       "max": 0,
+       "n": 32
+      },
+      "block_fallback_calls": {
+       "median": 0.0,
+       "min": 0,
+       "max": 0,
+       "n": 32
+      },
+      "block_undecided_rows": {
+       "median": 0.0,
+       "min": 0,
+       "max": 0,
+       "n": 32
+      },
+      "prompt_tokens": {
+       "median": 104992.0,
+       "min": 91856,
+       "max": 118128,
+       "n": 32
+      }
+     },
+     "stage1:k4": {
+      "out_per_in": {
+       "median": 11.52,
+       "min": 11.52,
+       "max": 11.52,
+       "n": 16
+      },
+      "partial_blocks": {
+       "median": 0.0,
+       "min": 0,
+       "max": 0,
+       "n": 16
+      },
+      "tasks": {
+       "median": 25.0,
+       "min": 25,
+       "max": 25,
+       "n": 16
+      },
+      "forced_launches": {
+       "median": 0.0,
+       "min": 0,
+       "max": 0,
+       "n": 16
+      },
+      "retries": {
+       "median": 0.0,
+       "min": 0,
+       "max": 0,
+       "n": 16
+      },
+      "wait_s_p95": {
+       "median": 0.03559655349999957,
+       "min": 0.03345474799994008,
+       "max": 0.043030887999975675,
+       "n": 16
+      },
+      "exec_s_p50": {
+       "median": 1.1314984174999836,
+       "min": 0.8204238700000133,
+       "max": 1.2095802630001344,
+       "n": 16
+      },
+      "truncated_calls": {
+       "median": 0.0,
+       "min": 0,
+       "max": 0,
+       "n": 16
+      },
+      "block_fallback_calls": {
+       "median": 0.0,
+       "min": 0,
+       "max": 0,
+       "n": 16
+      },
+      "block_undecided_rows": {
+       "median": 0.0,
+       "min": 0,
+       "max": 0,
+       "n": 16
+      },
+      "prompt_tokens": {
+       "median": 5469.0,
+       "min": 5469,
+       "max": 5469,
+       "n": 16
+      }
+     }
+    },
+    "plan_s": {
+     "median": 0.09074370250004904,
+     "min": 0.08494314700010364,
+     "max": 0.10823395199986408,
+     "n": 48
+    },
+    "attribution": "not attributed: 48 queries vs 0 arms x 6 trials (each arm may issue more than one query)"
+   }
+  },
+  "vllm_metrics": {
+   "vllm-metrics-on": {
+    "samples": 4226,
+    "kv_cache_pct": {
+     "median": 3.325696284098234,
+     "min": 0.0,
+     "max": 17.69528173551944,
+     "n": 4226
+    },
+    "waiting": {
+     "median": 0.0,
+     "min": 0.0,
+     "max": 844.0,
+     "n": 4226
+    },
+    "preemptions_total": 0.0
+   }
+  }
  }
 ]

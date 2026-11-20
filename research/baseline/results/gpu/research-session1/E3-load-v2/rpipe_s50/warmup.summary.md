@@ -1,0 +1,1 @@
+ERROR: Command '['python3', '-m', 'vllm.kalypso.benchmark.eval.report', '/results/research-session1/E3-load-v2/rpipe_s50/warmup.jsonl', '--reference', 'kalypso_per_tuple']' returned non-zero exit status 1.
