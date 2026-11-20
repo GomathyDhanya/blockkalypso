@@ -25,7 +25,13 @@ through every operator.
 Events (see research/docs/BASELINE_METHODOLOGY.md for every field):
 ``query_start``, ``plan_built``, ``kv_stage_registered``, ``task_enqueue``,
 ``task_start``, ``task_end``, ``task_retry``, ``scheduler_sample``,
-``llm_call``, ``block_eval``, ``kv_admit_rejected``, ``query_end``.
+``llm_call``, ``block_eval``, ``kv_admit_rejected``, ``query_end``,
+``adaptive_switch``.
+
+In-process subscribers (``subscribe``) receive the same records as the sink.
+They are scoped to the current context (one query's executor loop), so
+concurrent queries never see each other's events, and they work with no sink
+configured. The adaptive stage controller uses this to read ``task_end``.
 """
 
 from __future__ import annotations
@@ -47,6 +53,10 @@ query_id: contextvars.ContextVar = contextvars.ContextVar("kalypso_query_id", de
 stage_id: contextvars.ContextVar = contextvars.ContextVar("kalypso_stage_id", default=None)
 task_id: contextvars.ContextVar = contextvars.ContextVar("kalypso_task_id", default=None)
 op_name: contextvars.ContextVar = contextvars.ContextVar("kalypso_op", default=None)
+
+# Callables receiving every record emitted in this context (see subscribe).
+_subscribers: contextvars.ContextVar = contextvars.ContextVar(
+    "kalypso_telemetry_subscribers", default=())
 
 # Minimum seconds between two scheduler_sample events of one query.
 SCHEDULER_SAMPLE_INTERVAL_S = float(os.environ.get("KALYPSO_TRACE_SAMPLE_S", "0.25"))
@@ -76,6 +86,20 @@ def enabled() -> bool:
     return _sink is not None
 
 
+def subscribe(fn) -> contextvars.Token:
+    """Deliver every record emitted in the current context to ``fn(record)``.
+    Returns a token for ``unsubscribe``; call both in the same context."""
+    return _subscribers.set(_subscribers.get() + (fn,))
+
+
+def unsubscribe(token: contextvars.Token) -> None:
+    _subscribers.reset(token)
+
+
+def has_subscribers() -> bool:
+    return bool(_subscribers.get())
+
+
 def new_query_id() -> str:
     return uuid.uuid4().hex[:12]
 
@@ -91,7 +115,8 @@ def _jsonable(value: Any):
 def emit(event: str, **fields) -> None:
     """Write one event. Never raises: telemetry must not break a query."""
     sink = _sink
-    if sink is None:
+    subscribers = _subscribers.get()
+    if sink is None and not subscribers:
         return
     record = {
         "event": event,
@@ -104,6 +129,13 @@ def emit(event: str, **fields) -> None:
         if key not in fields and var.get() is not None:
             record[key] = var.get()
     record.update({k: _jsonable(v) for k, v in fields.items()})
+    for fn in subscribers:
+        try:
+            fn(record)
+        except Exception:  # noqa: BLE001 -- a subscriber must not break a query
+            pass
+    if sink is None:
+        return
     try:
         with _lock:
             if isinstance(sink, list):

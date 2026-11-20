@@ -10,6 +10,7 @@ from vllm.kalypso.execution.pipeline_execution import PlanExecutor
 from vllm.kalypso.controller.map_estimator import MapRatioEstimator
 from vllm.kalypso import telemetry
 from .stage import Stage, Task, stage_builder
+from .adaptive_stage import AdaptiveStageConfig
 
 class SemanticPlan:
     ESTIMATED_CTX_SAMPLE_SIZE = 100
@@ -21,9 +22,13 @@ class SemanticPlan:
     DEFAULT_PLAN_SEED = 0
 
     def __init__(self, executor, virtual_pinning: bool = True,
-                 plan_seed: int | None = DEFAULT_PLAN_SEED):
+                 plan_seed: int | None = DEFAULT_PLAN_SEED,
+                 adaptive: AdaptiveStageConfig | None = None):
         self.executor = executor
-        self.plan_executor = PlanExecutor()
+        # Adaptive per-stage blocking (controller/adaptive_stage.py). Off unless
+        # enabled here or with KALYPSO_ADAPTIVE_STAGE=1.
+        self.adaptive = adaptive if adaptive is not None else AdaptiveStageConfig.from_env()
+        self.plan_executor = PlanExecutor(adaptive=self.adaptive)
         self.virtual_pinning = virtual_pinning
         # None restores the old unseeded behaviour (global ``random`` state).
         self.plan_seed = plan_seed

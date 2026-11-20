@@ -7,13 +7,15 @@ from vllm.kalypso.budget import KVMemoryManager
 from vllm.kalypso.context import RetryTaskResult
 # from vllm.kalypso.controller.map_estimator import MapRatioEstimator
 from vllm.kalypso.controller.stage import Task
+from vllm.kalypso.controller.adaptive_stage import AdaptiveStageController
 from vllm.kalypso.sem_ops import OpBehavior, ops
 
 
 class PlanExecutor:
 
-    def __init__(self):
-        self.pipeline_executor = AsyncPipelineExecutor()
+    def __init__(self, adaptive=None):
+        # adaptive: AdaptiveStageConfig or None (None/disabled = static blocks).
+        self.pipeline_executor = AsyncPipelineExecutor(adaptive=adaptive)
         self.blocking_executor = BlockingExecutor()
 
     async def execute(self, ctxs, plan):
@@ -127,14 +129,27 @@ class AsyncPipelineExecutor:
     LOG_RETRY_TRACE = False
     LOG_DEFERRAL_TRACE = False
 
-    def __init__(self):
+    def __init__(self, adaptive=None):
         self.manager = KVMemoryManager.get_instance()
+        self.adaptive = adaptive
+        self.last_controller = None  # the most recent run's controller (tests, debugging)
 
     async def execute_tasks(self, ctxs, stages):
         """
         ctxs: initial contexts
         stages: [stage1, stage2, ...]
         """
+        if self.adaptive is None or not self.adaptive.enabled:
+            return await self._execute_tasks(ctxs, stages, None)
+        controller = AdaptiveStageController(stages, self.adaptive)
+        self.last_controller = controller
+        token = telemetry.subscribe(controller.observe)
+        try:
+            return await self._execute_tasks(ctxs, stages, controller)
+        finally:
+            telemetry.unsubscribe(token)
+
+    async def _execute_tasks(self, ctxs, stages, controller):
         stage_stat = {}
         out = []
         active = {}
@@ -158,6 +173,9 @@ class AsyncPipelineExecutor:
             if index > 0 and stage.block_tasks
         }
         total_retries = 0
+        # Size of the block currently forming per downstream block stage, fixed
+        # when its first row arrives (adaptive controller only).
+        forming_size = {}
 
         def enqueue_block_rows(index, rows, trackers=()):
             """Accumulate rows into one task for a downstream block stage.
@@ -185,8 +203,14 @@ class AsyncPipelineExecutor:
                 )) > 1:
                     emit(pending[:])
                     pending.clear()
+                if controller is not None and not pending:
+                    # A new block starts forming here: the only point where
+                    # the adaptive controller's size takes effect. Blocks
+                    # already emitted (queued or running) are never resized.
+                    size = controller.formation_size(index, row)
+                    forming_size[index] = stage.block_size if size is None else size
                 pending.append((row, trackers))
-                if len(pending) >= stage.block_size:
+                if len(pending) >= forming_size.get(index, stage.block_size):
                     emit(pending[:])
                     pending.clear()
 
@@ -232,7 +256,9 @@ class AsyncPipelineExecutor:
             retry_counts[stage_id] = retry_counts.get(stage_id, 0) + 1
             total_retries += 1
 
-        trace = telemetry.enabled()
+        # Also on when an in-process subscriber (the adaptive controller)
+        # listens, even with no trace sink configured.
+        trace = telemetry.enabled() or telemetry.has_subscribers()
         last_trace_sample_at = 0.0
 
         def trace_launch(stage, task, budget, forced):
@@ -249,12 +275,14 @@ class AsyncPipelineExecutor:
                 stage_running_tasks=len(stage.running_tasks),
             )
 
-        def trace_end(stage, task, outcome, rows_out):
+        def trace_end(stage, task, outcome, rows_out, rows_passed):
+            # rows_passed: rows that survived the stage before any fanout
+            # (rows_out counts fanout children, so it is not a pass rate).
             now = time.monotonic()
             telemetry.emit(
                 "task_end", stage_id=stage.stage_id, task_id=task.task_id,
-                rows_in=task.num_rows, rows_out=rows_out, outcome=outcome,
-                exec_s=now - getattr(task, "_t_start", now),
+                rows_in=task.num_rows, rows_out=rows_out, rows_passed=rows_passed,
+                outcome=outcome, exec_s=now - getattr(task, "_t_start", now),
             )
 
         def trace_sample(force=False):
@@ -505,7 +533,7 @@ class AsyncPipelineExecutor:
                 children = list(rows)
             record_output(stage.stage_id, len(children))
             if trace:
-                trace_end(stage, task, "block", len(children))
+                trace_end(stage, task, "block", len(children), len(rows))
 
             def downstream_trackers(count):
                 if task.trackers and count > 1:
@@ -583,7 +611,7 @@ class AsyncPipelineExecutor:
 
                 if isinstance(result, RetryTaskResult):
                     if trace:
-                        trace_end(stage, task, "retry", 0)
+                        trace_end(stage, task, "retry", 0, 0)
                         telemetry.emit("task_retry", stage_id=stage.stage_id,
                                        task_id=task.task_id, op_index=result.op_index,
                                        retain_budget=result.retain_budget,
@@ -621,7 +649,7 @@ class AsyncPipelineExecutor:
 
                 if result is None:
                     if trace:
-                        trace_end(stage, task, "dropped", 0)
+                        trace_end(stage, task, "dropped", 0, 0)
                     await stage.release_budget(budget, self.manager)
                     log_running_tasks(
                         f"finish task={task.task_id} stage={stage.stage_id}"
@@ -639,7 +667,7 @@ class AsyncPipelineExecutor:
                     child_ctxs = stage.fanout_op(result) or []
                     record_output(stage.stage_id, len(child_ctxs))
                     if trace:
-                        trace_end(stage, task, "fanout", len(child_ctxs))
+                        trace_end(stage, task, "fanout", len(child_ctxs), 1)
 
                     if not child_ctxs:
                         if task.ctx.state.pin_req_id is not None:
@@ -712,7 +740,7 @@ class AsyncPipelineExecutor:
 
                 record_output(stage.stage_id, 1)
                 if trace:
-                    trace_end(stage, task, "row", 1)
+                    trace_end(stage, task, "row", 1, 1)
                 next_task = Task(
                     ctx=([result] if next_stage_index < len(stages)
                          and stages[next_stage_index].block_tasks else result),
