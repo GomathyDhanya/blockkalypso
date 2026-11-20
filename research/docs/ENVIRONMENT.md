@@ -70,7 +70,7 @@ versions, CUDA, driver, GPU name and memory, model revision, vLLM's KV cache
 size, seeds, git sha and dirty flag of the launching tree), `tokens.json`
 (tokenizer row counts per workload), `gpu-*.csv` (nvidia-smi every 0.5 s),
 `vllm-metrics-*.jsonl` (`/metrics` every 0.5 s), `trace-*.jsonl`
-(KALYPSO_TRACE), `server-*.log`, `run-*.jsonl` (eval.run output), and
+(KALYPSO_TRACE), `server-*.log` (committed gzipped), `run-*.jsonl` (eval.run output), and
 `status.json`.
 
 ## 6. Reproduction
