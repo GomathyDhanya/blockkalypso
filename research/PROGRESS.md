@@ -20,7 +20,7 @@ Ground rules for this branch:
 |---|---|---|---|
 | 0 | Branch + this log | done | `research/PROGRESS.md` |
 | 1 | Repository audit | done | `research/docs/BASELINE_AUDIT.md` |
-| 2 | Environment and reproducibility audit | in progress | `research/docs/ENVIRONMENT.md` (next) |
+| 2 | Environment and reproducibility audit | done | `research/docs/ENVIRONMENT.md` |
 | 3 | Opt-in instrumentation + tests | done: executor telemetry + optimizer profiler (`research/baseline/instrumentation/optimizer_profile.py`) | `vllm/kalypso/telemetry.py`, hooks in `controller/`, `execution/`, `sem_ops/block_*`, `budget.py`; tests `vllm/kalypso/tests/test_telemetry.py` |
 | 4 | CPU-only experiments (optimizer scaling, executor simulation) | done: `results/optimizer_scaling.jsonl` (all 3 families, d1-d6), `results/executor_simulation/summary.md` (real scheduler, simulated LLM) | `research/baseline/experiments/` |
 | 5 | Cost-model validation on existing GPU results | analysis done, write-up next | `research/baseline/analysis/costmodel_validation.py` → `research/baseline/results/costmodel_validation/summary.md` |
