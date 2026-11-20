@@ -91,6 +91,13 @@ TAIL_KINDS = ("map",)
 # Largest size considered when the accuracy cap is off and the regime has no
 # measured sizes.
 MAX_K = 32
+# Block-size candidate sets for choose_pipeline(candidate_set=...).
+# "exhaustive" (the default) searches every k in 1..k_max per stage. "pow2"
+# searches only these sizes; research/baseline/results/optimizer_scaling.md
+# measured it against the exhaustive pick on 1-4 stage pipelines (regret
+# -1.7% to +2.3%) and it plans 6 stages in under 2 s.
+POW2_CANDIDATES = (1, 2, 4, 8, 16, 32)
+CANDIDATE_SETS = ("exhaustive", "pow2")
 
 
 @dataclass
@@ -288,9 +295,22 @@ class Model:
                 "calls": sum(s["calls"] for s in stages)}
 
     def choose_pipeline(self, pipe: Pipeline, max_num_seqs: int = analyze.DEFAULT_MAX_NUM_SEQS,
-                        tie: float = 0.02, candidates=None, quality: bool = False) -> dict:
+                        tie: float = 0.02, candidates=None, quality: bool = False,
+                        candidate_set: str = "exhaustive") -> dict:
+        """``candidate_set`` picks the generated per-stage block sizes when no
+        explicit ``candidates`` are given: "exhaustive" (default, 1..k_max) or
+        "pow2" (POW2_CANDIDATES up to k_max)."""
+        if candidate_set not in CANDIDATE_SETS:
+            raise ValueError(f"candidate_set must be one of {CANDIDATE_SETS}, got {candidate_set!r}")
+        if candidates is not None and candidate_set != "exhaustive":
+            raise ValueError("pass either explicit candidates or candidate_set, not both")
         k_max = [self.k_max(op, items, quality)
                  for op, items in zip(pipe.ops, self.stage_items(pipe, pipe.rows))]
+        if candidates is None and candidate_set == "pow2":
+            # Same set (and order) as the full POW2 product with over-k_max
+            # combinations dropped, which is how optimizer_scaling.py ran it.
+            candidates = itertools.product(*[[k for k in POW2_CANDIDATES if k <= m]
+                                             for m in k_max])
         if candidates is None:
             candidates = itertools.product(*[range(1, k + 1) for k in k_max])
         candidates = [tuple(c) for c in candidates
