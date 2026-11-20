@@ -49,6 +49,9 @@ SOURCE = "/opt/kalypso-source"
 VLLM_PKG = ("$(python3 -c 'import importlib.util; print(next(iter(importlib.util"
             ".find_spec(\"vllm\").submodule_search_locations)))')")
 MODEL = "Qwen/Qwen2.5-7B-Instruct"
+# Hub commit every Session 1 run resolved for MODEL (env.json model_revision in
+# all 22 records). Pinned so later runs serve and tokenize the same weights.
+MODEL_REVISION = "a09a35458c702b33eeacc393d103063234e8bc28"
 GPU = "L40S"
 PORT = 8000
 MAX_NUM_SEQS = 256
@@ -153,12 +156,17 @@ def _environment(root: Path) -> dict:
                                        "--format=csv,noheader"])
     ref = Path("/cache/huggingface/hub/models--Qwen--Qwen2.5-7B-Instruct/refs/main")
     env["model"] = MODEL
-    env["model_revision"] = ref.read_text().strip() if ref.exists() else None
+    env["model_revision"] = MODEL_REVISION
+    # What the cache's refs/main points at, to spot Hub drift (not used).
+    env["model_revision_cache_main"] = ref.read_text().strip() if ref.exists() else None
     env["server"] = {"max_num_seqs": MAX_NUM_SEQS, "max_num_batched_tokens": MAX_NUM_BATCHED_TOKENS,
                      "max_model_len": MAX_MODEL_LEN, "prefix_caching": True,
                      "dtype": "auto (model config: bfloat16)", "gpu": GPU}
     env["seeds"] = {"VLLMExecutor.DEFAULT_SAMPLING.seed": 42, "workload SELECTIVITY_SEED": 0,
-                    "temperature": 0.0}
+                    "SemanticPlan.DEFAULT_PLAN_SEED": 0, "temperature": 0.0}
+    # Overlay server path (docker/kalypso/init_api.py KV_BUDGET_FACTOR); the
+    # fork's own api_server.py would use 0.5.
+    env["kalypso_kv_budget_factor"] = 1.0
     (root / "env.json").write_text(json.dumps(env, indent=2))
     return env
 
@@ -173,6 +181,7 @@ def _start_server(root: Path, trace: bool, tag: str):
     log = open(root / f"server-{tag}.log", "w")
     proc = subprocess.Popen([
         "python3", "-m", "vllm.entrypoints.cli.main", "serve", MODEL,
+        "--revision", MODEL_REVISION,
         "--host", "127.0.0.1", "--port", str(PORT),
         "--enable-prefix-caching", "--no-async-scheduling", "--api-server-count", "1",
         "--max-model-len", str(MAX_MODEL_LEN), "--max-num-seqs", str(MAX_NUM_SEQS),
@@ -263,7 +272,7 @@ sys.path.insert(0, {SOURCE!r})
 from research.baseline import workloads  # registers research workloads
 from vllm.kalypso.benchmark.eval.workloads import WORKLOADS
 from transformers import AutoTokenizer
-tok = AutoTokenizer.from_pretrained({MODEL!r})
+tok = AutoTokenizer.from_pretrained({MODEL!r}, revision={MODEL_REVISION!r})
 out = {{}}
 for name, n in {[(p["workload"], p["n"]) for p in parts]!r}:
     w = WORKLOADS[name](n or None)

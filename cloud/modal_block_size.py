@@ -41,6 +41,11 @@ SOURCE = "/opt/kalypso-source"
 VLLM_PKG = ("$(python3 -c 'import importlib.util; print(next(iter(importlib.util"
             ".find_spec(\"vllm\").submodule_search_locations)))')")
 DEFAULT_MODEL = "Qwen/Qwen2.5-7B-Instruct"
+# Pinned Hub commits; a model not listed here is served from the Hub's default
+# branch (unpinned). Qwen2.5-7B-Instruct: the commit every Session 1 run used.
+MODEL_REVISIONS = {
+    "Qwen/Qwen2.5-7B-Instruct": "a09a35458c702b33eeacc393d103063234e8bc28",
+}
 DEFAULT_GPU = "L40S"
 PORT = 8000
 # vLLM 0.29.0's own defaults for an API server on a GPU under 70 GiB (L40S):
@@ -81,6 +86,7 @@ def _start_server(model: str, max_model_len: int, max_num_seqs: int = MAX_NUM_SE
     # Flags Kalypso's container init requires (docker/kalypso/init_api.py).
     return subprocess.Popen([
         "python3", "-m", "vllm.entrypoints.cli.main", "serve", model,
+        *(["--revision", MODEL_REVISIONS[model]] if model in MODEL_REVISIONS else []),
         "--host", "127.0.0.1", "--port", str(PORT),
         "--enable-prefix-caching", "--no-async-scheduling", "--api-server-count", "1",
         "--max-model-len", str(max_model_len),

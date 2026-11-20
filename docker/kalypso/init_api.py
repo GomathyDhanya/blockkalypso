@@ -1,3 +1,11 @@
+# Share of vLLM's per-GPU KV-cache budget given to Kalypso's reservation
+# ledger. The fork's own server (vllm/entrypoints/openai/api_server.py,
+# FORK_KV_BUDGET_FACTOR) uses 0.5; this overlay uses 1.0. Every Modal GPU
+# result (historical and Session 1) ran with this overlay value. Not
+# reconciled on purpose: see research/docs/ENVIRONMENT.md section 2.
+KV_BUDGET_FACTOR = 1.0
+
+
 async def init_kalypso(engine_client, state, args):
     from vllm.kalypso.execution.vllm_executor import VLLMExecutor
 
@@ -19,7 +27,10 @@ async def init_kalypso(engine_client, state, args):
         raise ValueError("Kalypso requires a positive GPU KV-cache budget")
     state.query_processor = query_processor.QueryProcessor(
         model_name=config.model_config.model,
-        budget=per_gpu * config.parallel_config.tensor_parallel_size,
+        budget=per_gpu * config.parallel_config.tensor_parallel_size * KV_BUDGET_FACTOR,
+        # Tokenizer / KV-size lookups use the revision the engine serves.
+        revision=config.model_config.revision,
+        tokenizer_revision=config.model_config.tokenizer_revision,
     )
     # Tokenization uses the model path; API requests use its public alias.
     aliases = config.model_config.served_model_name

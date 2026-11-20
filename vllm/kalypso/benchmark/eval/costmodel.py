@@ -78,6 +78,10 @@ from . import analyze
 
 RESULTS = analyze.RESULTS
 TOKENIZER = "Qwen/Qwen2.5-7B-Instruct"
+# Hub commit of TOKENIZER that the Session 1 GPU runs resolved (all 22
+# research/baseline/results/gpu/*/env.json records). Pinned so token counts
+# do not move if the Hub's main branch does.
+TOKENIZER_REVISION = "a09a35458c702b33eeacc393d103063234e8bc28"
 DEFAULT_MAX_MODEL_LEN = 32768
 # Items above this many tokens are "long rows" (ContractNLI, ~1.6k): a regime
 # with its own accuracy cap.
@@ -335,7 +339,7 @@ def _count(texts: list[str]) -> list[int]:
     global _tokenizer
     if _tokenizer is None:
         from transformers import AutoTokenizer
-        _tokenizer = AutoTokenizer.from_pretrained(TOKENIZER)
+        _tokenizer = AutoTokenizer.from_pretrained(TOKENIZER, revision=TOKENIZER_REVISION)
     return [len(ids) for ids in _tokenizer(texts, add_special_tokens=False)["input_ids"]]
 
 

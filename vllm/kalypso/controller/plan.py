@@ -13,16 +13,28 @@ from .stage import Stage, Task, stage_builder
 
 class SemanticPlan:
     ESTIMATED_CTX_SAMPLE_SIZE = 100
+    # Seed for the planner's KV-capacity sample (see ``build``). The only
+    # randomness in planning: when a segment has more than
+    # ESTIMATED_CTX_SAMPLE_SIZE input contexts, a random subset sizes each
+    # stage's minimum KV capacity. Seeding it makes the registered stage
+    # capacities identical across runs of the same query.
+    DEFAULT_PLAN_SEED = 0
 
-    def __init__(self, executor, virtual_pinning: bool = True):
+    def __init__(self, executor, virtual_pinning: bool = True,
+                 plan_seed: int | None = DEFAULT_PLAN_SEED):
         self.executor = executor
         self.plan_executor = PlanExecutor()
         self.virtual_pinning = virtual_pinning
+        # None restores the old unseeded behaviour (global ``random`` state).
+        self.plan_seed = plan_seed
 
 
     def build(self, ctxs, operators):
 
         plan = []
+        # A fresh generator per build: the draw depends only on the seed and
+        # the query, not on what else ran in the process before.
+        rng = random.Random(self.plan_seed) if self.plan_seed is not None else random
 
         current_segment = []          # [stage, stage, ...]
         stage_ops_chain = []          # tuple-independent ops to fuse
@@ -101,7 +113,7 @@ class SemanticPlan:
             for stage in current_segment:
                 sampled_ctxs = estimated_ctxs
                 if len(estimated_ctxs) > self.ESTIMATED_CTX_SAMPLE_SIZE:
-                    sampled_ctxs = random.sample(
+                    sampled_ctxs = rng.sample(
                         estimated_ctxs,
                         self.ESTIMATED_CTX_SAMPLE_SIZE,
                     )

@@ -11,8 +11,9 @@ from vllm.kalypso import telemetry
 def compute_bytes_per_token(
     model_name: str,
     dtype: torch.dtype = torch.float16,
+    revision: str | None = None,
 ) -> int:
-    cfg = AutoConfig.from_pretrained(model_name)
+    cfg = AutoConfig.from_pretrained(model_name, revision=revision)
     # Multimodal / nested configs (e.g. Qwen3.5) keep the language-model
     # fields under a sub-config instead of the top level.
     text_cfg = cfg.get_text_config() if hasattr(cfg, "get_text_config") else cfg
@@ -60,9 +61,16 @@ class KVMemoryManager:
     _init_lock = threading.Lock()
     LOG = False
     REBALANCE_LOG = False
-    def __init__(self, model_name, kv_capacity, dtype):
-        self.tokenizer = AutoTokenizer.from_pretrained(model_name)
-        self.bytes_per_token = compute_bytes_per_token(model_name, dtype)
+    def __init__(self, model_name, kv_capacity, dtype,
+                 revision=None, tokenizer_revision=None):
+        # Load the same Hub revision the server serves (ModelConfig.revision /
+        # tokenizer_revision); None means the Hub's default branch, which can
+        # move between runs.
+        self.revision = revision
+        self.tokenizer_revision = tokenizer_revision or revision
+        self.tokenizer = AutoTokenizer.from_pretrained(
+            model_name, revision=self.tokenizer_revision)
+        self.bytes_per_token = compute_bytes_per_token(model_name, dtype, revision)
 
         self._capacity = kv_capacity 
         self._global_used = 0
@@ -328,11 +336,14 @@ class KVMemoryManager:
             return len(self.tokenizer.encode(prompt, add_special_tokens=False))
 
     @classmethod
-    def init(cls, model_name, kv_capacity, dtype=torch.float16):
+    def init(cls, model_name, kv_capacity, dtype=torch.float16,
+             revision=None, tokenizer_revision=None):
         with cls._init_lock:
             if cls._instance is not None:
                 raise RuntimeError("KVMemoryManager already initialized")
-            cls._instance = cls(model_name, kv_capacity, dtype)
+            cls._instance = cls(model_name, kv_capacity, dtype,
+                                revision=revision,
+                                tokenizer_revision=tokenizer_revision)
 
     @classmethod
     def get_instance(cls):

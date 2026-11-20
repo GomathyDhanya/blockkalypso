@@ -1567,7 +1567,11 @@ async def init_app_state(
     tp_size = (
         state.engine_client.vllm_config.parallel_config.tensor_parallel_size
     )
-    budget = per_gpu_budget * tp_size * 0.5
+    # FORK_KV_BUDGET_FACTOR: the Modal overlay (docker/kalypso/init_api.py,
+    # KV_BUDGET_FACTOR) uses 1.0 instead. Results from the two server paths
+    # are not comparable without accounting for this (ENVIRONMENT.md §2).
+    FORK_KV_BUDGET_FACTOR = 0.5
+    budget = per_gpu_budget * tp_size * FORK_KV_BUDGET_FACTOR
     gib = 1024**3
     logger.info(
         "Semantic Query processor KV budget: per_gpu=%.2f GiB tp_size=%s total=%.2f GiB",
@@ -1577,7 +1581,13 @@ async def init_app_state(
     )
 
     # Query processor currently doesn't reflect other requests' budget usage
-    state.query_processor = query_processor.QueryProcessor(model_name=model_name, budget=budget)
+    model_config = state.engine_client.vllm_config.model_config
+    state.query_processor = query_processor.QueryProcessor(
+        model_name=model_name,
+        budget=budget,
+        revision=model_config.revision,
+        tokenizer_revision=model_config.tokenizer_revision,
+    )
     state.query_processor.start_stuck_monitor(state.engine_client)
     
 

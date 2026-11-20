@@ -14,10 +14,12 @@ class QueryProcessor:
     STUCK_CONFIRMATION_COUNT = 2
     UNPIN_COOLDOWN_SEC = 10.0
 
-    def __init__(self, model_name, budget, virtual_pinning: bool = True):
+    def __init__(self, model_name, budget, virtual_pinning: bool = True,
+                 revision=None, tokenizer_revision=None):
         self.model_name = model_name
         self.virtual_pinning = virtual_pinning
-        KVMemoryManager.init(model_name, budget)
+        KVMemoryManager.init(model_name, budget, revision=revision,
+                             tokenizer_revision=tokenizer_revision)
         self.executor = VLLMExecutor(model=model_name)
         self._stuck_monitor_task = None
         self._last_unpin_at = 0.0

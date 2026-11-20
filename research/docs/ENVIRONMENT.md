@@ -41,10 +41,10 @@ without accounting for this.
 | Sampling | yes: temperature 0.0, seed 42 | `vllm/kalypso/execution/vllm_executor.py:35-36` |
 | Workload row selection | yes: `SELECTIVITY_SEED` 0, `FANOUT_SEED` 0 | `eval/workloads.py:282,317` |
 | Arm order | fixed interleaving per repeat | `eval/run.py` |
-| Planner sampling for KV estimates | **no**: unseeded `random.sample` | `controller/plan.py:99-105` (audit §4.1) |
-| Downstream block membership | **no**: depends on task completion order (`asyncio.wait` returns a set) | audit §4.6; confirmed in the CPU telemetry tests and simulation |
+| Planner sampling for KV estimates | yes since phase2/00: `SemanticPlan(plan_seed=0)` (was unseeded `random.sample`) | `controller/plan.py` `DEFAULT_PLAN_SEED`; `tests/test_plan_seed.py` |
+| Downstream block membership | **no**: depends on task completion order (`asyncio.wait` returns a set). Changes *which rows share a block*, not just order; final results change only if a row's verdict depends on its block-mates | audit §4.6; `tests/test_block_membership_order.py` |
 | GPU batch composition | no (inherent to continuous batching); greedy decoding still varies at the margin with batch shape | vLLM |
-| Model weights revision | **not pinned** in either Modal runner: `from_pretrained` resolves `main`. Session 1 records the resolved snapshot hash in `env.json` (`model_revision`) | `modal_baseline.py:151` |
+| Model weights revision | pinned since phase2/00 to `a09a3545…8bc28` (the commit all Session 1 runs resolved): `--revision` in both Modal runners, the KV manager's tokenizer/config follow `ModelConfig.revision`, cost-model tokenizer pinned. Session 1 itself ran unpinned (`revision=main`) | `modal_baseline.py` `MODEL_REVISION`; `modal_block_size.py` `MODEL_REVISIONS`; `budget.py`; `costmodel.py` `TOKENIZER_REVISION` |
 
 ## 4. Provenance of historical results
 
@@ -89,9 +89,14 @@ modal volume get blockkalypso-results research-session1 ./research/baseline/resu
 
 ## 7. Hazards to fix before Session 2 comparisons
 
-1. Pin the model revision in both Modal runners.
-2. Seed the planner's `random.sample` (or record its draw).
+1. ~~Pin the model revision in both Modal runners.~~ Done (phase2/00).
+2. ~~Seed the planner's `random.sample` (or record its draw).~~ Done (phase2/00).
 3. Decide on one KV budget factor (0.5 vs 1.0) and record it in result meta.
+   phase2/00: **not reconciled**; both are now named constants
+   (`init_api.py` `KV_BUDGET_FACTOR` = 1.0, `api_server.py`
+   `FORK_KV_BUDGET_FACTOR` = 0.5) and `modal_baseline.py` records
+   `kalypso_kv_budget_factor` in `env.json`. Session 1 traces confirm 1.0
+   (Kalypso capacity = vLLM's available KV memory in every run).
 4. Refuse to record results from a dirty tree, or store the diff with them.
 5. Report block-composition variance explicitly; it is a real source of
    run-to-run variation in downstream block quality and latency.
