@@ -73,7 +73,7 @@ import itertools
 import json
 import math
 from collections import OrderedDict
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 
 import numpy as np
@@ -319,6 +319,27 @@ def kv_budget_tokens(stage_id: int | None = None) -> float:
     return capacity / mgr.bytes_per_token
 
 
+# --- Adaptive selectivity (Phase 2 step C; OFF by default) -----------------------
+#
+# Plumbing only: Model.observe_selectivity nudges a stored per-stage match-rate
+# estimate toward an observed value (EWMA, weight SELECTIVITY_EWMA_WEIGHT), and
+# predict_pipeline / choose_pipeline use the stored estimates only when called
+# with ``adaptive_selectivity`` set to True. Nothing in the repo sets it.
+#
+# Why it stays off: the model's current error (held-out validation,
+# research/docs/RESOURCE_MODEL.md and validation.md) was measured with the
+# offline selectivities. A model that updates its own inputs from live
+# observations is a moving target, and its error needs its own evaluation
+# before anyone relies on it. That evaluation is explicitly not done here.
+# With the flag off, every call is bit-for-bit what it was without this code.
+
+SELECTIVITY_EWMA_WEIGHT = 0.2
+
+
+def selectivity_key(ops: tuple, stage: int) -> str:
+    return f"{'+'.join(ops)}#{stage}"
+
+
 @dataclass
 class Model:
     g: dict                # kind -> fixed seconds per operator (stage)
@@ -334,6 +355,33 @@ class Model:
     # rows a block answer missed) per map row, by the map's position and
     # whether it is blocked: "first:1", "first:block", "after:1", "after:block".
     retry: dict = field(default_factory=dict)
+    # Adaptive selectivity (off unless a call sets adaptive_selectivity to True):
+    # selectivity_key(ops, stage) -> EWMA of observed match rates.
+    selectivity_estimates: dict = field(default_factory=dict)
+
+    def observe_selectivity(self, ops: tuple, stage: int, observed: float,
+                            prior: float | None = None,
+                            weight: float = SELECTIVITY_EWMA_WEIGHT) -> float:
+        """Move the stored estimate for (ops, stage) a share ``weight`` of the
+        way toward ``observed``; the first observation starts from ``prior``
+        (the offline value), or from ``observed`` when no prior is given."""
+        if not 0.0 < weight <= 1.0:
+            raise ValueError("weight must be in (0, 1]")
+        key = selectivity_key(tuple(ops), stage)
+        old = self.selectivity_estimates.get(key, observed if prior is None else prior)
+        new = old + weight * (observed - old)
+        self.selectivity_estimates[key] = new
+        return new
+
+    def adapted_pipeline(self, pipe: Pipeline) -> Pipeline:
+        """``pipe`` with each stage's true share replaced by its stored
+        estimate where there is one; ``pipe`` itself when there is none."""
+        ops = tuple(pipe.ops)
+        keys = [selectivity_key(ops, i) for i in range(len(ops))]
+        if not any(k in self.selectivity_estimates for k in keys):
+            return pipe
+        return replace(pipe, stage_selectivity=tuple(
+            self.selectivity_estimates.get(k, pipe.true_share(i)) for i, k in enumerate(keys)))
 
     def fingerprint(self) -> str:
         """Identity of this fit: a hash of every parameter. Recomputed per
@@ -448,10 +496,14 @@ class Model:
 
     def predict_pipeline(self, pipe: Pipeline, blocks: tuple,
                          max_num_seqs: int = analyze.DEFAULT_MAX_NUM_SEQS,
-                         passed: float | None = None, retried: float | None = None) -> dict:
+                         passed: float | None = None, retried: float | None = None,
+                         adaptive_selectivity: bool = False) -> dict:
         """``passed``/``retried``: rows the leading filter passed and map rows
         rerun, when known (measured); otherwise predicted from the filter's
-        recall and false-positive rate at its block size and the retry share."""
+        recall and false-positive rate at its block size and the retry share.
+        ``adaptive_selectivity``: see the note above Model (default off)."""
+        if adaptive_selectivity:
+            pipe = self.adapted_pipeline(pipe)
         rows, stages = pipe.rows, []
         for i, (op, k) in enumerate(zip(pipe.ops, blocks)):
             items = self.stage_items(pipe, rows)[i]
@@ -480,12 +532,15 @@ class Model:
     def choose_pipeline(self, pipe: Pipeline, max_num_seqs: int = analyze.DEFAULT_MAX_NUM_SEQS,
                         tie: float = 0.02, candidates=None, quality: bool = False,
                         candidate_set: str = "exhaustive", cache: bool = False,
-                        kv_budget_tokens=None) -> dict:
+                        kv_budget_tokens=None, adaptive_selectivity: bool = False) -> dict:
         """``candidate_set`` picks the generated per-stage block sizes when no
         explicit ``candidates`` are given: "exhaustive" (default, 1..k_max) or
         "pow2" (POW2_CANDIDATES up to k_max). ``cache``: see DECISION_CACHE.
         ``kv_budget_tokens``: one budget for every stage, or one per stage
-        (see the KV feasibility gate note above Model)."""
+        (see the KV feasibility gate note above Model).
+        ``adaptive_selectivity``: see the note above Model (default off)."""
+        if adaptive_selectivity:
+            pipe = self.adapted_pipeline(pipe)
         if cache:
             b = _bucket_pipeline(pipe)
             cands = tuple(tuple(c) for c in candidates) if candidates is not None else None
