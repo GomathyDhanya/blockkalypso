@@ -90,9 +90,14 @@ How the controller behaves:
 4. **`choose_pipeline(quality=True)` does not use the band caps.** It passes
    no selectivity, so pipeline search still gets the pooled join cap. Only
    `k_max`, `choose_k` and the controller take a selectivity.
-5. **The controller's selectivity is cold at the start.** Until a managed
-   stage's own tasks have finished, its selectivity is unknown and the pooled
-   cap (1 for joins) applies.
+5. **The controller's selectivity is cold at the start.** P2-compare showed
+   this on real data: every join veto ran with no reading and got the
+   pooled cap of 1. **Fixed after P2-compare.** For joins, a switch up to
+   blocks now waits until the stage's own window is full (16 of its own
+   finished tasks) and asks the band-aware veto only then. Until that, the
+   stage keeps its current size and records nothing. A switch to per-tuple
+   is never deferred, and filters and maps are not gated. This is covered
+   by unit tests only; it has not been re-run on GPU.
 
 ## Part 2: functional run (done, 2026-11-20)
 

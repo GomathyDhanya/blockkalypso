@@ -64,6 +64,13 @@ the managed stage's *own* pass rate (rows_passed / rows_in of its own
 of its tasks has finished, which gives the pooled cap. It is not the
 upstream rate used for voting: for a join fed by a filter, the upstream rate
 is the filter's pass rate and says nothing about the join's match rate.
+For joins, whose cap depends on selectivity, a switch up to blocks is
+deferred until the stage has a real reading of its own pass rate (a full
+own window of ``window_tasks`` finished tasks). Until then no veto is asked
+and the stage stays at its current size; the next block vote tries again.
+This is because the upstream stage can recover before any join task
+finishes, which happened on real data (PHASE2_HANDOFF.md, P2-compare), and
+the pooled cap would then decide. A switch to per-tuple is never deferred.
 If the preferred size is vetoed, the controller steps down through the
 smaller power-of-two candidates and switches to the first one the veto allows
 (the switch record lists the vetoed sizes). If every candidate above 1 is
@@ -95,6 +102,14 @@ from typing import Callable
 from vllm.kalypso import telemetry
 
 STATIC, TUPLE, BLOCK = "static", "tuple", "block"
+
+# Kinds whose quality cap depends on selectivity: the cost model fits
+# selectivity-band caps for joins only (costmodel.KindParams.band_caps). For
+# these, a switch *up* to blocks waits for a real reading of the stage's own
+# pass rate (a full own_window) instead of being checked against the pooled
+# cap. Filters and maps are not gated: their cap does not depend on
+# selectivity, so waiting could not change the answer.
+SELECTIVITY_GATED_KINDS = ("join",)
 
 
 @dataclass(frozen=True)
@@ -211,6 +226,7 @@ class AdaptiveStageController:
         self.decisions: list[dict] = []   # switches and vetoes, in order
         self.formations: list[tuple[int, int]] = []  # (stage index, size) per new block
         self.veto_checks = 0  # quality-veto calls made (cheap, CPU-only)
+        self.deferrals = 0    # switch-up votes deferred for lack of a selectivity reading
         for index, stage in enumerate(stages):
             if index == 0 or not stage.block_tasks:
                 continue
@@ -263,6 +279,10 @@ class AdaptiveStageController:
         state.vote = vote
         if state.streak < self.config.min_consecutive:
             return
+        if vote == BLOCK and self._defer(state):
+            # Keep the streak: the next block vote re-evaluates at once.
+            self.deferrals += 1
+            return
         state.vote, state.streak = None, 0
         vetoed = []
         if vote == BLOCK:
@@ -271,6 +291,19 @@ class AdaptiveStageController:
                 return
             state.block_size = k
         self._switch(state, vote, rate, vetoed)
+
+    def has_selectivity_reading(self, state: _StageState) -> bool:
+        """The stage's own pass rate counts as real once its own window is
+        full (``window_tasks`` of its own finished tasks)."""
+        return len(state.own_window) >= state.own_window.maxlen
+
+    def _defer(self, state: _StageState) -> bool:
+        """Switch up to blocks later, not now: the stage's cap depends on its
+        selectivity and there is no real reading yet. No veto is asked and
+        nothing is recorded; the stage keeps its current size. The switch to
+        per-tuple never comes here."""
+        return (state.small_size > 1 and state.kind in SELECTIVITY_GATED_KINDS
+                and not self.has_selectivity_reading(state))
 
     def _block_size(self, state: _StageState) -> tuple[int | None, list[int]]:
         """Block size for a switch to block: the largest candidate up to

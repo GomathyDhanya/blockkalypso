@@ -376,8 +376,9 @@ def test_real_veto_steps_down_to_the_join_band_cap():
     # Short-row join at selectivity 0.8: band cap 6, so 8 is vetoed and 4 passes.
     c = _block_controller(costmodel_quality_veto(), row_tokens=lambda text: 100)
     c.states[1].kind = "join"
-    c.observe({"event": "task_end", "stage_id": 2, "rows_in": 10, "rows_out": 8,
-               "rows_passed": 8, "outcome": "block"})
+    for _ in range(16):  # a real reading: a full own window (window_tasks) at 0.8
+        c.observe({"event": "task_end", "stage_id": 2, "rows_in": 10, "rows_out": 8,
+                   "rows_passed": 8, "outcome": "block"})
     _to_tuple_then_high(c)
     assert c.states[1].mode == BLOCK and c.formation_size(1, row("y")) == 4
     assert c.decisions[-1]["vetoed"] == [8]
@@ -416,3 +417,94 @@ def test_switch_back_recomputes_size():
         c.observe(_end(1))
     assert c.states[1].mode == BLOCK
     assert c.formation_size(1, row("b")) == 8
+
+
+# ---------------------------------------------------------------------------
+# 8. Cold start: a join's switch up waits for a real selectivity reading
+# ---------------------------------------------------------------------------
+
+def _join_controller(veto=None, block_size=8, small_block_size=8):
+    calls = []
+    real = veto or costmodel_quality_veto()
+
+    def recording(kind, k, tokens, selectivity=None):
+        calls.append((k, selectivity))
+        return real(kind, k, tokens, selectivity)
+    c = _block_controller(recording, block_size=block_size,
+                          small_block_size=small_block_size, row_tokens=lambda text: 100)
+    c.states[1].kind = "join"
+    return c, calls
+
+
+def _own(c, passed, rows_in=1):
+    c.observe({"event": "task_end", "stage_id": 2, "rows_in": rows_in,
+               "rows_out": passed, "rows_passed": passed, "outcome": "row"})
+
+
+def _drift_recovery(c, n=40):
+    """The real drift shape (P2-compare): the upstream filter's first rows
+    fail, then it recovers, all before any join task has finished."""
+    for _ in range(3):
+        c.observe(_end(0))
+    for _ in range(n):
+        c.observe(_end(1))
+
+
+def test_switch_to_tuple_fires_immediately_without_a_reading():
+    c, calls = _join_controller()
+    for _ in range(3):
+        c.observe(_end(0))
+    assert c.states[1].mode == TUPLE
+    assert c.states[1].selectivity() is None and not c.has_selectivity_reading(c.states[1])
+    assert [d["action"] for d in c.decisions] == ["switch"]
+    assert calls == [] and c.deferrals == 0
+
+
+def test_recovery_with_no_join_completions_defers_not_caps():
+    c, calls = _join_controller()
+    _drift_recovery(c)
+    assert c.states[1].mode == TUPLE                      # stays at its current size
+    assert calls == []                                   # the pooled cap was never asked
+    assert [d["action"] for d in c.decisions] == ["switch"]  # no veto recorded
+    assert c.deferrals == 40 - 2                         # every vote after the 3rd
+
+
+def test_partial_window_still_defers():
+    c, calls = _join_controller()
+    for _ in range(15):          # one short of window_tasks
+        _own(c, 1)
+    _drift_recovery(c, n=10)
+    assert calls == [] and c.states[1].mode == TUPLE and c.deferrals > 0
+
+
+def test_switches_once_real_data_allows_it():
+    # Short-row join, own rate 0.75 (band cap 6): preferred 8 is vetoed, 4 passes.
+    c, calls = _join_controller()
+    _drift_recovery(c, n=5)
+    assert calls == [] and c.states[1].mode == TUPLE
+    pattern = [1, 1, 1, 0] * 4   # 16 own tasks at 0.75
+    for passed in pattern:
+        _own(c, passed)
+    c.observe(_end(1))           # the next block vote: streak was kept, evaluates at once
+    assert c.states[1].mode == BLOCK
+    assert calls == [(8, 0.75), (4, 0.75)]
+    assert c.decisions[-1]["action"] == "switch" and c.decisions[-1]["vetoed"] == [8]
+    assert c.formation_size(1, row("y")) == 4
+
+
+def test_real_low_selectivity_reading_still_vetoes():
+    c, calls = _join_controller()
+    _drift_recovery(c, n=5)
+    for passed in [1, 0, 0, 0] * 4:   # 0.25: band cap 1
+        _own(c, passed)
+    c.observe(_end(1))
+    assert c.states[1].mode == TUPLE
+    assert c.decisions[-1]["action"] == "veto" and c.decisions[-1]["vetoed"] == [8, 4, 2]
+    assert all(sel == 0.25 for _, sel in calls)
+
+
+def test_filters_are_not_deferred():
+    asked = []
+    c = _block_controller(lambda kind, k, t, sel=None: asked.append(sel) or False)
+    _to_tuple_then_high(c)       # filter stage, no own data: decides at once, as before
+    assert c.states[1].mode == BLOCK and asked == [None] and c.deferrals == 0
