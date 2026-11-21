@@ -14,6 +14,71 @@ These are confirmation and characterization runs on 4 workloads with
 min-max spread. They are not the evaluation matrix, and no paper claim
 should rest on them alone.
 
+## Open items for the team
+
+None of these were done or attempted in Phase 2.
+
+1. **Maps quality metric.** Nothing yet tells a wrong answer from a
+   right one in different words. The current metric, ROUGE-1 against the
+   per-tuple output, measures wording, not answers, and there is no
+   prompt-matched control (a block prompt with one row). Maps stay at
+   k = 1, with no validated path to anything larger
+   (QUALITY_CAP_DECISION.md).
+2. **Item 9: adaptive cost model (EWMA selectivity, step C).** It is built
+   and gated off (`adaptive_selectivity=False`; a test checks that nothing
+   sets it). It should be enabled only after a team decision and a Phase 3
+   commitment to evaluate it, because enabling it makes the validated
+   model a moving target.
+3. **The controller's switch-up trigger gap: dormant, not resolved.**
+   - **The bug:** a join's deferred switch to blocks is re-checked only on
+     upstream `task_end` votes. In filter -> join plans the join's own
+     reading (16 own tasks) arrives after the last upstream vote, so the
+     switch is never re-evaluated (P2-compare-v2: window filled at 896 own
+     tasks, 0 upstream votes after it).
+   - **Why nothing shows it today:** every join cap is 1, so no join ever
+     needs to switch up.
+   - **When it bites:** if a cap above 1 is ever justified (better join
+     data, or maps once item 1 is fixed), the bug is still there and must
+     be fixed then.
+   - **Likely fix:** also re-check a deferred switch when the managed
+     stage's own window fills, or on its own `task_end`.
+4. **Other quality caps may rest on lucky draws too: a methodological risk
+   across the whole cap system.** The join band cap rested on one draw
+   each of two workloads, and it failed on resampling. None of these was
+   ever resample-tested that way:
+   - the filter caps (short rows 20, long rows 1);
+   - the map caps;
+   - the original pooled join cap (1).
+
+   Greedy decoding makes repeats identical, so only re-drawing the data
+   shows the noise. The risk is directional:
+   - **A cap above 1 (the short-row filter cap of 20)** can let through a
+     quality loss that isn't real-world safe.
+   - **A cap at 1** can only cost speed, by missing a block size that would
+     have been fine.
+
+   Before relying on any cap, refit it over several independent samples
+   per workload.
+5. **Join-first decisions flagged by the Part 2 trace**
+   (RESOURCE_MODEL.md, "Join-first plans"):
+   - **The join cardinality model.** The fitted join pass share does not
+     carry across join instructions: it predicts 350-670 of 1,024 pairs
+     kept, against 2-57 actually kept per-tuple. It is the main cause of
+     the held-out join -> filter error (21.6% MAPE, 7.5% given the real
+     count). Fixing it changes plans.
+   - **COST_MODEL_VALIDATION.md finding 3 and `costmodel.passed_rows`.**
+     The given-cardinality path never ran for join-first plans, so the
+     held-out 20.2% "given cardinality" figure mixes in plain predictions.
+     Both need correcting.
+   - **Replacing λ.** Scope step 01's per-upstream overlap discount to
+     filter-first plans only. In join -> filter, overlap and contention
+     roughly cancel.
+   - **Not yet measured:** large first-stage join blocks (k1 >= 9),
+     under-predicted by 9-20% even at the real count. Telling standalone
+     cost from contention needs a join-alone run at k >= 9.
+   - **Not yet measured:** join -> filter -> join, because no catalog
+     workload has that shape.
+
 ## Correct the record first
 
 The evaluation matrix should not assume mechanisms that do not exist:
@@ -84,16 +149,14 @@ The evaluation matrix should not assume mechanisms that do not exist:
 - **A predictive KV-cost term, and concurrency or admission modelling in
   the KV check:** KV was never the bottleneck; queueing was.
 
-## No longer applicable
+## No longer applicable, or dormant
 
 - **Wire band caps into the initial plan** (`choose_pipeline(quality=True)`
-  passing a selectivity). Every join band now caps at the pooled value, so
-  passing a selectivity cannot change a plan.
-- **Fix the controller's switch-up trigger for joins.** P2-compare-v2
-  found the join's deferred switch to blocks is never re-checked: the
-  reading arrives after the last upstream vote. With a join cap of 1 the
-  re-check would always end in a veto, so the trigger gap has no effect.
-  Revisit both only if a future band cap above 1 is supported by evidence.
+  passing a selectivity). This is no longer applicable while every join
+  band caps at the pooled value, because a selectivity cannot change a
+  plan.
+- **The controller's switch-up trigger for joins** is dormant, not
+  resolved: open item 3.
 
 ## Join band cap: final state
 
@@ -157,23 +220,13 @@ The full write-up is in RESOURCE_MODEL.md, section "Join-first plans".
 - **The overlap evidence is thin:** one workload (j62_f90), two arms and 14
   queries, with no per-tuple join traces.
 
-**Needs its own decision (not acted on):**
-- **The join cardinality model.** The fitted pass share does not transfer
-  across join instructions.
-- **Correcting COST_MODEL_VALIDATION.md finding 3 and `passed_rows`.** The
-  held-out "given cardinality" 20.2% mixes in plain predictions for
-  join-first plans.
-- **Replacing λ:** scope the per-upstream overlap discount from step 01 to
-  filter-first plans only.
+**Needs its own decision:** see open item 5.
 
-## Still open (unchanged)
+## Also open, minor
 
-1. **The maps quality metric.** ROUGE-1 against per-tuple output measures
-   wording, not answers, and there is no prompt-matched control. Maps stay
-   at k = 1 (QUALITY_CAP_DECISION.md).
-2. **The 0.47-0.50 join conflict.** fanout50 and opposite pass at k = 4,
-   while the pipe joins fail. It is unexplained; with every join band at 1
-   it does not affect behaviour.
+- **The 0.47-0.50 join conflict.** fanout50 and opposite pass at k = 4,
+  while the pipe joins fail. It is unexplained; with every join band at 1
+  it does not affect behaviour.
 
 ## GPU runs in Phase 2
 
