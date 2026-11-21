@@ -148,3 +148,73 @@ What ran:
   It is not a query failure.
 - **5 `task_retry` events,** all on pipe_map_filter's map stage
   (`retry_max_tokens` 512), the existing map rerun path.
+
+## First comparison: static vs adaptive controller (P2-compare, 2026-11-21)
+
+Modal job `fc-01M7XNZ7RFAFM216K8D3BKMYJT` at `6f7c976`, L40S, 23:51-00:08 UTC.
+
+**Setup:**
+- **Arm:** one per workload, the cost model's default choice
+  (`choose_pipeline`, exhaustive, unguarded).
+- **Configurations:** controller off (static) or on (adaptive). The server
+  restarts between them, in the order off, on, off, on.
+- **Repeats:** 1 warmup plus 2 repeats per phase, so 4 measured repeats per
+  configuration.
+- **Held fixed:** model, revision, GPU, plan seed and temperature; the prefix
+  cache is reset per trial.
+
+Numbers are mean [min-max] over the 4 repeats. F1 is `report.quality`
+against the labels. Raw output and `compare_summary.json` are in
+`research/phase2/results/P2-compare/`.
+
+| workload (arm) | static latency s | adaptive latency s | static F1 | adaptive F1 | LLM requests s / a | controller decisions |
+|---|---|---|---|---|---|---|
+| rpipe_s50_drift (1,2) | 7.79 [7.73-7.88] | 7.47 [6.97-8.37] | 0.505 [0.502-0.506] | 0.627 [0.627-0.628] | 548 / 996 | 6 x static->tuple, 11 vetoes |
+| rpipe_s05 (1,2) | 1.70 [1.69-1.71] | 1.60 [1.59-1.61] | 0.380 [0.378-0.384] | 0.400 [0.400-0.400] | 132 / 164 | 6 x static->tuple |
+| rpipe_s50 (1,2) | 7.44 [7.25-7.93] | 7.75 [7.09-9.09] | 0.504 [0.503-0.505] | 0.505 [0.504-0.505] | 548 / 548 | none |
+| pipe_join_filter_j62_f90 (10,2) | 10.13 [9.93-10.40] | 10.04 [9.86-10.28] | 0.454 [0.446-0.461] | 0.456 [0.451-0.461] | 240 / 241 | none |
+
+The static phases had 0 controller decisions, as expected.
+
+**Latency:**
+- **rpipe_s05:** adaptive was faster, 1.60 vs 1.70 s, about 6%, with ranges
+  that do not overlap.
+- **rpipe_s50_drift:** no clear difference. The means are 7.47 vs 7.79 s, but
+  the ranges overlap.
+- **rpipe_s50 and j62_f90:** no difference. The controller made no decision
+  there, so both configurations ran the same plan. rpipe_s50's adaptive mean
+  is pulled up by one 9.09 s repeat.
+
+**Quality:**
+- **It held everywhere, and rose where the controller acted.** On the drift
+  workload, F1 went from 0.505 to 0.627, and on rpipe_s05 from 0.380 to 0.400,
+  both with ranges that do not overlap. In both, the controller moved the
+  join from blocks of 2 to per-tuple; the drift workload's requests went from
+  548 to 996, per-tuple's count.
+- **This fits the band cap's premise.** Those joins have true selectivity
+  0.47, and blocking hurts join quality at that selectivity.
+
+**Did steps A and B fire on real data?**
+- **The veto fired 11 times,** across 5 of the 6 adaptive drift queries
+  (warmups included). Each time it rejected size 2 (`vetoed: [2]`) and the
+  stage stayed per-tuple, as the unit tests predict when every candidate is
+  vetoed.
+- **The band caps (step A) never got a say.** Replaying the real `task_end`
+  sequence through the controller shows **no join task had finished at any
+  veto**. The per-tuple filter recovers within its first ~30 rows, while each
+  passing row's 32 join pairs are still queued. So the selectivity was `None`
+  and the pooled cap (1) applied. This is open item 5 (cold start) observed
+  in practice. Over each whole query the join's own pass rate was about
+  0.685, the cap-6 band, which would have allowed size 2 if it had been known
+  in time.
+- **A step-down landing on an intermediate size (step B) was not
+  exercisable.** With the default choice the managed stage starts at 2, so
+  its only candidates are 2 and 1. An intermediate landing needs a starting
+  size of 4 or more and a cap between the two.
+
+**Not shown by this experiment:**
+- It is one experiment on 4 workloads with 4 repeats, so its spread is only
+  min-max.
+- The drift workload is a reordered copy of rpipe_s50, built because no
+  catalog workload drifts.
+- Whether adaptive helps more broadly is for the full ablation matrix.

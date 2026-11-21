@@ -1,0 +1,556 @@
+{
+  "parts": {
+    "rpipe_s50_drift": {
+      "arm": "kalypso_pipe:1,2",
+      "static": {
+        "latency_s": {
+          "mean": 7.7875,
+          "min": 7.734,
+          "max": 7.879,
+          "n": 4
+        },
+        "f1": {
+          "mean": 0.5046,
+          "min": 0.5016,
+          "max": 0.506,
+          "n": 4
+        },
+        "llm_requests": {
+          "mean": 548,
+          "min": 548,
+          "max": 548,
+          "n": 4
+        },
+        "errors": 0
+      },
+      "adaptive": {
+        "latency_s": {
+          "mean": 7.4735,
+          "min": 6.973,
+          "max": 8.368,
+          "n": 4
+        },
+        "f1": {
+          "mean": 0.6269,
+          "min": 0.6267,
+          "max": 0.6276,
+          "n": 4
+        },
+        "llm_requests": {
+          "mean": 996,
+          "min": 996,
+          "max": 996,
+          "n": 4
+        },
+        "errors": 0
+      }
+    },
+    "rpipe_s05": {
+      "arm": "kalypso_pipe:1,2",
+      "static": {
+        "latency_s": {
+          "mean": 1.7027,
+          "min": 1.691,
+          "max": 1.711,
+          "n": 4
+        },
+        "f1": {
+          "mean": 0.3797,
+          "min": 0.3784,
+          "max": 0.3836,
+          "n": 4
+        },
+        "llm_requests": {
+          "mean": 132,
+          "min": 132,
+          "max": 132,
+          "n": 4
+        },
+        "errors": 0
+      },
+      "adaptive": {
+        "latency_s": {
+          "mean": 1.5993,
+          "min": 1.592,
+          "max": 1.605,
+          "n": 4
+        },
+        "f1": {
+          "mean": 0.4,
+          "min": 0.4,
+          "max": 0.4,
+          "n": 4
+        },
+        "llm_requests": {
+          "mean": 164,
+          "min": 164,
+          "max": 164,
+          "n": 4
+        },
+        "errors": 0
+      }
+    },
+    "rpipe_s50": {
+      "arm": "kalypso_pipe:1,2",
+      "static": {
+        "latency_s": {
+          "mean": 7.4403,
+          "min": 7.248,
+          "max": 7.932,
+          "n": 4
+        },
+        "f1": {
+          "mean": 0.5044,
+          "min": 0.5032,
+          "max": 0.5048,
+          "n": 4
+        },
+        "llm_requests": {
+          "mean": 548,
+          "min": 548,
+          "max": 548,
+          "n": 4
+        },
+        "errors": 0
+      },
+      "adaptive": {
+        "latency_s": {
+          "mean": 7.7477,
+          "min": 7.094,
+          "max": 9.093,
+          "n": 4
+        },
+        "f1": {
+          "mean": 0.5047,
+          "min": 0.5044,
+          "max": 0.5048,
+          "n": 4
+        },
+        "llm_requests": {
+          "mean": 548,
+          "min": 548,
+          "max": 548,
+          "n": 4
+        },
+        "errors": 0
+      }
+    },
+    "pipe_join_filter_j62_f90": {
+      "arm": "kalypso_pipe:10,2",
+      "static": {
+        "latency_s": {
+          "mean": 10.128,
+          "min": 9.927,
+          "max": 10.397,
+          "n": 4
+        },
+        "f1": {
+          "mean": 0.4539,
+          "min": 0.4462,
+          "max": 0.4613,
+          "n": 4
+        },
+        "llm_requests": {
+          "mean": 239.5,
+          "min": 238,
+          "max": 241,
+          "n": 4
+        },
+        "errors": 0
+      },
+      "adaptive": {
+        "latency_s": {
+          "mean": 10.0358,
+          "min": 9.863,
+          "max": 10.275,
+          "n": 4
+        },
+        "f1": {
+          "mean": 0.4564,
+          "min": 0.4514,
+          "max": 0.4611,
+          "n": 4
+        },
+        "llm_requests": {
+          "mean": 241,
+          "min": 241,
+          "max": 241,
+          "n": 4
+        },
+        "errors": 0
+      }
+    }
+  },
+  "queries_per_config": {
+    "static": {
+      "rpipe_s50_drift": 6,
+      "rpipe_s05": 6,
+      "rpipe_s50": 6,
+      "pipe_join_filter_j62_f90": 6
+    },
+    "adaptive": {
+      "rpipe_s50_drift": 6,
+      "rpipe_s05": 6,
+      "rpipe_s50": 6,
+      "pipe_join_filter_j62_f90": 6
+    }
+  },
+  "decision_counts": {
+    "static": [],
+    "adaptive": [
+      {
+        "part": "rpipe_s05",
+        "action": "switch",
+        "mode": "tuple",
+        "size": 1,
+        "vetoed": [],
+        "count": 6
+      },
+      {
+        "part": "rpipe_s50_drift",
+        "action": "switch",
+        "mode": "tuple",
+        "size": 1,
+        "vetoed": [],
+        "count": 6
+      },
+      {
+        "part": "rpipe_s50_drift",
+        "action": "veto",
+        "mode": "block",
+        "size": 2,
+        "vetoed": [
+          2
+        ],
+        "count": 11
+      }
+    ]
+  },
+  "adaptive_decisions": {
+    "rpipe_s50_drift": [
+      {
+        "query_id": "82e487ebf564",
+        "stage_id": 2,
+        "action": "switch",
+        "mode": "tuple",
+        "size": 1,
+        "from_mode": "static",
+        "reason": null,
+        "vetoed": null,
+        "pass_rate": 0.0,
+        "after_formations": 0,
+        "phase": "on-1"
+      },
+      {
+        "query_id": "82e487ebf564",
+        "stage_id": 2,
+        "action": "veto",
+        "mode": "block",
+        "size": 2,
+        "from_mode": null,
+        "reason": "quality guard",
+        "vetoed": [
+          2
+        ],
+        "pass_rate": null,
+        "after_formations": 576,
+        "phase": "on-1"
+      },
+      {
+        "query_id": "d2dfde417b31",
+        "stage_id": 2,
+        "action": "switch",
+        "mode": "tuple",
+        "size": 1,
+        "from_mode": "static",
+        "reason": null,
+        "vetoed": null,
+        "pass_rate": 0.0,
+        "after_formations": 0,
+        "phase": "on-1"
+      },
+      {
+        "query_id": "d2dfde417b31",
+        "stage_id": 2,
+        "action": "veto",
+        "mode": "block",
+        "size": 2,
+        "from_mode": null,
+        "reason": "quality guard",
+        "vetoed": [
+          2
+        ],
+        "pass_rate": null,
+        "after_formations": 160,
+        "phase": "on-1"
+      },
+      {
+        "query_id": "d2dfde417b31",
+        "stage_id": 2,
+        "action": "veto",
+        "mode": "block",
+        "size": 2,
+        "from_mode": null,
+        "reason": "quality guard",
+        "vetoed": [
+          2
+        ],
+        "pass_rate": null,
+        "after_formations": 320,
+        "phase": "on-1"
+      },
+      {
+        "query_id": "d2dfde417b31",
+        "stage_id": 2,
+        "action": "veto",
+        "mode": "block",
+        "size": 2,
+        "from_mode": null,
+        "reason": "quality guard",
+        "vetoed": [
+          2
+        ],
+        "pass_rate": null,
+        "after_formations": 416,
+        "phase": "on-1"
+      },
+      {
+        "query_id": "d2dfde417b31",
+        "stage_id": 2,
+        "action": "veto",
+        "mode": "block",
+        "size": 2,
+        "from_mode": null,
+        "reason": "quality guard",
+        "vetoed": [
+          2
+        ],
+        "pass_rate": null,
+        "after_formations": 672,
+        "phase": "on-1"
+      },
+      {
+        "query_id": "da6786337088",
+        "stage_id": 2,
+        "action": "switch",
+        "mode": "tuple",
+        "size": 1,
+        "from_mode": "static",
+        "reason": null,
+        "vetoed": null,
+        "pass_rate": 0.0,
+        "after_formations": 0,
+        "phase": "on-1"
+      },
+      {
+        "query_id": "da6786337088",
+        "stage_id": 2,
+        "action": "veto",
+        "mode": "block",
+        "size": 2,
+        "from_mode": null,
+        "reason": "quality guard",
+        "vetoed": [
+          2
+        ],
+        "pass_rate": null,
+        "after_formations": 160,
+        "phase": "on-1"
+      },
+      {
+        "query_id": "da6786337088",
+        "stage_id": 2,
+        "action": "veto",
+        "mode": "block",
+        "size": 2,
+        "from_mode": null,
+        "reason": "quality guard",
+        "vetoed": [
+          2
+        ],
+        "pass_rate": null,
+        "after_formations": 672,
+        "phase": "on-1"
+      },
+      {
+        "query_id": "da3ec64bfe13",
+        "stage_id": 2,
+        "action": "switch",
+        "mode": "tuple",
+        "size": 1,
+        "from_mode": "static",
+        "reason": null,
+        "vetoed": null,
+        "pass_rate": 0.0,
+        "after_formations": 0,
+        "phase": "on-2"
+      },
+      {
+        "query_id": "54f65eac9618",
+        "stage_id": 2,
+        "action": "switch",
+        "mode": "tuple",
+        "size": 1,
+        "from_mode": "static",
+        "reason": null,
+        "vetoed": null,
+        "pass_rate": 0.0,
+        "after_formations": 0,
+        "phase": "on-2"
+      },
+      {
+        "query_id": "54f65eac9618",
+        "stage_id": 2,
+        "action": "veto",
+        "mode": "block",
+        "size": 2,
+        "from_mode": null,
+        "reason": "quality guard",
+        "vetoed": [
+          2
+        ],
+        "pass_rate": null,
+        "after_formations": 256,
+        "phase": "on-2"
+      },
+      {
+        "query_id": "54f65eac9618",
+        "stage_id": 2,
+        "action": "veto",
+        "mode": "block",
+        "size": 2,
+        "from_mode": null,
+        "reason": "quality guard",
+        "vetoed": [
+          2
+        ],
+        "pass_rate": null,
+        "after_formations": 416,
+        "phase": "on-2"
+      },
+      {
+        "query_id": "0be31ce711f2",
+        "stage_id": 2,
+        "action": "switch",
+        "mode": "tuple",
+        "size": 1,
+        "from_mode": "static",
+        "reason": null,
+        "vetoed": null,
+        "pass_rate": 0.0,
+        "after_formations": 0,
+        "phase": "on-2"
+      },
+      {
+        "query_id": "0be31ce711f2",
+        "stage_id": 2,
+        "action": "veto",
+        "mode": "block",
+        "size": 2,
+        "from_mode": null,
+        "reason": "quality guard",
+        "vetoed": [
+          2
+        ],
+        "pass_rate": null,
+        "after_formations": 480,
+        "phase": "on-2"
+      },
+      {
+        "query_id": "0be31ce711f2",
+        "stage_id": 2,
+        "action": "veto",
+        "mode": "block",
+        "size": 2,
+        "from_mode": null,
+        "reason": "quality guard",
+        "vetoed": [
+          2
+        ],
+        "pass_rate": null,
+        "after_formations": 608,
+        "phase": "on-2"
+      }
+    ],
+    "rpipe_s05": [
+      {
+        "query_id": "c9cd0d8ca98c",
+        "stage_id": 2,
+        "action": "switch",
+        "mode": "tuple",
+        "size": 1,
+        "from_mode": "static",
+        "reason": null,
+        "vetoed": null,
+        "pass_rate": 0.0,
+        "after_formations": 0,
+        "phase": "on-1"
+      },
+      {
+        "query_id": "8a9e726f641a",
+        "stage_id": 2,
+        "action": "switch",
+        "mode": "tuple",
+        "size": 1,
+        "from_mode": "static",
+        "reason": null,
+        "vetoed": null,
+        "pass_rate": 0.0,
+        "after_formations": 0,
+        "phase": "on-1"
+      },
+      {
+        "query_id": "bdacc1f98b30",
+        "stage_id": 2,
+        "action": "switch",
+        "mode": "tuple",
+        "size": 1,
+        "from_mode": "static",
+        "reason": null,
+        "vetoed": null,
+        "pass_rate": 0.0,
+        "after_formations": 0,
+        "phase": "on-1"
+      },
+      {
+        "query_id": "37b8d8cc41fe",
+        "stage_id": 2,
+        "action": "switch",
+        "mode": "tuple",
+        "size": 1,
+        "from_mode": "static",
+        "reason": null,
+        "vetoed": null,
+        "pass_rate": 0.0,
+        "after_formations": 0,
+        "phase": "on-2"
+      },
+      {
+        "query_id": "bdc26d2b65ad",
+        "stage_id": 2,
+        "action": "switch",
+        "mode": "tuple",
+        "size": 1,
+        "from_mode": "static",
+        "reason": null,
+        "vetoed": null,
+        "pass_rate": 0.0,
+        "after_formations": 0,
+        "phase": "on-2"
+      },
+      {
+        "query_id": "90c43360b397",
+        "stage_id": 2,
+        "action": "switch",
+        "mode": "tuple",
+        "size": 1,
+        "from_mode": "static",
+        "reason": null,
+        "vetoed": null,
+        "pass_rate": 0.0,
+        "after_formations": 0,
+        "phase": "on-2"
+      }
+    ]
+  }
+}

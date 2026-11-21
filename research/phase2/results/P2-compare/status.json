@@ -1,0 +1,45 @@
+{
+  "id": "P2-compare",
+  "git_sha": "6f7c97687c9a9c689d2bad4a47115045d675d61f",
+  "git_dirty": false,
+  "started": "2026-11-20T23:51:56+0000",
+  "phases": {
+    "off-1": {
+      "adaptive": false,
+      "parts": {
+        "rpipe_s50_drift": "done",
+        "rpipe_s05": "done",
+        "rpipe_s50": "done",
+        "pipe_join_filter_j62_f90": "done"
+      }
+    },
+    "on-1": {
+      "adaptive": true,
+      "parts": {
+        "rpipe_s50_drift": "done",
+        "rpipe_s05": "done",
+        "rpipe_s50": "done",
+        "pipe_join_filter_j62_f90": "done"
+      }
+    },
+    "off-2": {
+      "adaptive": false,
+      "parts": {
+        "rpipe_s50_drift": "done",
+        "rpipe_s05": "done",
+        "rpipe_s50": "done",
+        "pipe_join_filter_j62_f90": "done"
+      }
+    },
+    "on-2": {
+      "adaptive": true,
+      "parts": {
+        "rpipe_s50_drift": "done",
+        "rpipe_s05": "done",
+        "rpipe_s50": "done",
+        "pipe_join_filter_j62_f90": "done"
+      }
+    }
+  },
+  "finished": "2026-11-21T00:08:38+0000"
+}

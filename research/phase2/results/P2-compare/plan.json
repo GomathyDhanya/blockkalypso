@@ -1,0 +1,49 @@
+{
+  "id": "P2-compare",
+  "parts": [
+    {
+      "name": "rpipe_s50_drift",
+      "workload": "rpipe_s50_drift",
+      "n": 0,
+      "arm": "kalypso_pipe:1,2"
+    },
+    {
+      "name": "rpipe_s05",
+      "workload": "rpipe_s05",
+      "n": 0,
+      "arm": "kalypso_pipe:1,2"
+    },
+    {
+      "name": "rpipe_s50",
+      "workload": "rpipe_s50",
+      "n": 0,
+      "arm": "kalypso_pipe:1,2"
+    },
+    {
+      "name": "pipe_join_filter_j62_f90",
+      "workload": "pipe_join_filter_j62_f90",
+      "n": 0,
+      "arm": "kalypso_pipe:10,2"
+    }
+  ],
+  "warmup": 1,
+  "repeats": 2,
+  "phases": [
+    [
+      "off-1",
+      false
+    ],
+    [
+      "on-1",
+      true
+    ],
+    [
+      "off-2",
+      false
+    ],
+    [
+      "on-2",
+      true
+    ]
+  ]
+}
