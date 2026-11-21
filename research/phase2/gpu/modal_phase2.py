@@ -257,3 +257,73 @@ def status_compare(run_id: str = ""):
         print(json.dumps(json.loads(data), indent=2))
     except Exception:  # noqa: BLE001
         print(rid, "no status yet")
+
+
+# --- Join band-cap resample check (P2-bandcap-resample) -----------------------
+#
+#     modal run --detach research/phase2/gpu/modal_phase2.py::launch_bandcap
+#     modal run research/phase2/gpu/modal_phase2.py::status_bandcap
+#
+# Measurement only. movie_fanout75/90 (the two workloads behind the band cap
+# at selectivity >= 0.6) and 4 disjoint resamples of each
+# (research/phase2/workloads.py), at per-tuple, block:4 and block:6. The
+# controller is off (KALYPSO_ADAPTIVE_STAGE unset), so the sizes are fixed.
+# Same model, revision, GPU, server settings and temperature 0 as the
+# original single/join-fanout* runs. The originals come first as a
+# reproduction control. 1 warmup and 2 repeats (greedy decoding, so the
+# repeats are a determinism check).
+
+BANDCAP_PARTS = [{"name": f"{b}{s}", "workload": f"{b}{s}", "n": 0}
+                 for b in ("movie_fanout75", "movie_fanout90")
+                 for s in ("", "_r1", "_r2", "_r3", "_r4")]
+BANDCAP = {"id": "P2-bandcap-resample", "parts": BANDCAP_PARTS, "warmup": 1, "repeats": 2,
+           "arms": [mb.BASELINE, "kalypso_block:4", "kalypso_block:6"]}
+
+
+@app.function(gpu=mb.GPU, timeout=4 * 3600,
+              volumes={"/results": mb.results, "/cache": mb.hf_cache})
+def run_bandcap(exp: dict, git_sha: str, git_dirty: bool) -> dict:
+    os.environ.pop("KALYPSO_ADAPTIVE_STAGE", None)
+    root = Path("/results") / OUT_ROOT / exp["id"]
+    root.mkdir(parents=True, exist_ok=True)
+    status = {"id": exp["id"], "git_sha": git_sha, "git_dirty": git_dirty,
+              "started": time.strftime("%Y-%m-%dT%H:%M:%S%z"), "parts": {}}
+    (root / "plan.json").write_text(json.dumps(exp, indent=2))
+    try:
+        mb._environment(root)
+        with mb._server(root, False, "bandcap") as proc:
+            for part in exp["parts"]:
+                try:
+                    mb._eval(root, part, exp["arms"], exp["warmup"], exp["repeats"],
+                             "run.jsonl", proc.pid)
+                    status["parts"][part["name"]] = "done"
+                except subprocess.CalledProcessError as exc:
+                    status["parts"][part["name"]] = f"failed: {exc}"
+                (root / "status.json").write_text(json.dumps(status, indent=2))
+                mb.results.commit()
+    except Exception as exc:  # noqa: BLE001 -- record and return
+        status["error"] = f"{type(exc).__name__}: {exc}"
+    status["finished"] = time.strftime("%Y-%m-%dT%H:%M:%S%z")
+    (root / "status.json").write_text(json.dumps(status, indent=2))
+    mb.results.commit()
+    return status
+
+
+@app.local_entrypoint()
+def launch_bandcap(wait: bool = False):
+    sha = mb._git("rev-parse", "HEAD")
+    dirty = bool(mb._git("status", "--porcelain", "--untracked-files=no"))
+    print(f"launching {BANDCAP['id']} at {sha[:9]}{' (dirty)' if dirty else ''}")
+    call = run_bandcap.spawn(BANDCAP, sha, dirty)
+    print(BANDCAP["id"], "spawned", call.object_id)
+    if wait:
+        print(json.dumps(call.get(), indent=2))
+
+
+@app.local_entrypoint()
+def status_bandcap():
+    try:
+        data = b"".join(mb.results.read_file(f"{OUT_ROOT}/{BANDCAP['id']}/status.json"))
+        print(json.dumps(json.loads(data), indent=2))
+    except Exception:  # noqa: BLE001
+        print(BANDCAP["id"], "no status yet")
