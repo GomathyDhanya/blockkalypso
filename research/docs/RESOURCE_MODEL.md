@@ -123,3 +123,114 @@ traces. They should not expect that change alone to close the 20% gap.
    vLLM scheduling, so "both running" means both had requests in flight on
    the server. That is the right notion for wall-time composition, but it is
    not GPU-level concurrency.
+
+## Join-first plans (Phase 2, item 4)
+
+Limit 1 above said the held-out pipeline error sits in join → filter
+(`validate-jf`) and that no join-first plan had been traced. This section
+takes one pass at it. It is read-only over committed results; there was no
+new GPU run and no cost-model change. Script: `research/phase2/join_first.py`.
+Output: `research/phase2/results/join_first/` (`arms.jsonl`,
+`overlap.jsonl`, `summary.json`).
+
+```
+python -m research.phase2.join_first --out research/phase2/results/join_first
+```
+
+Coverage: the 4 held-out `pipe_join_filter_*` workloads (119 arms), their
+`alone-join` runs (the join alone at k = 1, 2, 4, 6), and the only
+join-first task traces that exist. Those are pipe_join_filter_j62_f90 in
+the Phase 2 Modal runs: 12 queries at k = 10, 2 (the P2-compare and
+P2-compare-v2 controller-off phases) and 2 at k = 4, 4 (P2-functional; any
+query with a controller decision is dropped). The catalog has **no join →
+filter → join plan**, so that shape is untested.
+
+### 1. Cardinality: this is the main cause
+
+`costmodel.passed_rows` returns None unless the plan starts with a filter.
+So for join-first plans the "given cardinality" prediction in
+COST_MODEL_VALIDATION.md is the full prediction, and the finding there that
+"the error persists given the true cardinality, so it is composition" was
+never tested on these plans. Here the filter stage is re-predicted from the
+pairs the join really passed: (calls - the join stage's calls) × k2, which
+agrees with `alone-join` `rows_out`. Every other term is left unchanged.
+
+| arms | n | MAPE, as predicted | MAPE, true join cardinality | bias as predicted → true card | over-predicted (as predicted → true card) |
+|---|---|---|---|---|---|
+| all | 119 | 21.6% | **7.5%** | +17.2% → −5.5% | 95 → 25 |
+| per-tuple join (k1 = 1) | 22 | 36.0% | 5.0% | +36.0% → +3.9% | 22 → 18 |
+| k1 = 2-8 | 62 | 23.0% | 5.9% | +23.0% → −5.2% | 61 → 6 |
+| k1 ≥ 9 | 35 | 10.2% | 12.1% | −4.9% → −12.0% | 12 → 1 |
+
+**The model's join pass share is far off for this instruction.** The
+join's pass share (recall and false-positive rate) is fitted on the movie
+joins, and it predicts the join keeps 350-670 of 1,024 pairs. On these
+workloads the per-tuple join kept 2-57, and the block joins kept 89-396
+(`alone-join`). The over-prediction at k1 = 1 is almost entirely a filter
+stage the model sizes at about 540 rows when it really sees about 20.
+
+### 2. The join's standalone cost matches, but not inside the pipeline
+
+**Run alone, the model's join stage is accurate.** For the join alone
+(`alone-join`), the model predicts it within 2-6%: k = 1 is 10.4-11.1 s
+measured against 10.6-11.0 s predicted, and k = 2-6 is 6.9-7.4 s measured
+against 6.5-7.0 s predicted.
+
+**Inside the pipeline, the join takes longer.** In the traced j62_f90 k = 4, 4
+queries, the join stage spans 8.85 s, against 7.04 s alone (+26%), because the
+filter's requests share the server with it (section 3).
+
+### 3. Overlap is large, and it roughly cancels the contention
+
+| traced arm (j62_f90) | n | latency s | join span s | filter span s | filter tasks started before the join ended | (span₁ + span₂) / latency | latency after the join ended |
+|---|---|---|---|---|---|---|---|
+| join k=10 → filter k=2 | 12 | 9.91 | 9.53 | 7.12 | 97% | **1.68** | 3% |
+| join k=4 → filter k=4 | 2 | 9.54 | 8.85 | 7.32 | 97% | **1.70** | 6% |
+
+This is the opposite of filter → join (additive ratio about 1.07, with
+about 80% of the query after stage 1).
+- **The filter runs inside the join's span.** Join results stream into the
+  filter as they finish, so almost all filter work happens while the join is
+  still running.
+- **A span-overlap discount does not fit here.** The additive ratio is
+  about 1.7, but adding the stage costs over-predicts by only about 4-5% at
+  these two arms once the cardinality is right. The server is saturated, so
+  the filter's work slows the join instead of being hidden. Overlap and
+  in-pipeline contention roughly cancel.
+- **Implication:** the `(1 − ω_up) · L_up + L_down` form proposed above for
+  filter → join does not carry over to join-first plans. On a saturated
+  server, summing the work (λ·Σ L_i) is close to right for join → filter at
+  k1 ≤ 8.
+
+### What is still open
+
+1. **Large first-stage join blocks (k1 ≥ 9) are under-predicted** by a
+   median 9% (pipe arms) to 20% (`kalypso_block:16/32`), even at the true
+   cardinality. Examples (j62_f90): block:16 is 13.2 s against 11.6 s
+   predicted, and block:32 is 18.6 s against 14.6 s.
+   - **What is missing:** `alone-join` has no k ≥ 9 measurement. So this
+     data cannot separate a wrong standalone join cost at large k from
+     in-pipeline contention at large k.
+   - **What it would take:** a traced run of the join alone at k = 9-32.
+2. **Join → filter → join is untested:** no such workload exists.
+3. **The overlap evidence is thin:** it comes from one workload (j62_f90),
+   two arms (14 queries), on the Phase 2 controller-off runs. There are no
+   per-tuple join traces. That makes the "they cancel" reading plausible,
+   not established.
+
+### Needs its own decision (not acted on)
+
+- **The join cardinality model.** The fitted join pass share does not
+  transfer to the same-sentiment instruction, and the error is large at
+  k = 1. Fixing it, for example with per-instruction pass shares or by
+  using observed selectivity, changes plans, so it is a cost-model change
+  for a separate step.
+- **COST_MODEL_VALIDATION.md finding 3** ("given true cardinality the error
+  persists, so it is composition") does not hold for join-first plans,
+  because the given-cardinality path never ran for them. That document and
+  `passed_rows` should be corrected in a separate change. The 20.2%
+  "given cardinality" held-out figure mixes real given-cardinality
+  predictions for filter-first plans with plain predictions for join-first
+  plans.
+- **Replacing λ** with the per-upstream discount proposed above should be
+  scoped to filter-first plans only, given section 3.
