@@ -35,6 +35,22 @@ from .test_block_membership_order import _downstream_blocks
 from .test_telemetry import PIPELINES, RuleExecutor, _run
 
 
+def band_cap6_veto():
+    """costmodel_quality_veto over a copy of the committed fit with the short
+    selectivity >= 0.6 join band at k = 6. That is the raw step-A fit, before
+    the P2-bandcap-resample revert to 1. It exercises the band-cap path
+    (step-down to a band cap, a real reading unlocking a switch) independently
+    of the committed values."""
+    import tempfile
+    from pathlib import Path
+    from vllm.kalypso.controller.adaptive_stage import _FITTED
+    d = json.loads(_FITTED.read_text())
+    d["kinds"]["join"]["band_caps"]["short"]["1"] = 6
+    path = Path(tempfile.mkdtemp()) / "costmodel.json"
+    path.write_text(json.dumps(d))
+    return costmodel_quality_veto(path)
+
+
 def _pin_completion_order(monkeypatch):
     real_wait = asyncio.wait
 
@@ -373,8 +389,8 @@ def test_vetoed_top_candidate_steps_down_not_to_one():
 
 
 def test_real_veto_steps_down_to_the_join_band_cap():
-    # Short-row join at selectivity 0.8: band cap 6, so 8 is vetoed and 4 passes.
-    c = _block_controller(costmodel_quality_veto(), row_tokens=lambda text: 100)
+    # Short-row join at selectivity 0.8 under a band cap of 6: 8 is vetoed, 4 passes.
+    c = _block_controller(band_cap6_veto(), row_tokens=lambda text: 100)
     c.states[1].kind = "join"
     for _ in range(16):  # a real reading: a full own window (window_tasks) at 0.8
         c.observe({"event": "task_end", "stage_id": 2, "rows_in": 10, "rows_out": 8,
@@ -382,6 +398,19 @@ def test_real_veto_steps_down_to_the_join_band_cap():
     _to_tuple_then_high(c)
     assert c.states[1].mode == BLOCK and c.formation_size(1, row("y")) == 4
     assert c.decisions[-1]["vetoed"] == [8]
+
+
+def test_committed_band_caps_keep_high_selectivity_joins_per_tuple():
+    # After the revert every join band caps at 1, so the same real reading
+    # (0.8, short rows) now vetoes every candidate.
+    c = _block_controller(costmodel_quality_veto(), row_tokens=lambda text: 100)
+    c.states[1].kind = "join"
+    for _ in range(16):
+        c.observe({"event": "task_end", "stage_id": 2, "rows_in": 10, "rows_out": 8,
+                   "rows_passed": 8, "outcome": "block"})
+    _to_tuple_then_high(c)
+    assert c.states[1].mode == TUPLE
+    assert c.decisions[-1]["action"] == "veto" and c.decisions[-1]["vetoed"] == [8, 4, 2]
 
 
 def test_all_candidates_vetoed_stays_per_tuple():
@@ -478,8 +507,8 @@ def test_partial_window_still_defers():
 
 
 def test_switches_once_real_data_allows_it():
-    # Short-row join, own rate 0.75 (band cap 6): preferred 8 is vetoed, 4 passes.
-    c, calls = _join_controller()
+    # Short-row join, own rate 0.75, under a band cap of 6: preferred 8 is vetoed, 4 passes.
+    c, calls = _join_controller(band_cap6_veto())
     _drift_recovery(c, n=5)
     assert calls == [] and c.states[1].mode == TUPLE
     pattern = [1, 1, 1, 0] * 4   # 16 own tasks at 0.75

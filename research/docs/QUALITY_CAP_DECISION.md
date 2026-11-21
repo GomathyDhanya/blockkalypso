@@ -163,3 +163,31 @@ before it passes at 4, so the stop-at-first-failure rule keeps it at 1. Long
 rows stay at 1, because each band has only one long-row workload. The
 adaptive controller passes the managed stage's own pass rate as the
 selectivity; maps are unchanged.
+
+## Update: band fit reconsidered and reverted (Phase 2, after P2-bandcap-resample)
+
+The step-A band cap (k = 6 for short-row joins at selectivity >= 0.6) was
+fitted from one draw each of movie_fanout75 and movie_fanout90. Repeats
+of a draw cannot show noise: decoding is greedy, so the three repeats of
+each were identical. So the check re-drew the pairs instead. It used 4
+fresh 32 x 32 samples of each workload, disjoint from the original and
+from each other, at per-tuple, k = 4 and k = 6, with the same model and
+settings (`research/phase2/results/P2-bandcap-resample/`, commits
+`2eebf56` and `794dba1`).
+
+- The original draws reproduced: ΔF1 +0.109/+0.087 and +0.125/+0.071 at
+  k = 4/6.
+- On the 8 fresh samples, k = 6 failed the -0.02 check on 7 and k = 4 on 4.
+  Mean ΔF1 at k = 4 was -0.037 (fanout75) and -0.015 (fanout90), and at
+  k = 6 it was -0.111 and -0.066.
+- Both original draws had the lowest per-tuple F1 of their family (about
+  0.81), which left blocking the most room to help. Where per-tuple F1 was
+  0.85-0.94, blocking cost F1.
+
+The original band fit therefore did not generalize: it was a favourable
+draw. `costmodel.BAND_CAP_CEILING = 1` now holds every join band cap at 1,
+the pooled join cap, pending better evidence, and `costmodel.json`
+`band_caps` reflects it. The machinery stays in place:
+`selectivity_band`, `band_caps`, `fit_band_caps` and the controller's
+selectivity-aware veto. A future band split should be fitted over several
+independent samples per workload, not one draw.

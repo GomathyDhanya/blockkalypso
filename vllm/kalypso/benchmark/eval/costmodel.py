@@ -131,9 +131,19 @@ class Items:
 #   measured there; fewer stops the band at the previous k.
 # Callers that pass no selectivity get the pooled cap, unchanged. Maps and
 # filters have no band caps.
+#
+# Reverted (Phase 2, after P2-bandcap-resample): the fit above gives the
+# selectivity >= 0.6 short-row band k = 6 from movie_fanout75/90. On 8 fresh,
+# disjoint 32 x 32 samples of the same two workloads, k = 6 failed the F1
+# check on 7 and k = 4 on 4, with negative mean ΔF1 in both. The original
+# draws were favourable outliers. Every band cap is now held at
+# BAND_CAP_CEILING = 1, the pooled join cap, pending better evidence. The
+# machinery (bands, band_caps, the controller's selectivity-aware veto)
+# stays. Raising the ceiling restores the raw fit.
 
 JOIN_SELECTIVITY_EDGES = (0.6,)
 MIN_BAND_WORKLOADS = 2
+BAND_CAP_CEILING = 1
 
 
 def selectivity_band(selectivity: float) -> str:
@@ -805,7 +815,8 @@ def _band_cap(rows: list[dict], measured: list[int], f1_slack: float) -> int:
 
 
 def fit_band_caps(rows: list[dict], f1_slack: float) -> dict:
-    """Join caps per (regime, selectivity band); see the note above KindParams.
+    """Join caps per (regime, selectivity band), held at BAND_CAP_CEILING; see
+    the note above KindParams.
     A workload's selectivity is positives / items of its per-tuple run."""
     sel = {r["workload"]: r["positives"] / r["items"] for r in rows
            if r["k"] == 1 and r.get("positives") is not None and r.get("items")}
@@ -816,8 +827,9 @@ def fit_band_caps(rows: list[dict], f1_slack: float) -> dict:
             continue
         measured = sorted({r["k"] for r in at})
         bands = sorted({selectivity_band(sel[r["workload"]]) for r in at})
-        out[regime] = {b: _band_cap([r for r in at if selectivity_band(sel[r["workload"]]) == b],
-                                    measured, f1_slack) for b in bands}
+        out[regime] = {b: min(BAND_CAP_CEILING,
+                              _band_cap([r for r in at if selectivity_band(sel[r["workload"]]) == b],
+                                        measured, f1_slack)) for b in bands}
     return out
 
 

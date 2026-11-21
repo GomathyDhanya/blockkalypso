@@ -28,11 +28,11 @@ JOINS = {
     "pipe_filter_join_s90_join": (0.47, "short"),
     "cnli_join_low": (0.21, "long"), "cnli_join_high": (0.65, "long"),
 }
-# fanout75/90 kept ΔF1 >= -0.02 at k = 2, 4 and 6 and fail at 11. Every other
-# join stays at 1: fanout50 fails at k = 2 (-0.048) before passing at 4, and
-# the cap stops at the first failing k; cnli_join_low's lone +0.007 at k = 2 is
-# one workload, below MIN_BAND_WORKLOADS.
-EXPECTED_CAP = {w: (6 if w in ("movie_fanout75", "movie_fanout90") else 1) for w in JOINS}
+# The raw step-A fit gives fanout75/90 (short, selectivity >= 0.6) k = 6.
+# After P2-bandcap-resample, BAND_CAP_CEILING holds every band at 1, the
+# pooled join cap: k = 6 failed on 7 of 8 fresh samples.
+RAW_CAP = {w: (6 if w in ("movie_fanout75", "movie_fanout90") else 1) for w in JOINS}
+EXPECTED_CAP = {w: 1 for w in JOINS}
 TOKENS = {"short": 100.0, "long": 1600.0}
 
 
@@ -59,8 +59,31 @@ def test_fit_reproduces_committed_band_caps(monkeypatch):
     for kind, p in fitted.kinds.items():
         assert p.caps == committed[kind]["caps"]            # pooled caps unchanged
         assert p.band_caps == committed[kind]["band_caps"]
-    assert committed["join"]["band_caps"] == {"short": {"0": 1, "1": 6},
+    assert committed["join"]["band_caps"] == {"short": {"0": 1, "1": 1},
                                               "long": {"0": 1, "1": 1}}
+
+
+def test_raw_fit_without_ceiling_is_unchanged(monkeypatch):
+    # The revert is the ceiling only: lifting it gives back the step-A values.
+    from research.baseline.analysis.quality_cap_audit import SLACK, fit_rows
+    monkeypatch.setattr(cm, "_count", cm._count)
+    monkeypatch.setattr(cm, "BAND_CAP_CEILING", 10**9)
+    assert cm.fit(fit_rows(), SLACK).kinds["join"].band_caps == \
+        {"short": {"0": 1, "1": 6}, "long": {"0": 1, "1": 1}}
+
+
+def test_reverted_band_caps_equal_the_pooled_cap(model):
+    join = model.kinds["join"]
+    for regime, bands in join.band_caps.items():
+        assert set(bands) == {"0", "1"}
+        for cap in bands.values():
+            assert cap == join.caps[regime] == 1
+    for regime in ("short", "long"):
+        pooled = model.choose_k("join", _items(regime), quality=True)
+        for sel in (0.0, 0.3, 0.59, 0.6, 0.75, 0.91, 1.0):
+            assert model.k_max("join", _items(regime), quality=True, selectivity=sel) \
+                == model.k_max("join", _items(regime), quality=True)
+            assert model.choose_k("join", _items(regime), quality=True, selectivity=sel) == pooled
 
 
 @pytest.mark.parametrize("workload", sorted(JOINS))
@@ -70,13 +93,12 @@ def test_join_cap_per_workload(model, workload):
         == EXPECTED_CAP[workload]
 
 
-def test_previously_miscapped_joins_now_get_larger_k(model):
+def test_high_selectivity_joins_back_at_the_pooled_cap(model):
     for w in ("movie_fanout75", "movie_fanout90"):
         sel, regime = JOINS[w]
-        assert model.k_max("join", _items(regime), quality=True) == 1  # pooled, as before
-        assert model.k_max("join", _items(regime), quality=True, selectivity=sel) == 6
-        pick = model.choose_k("join", _items(regime), quality=True, selectivity=sel)
-        assert pick["k_max"] == 6
+        assert model.k_max("join", _items(regime), quality=True) == 1
+        assert model.k_max("join", _items(regime), quality=True, selectivity=sel) == 1
+        assert model.choose_k("join", _items(regime), quality=True, selectivity=sel)["k_max"] == 1
 
 
 def test_low_selectivity_joins_still_cap_at_one(model):
@@ -103,8 +125,8 @@ def test_default_veto_uses_band_cap():
     veto = costmodel_quality_veto()
     assert veto("join", 4, 100.0) is True          # pooled cap 1
     assert veto("join", 4, 100.0, 0.3) is True     # low band
-    assert veto("join", 4, 100.0, 0.8) is False    # high band, cap 6
-    assert veto("join", 8, 100.0, 0.8) is True     # above the band cap
+    assert veto("join", 4, 100.0, 0.8) is True     # high band, reverted to cap 1
+    assert veto("join", 2, 100.0, 0.8) is True
     assert veto("join", 4, 1600.0, 0.8) is True    # long rows: cap 1 in every band
     assert veto("map", 2, 40.0, 0.9) is True
 

@@ -88,8 +88,8 @@ PREFLIGHT = """
 from vllm.kalypso.controller.adaptive_stage import AdaptiveStageConfig, costmodel_quality_veto
 veto = costmodel_quality_veto()
 assert AdaptiveStageConfig.from_env().enabled, "KALYPSO_ADAPTIVE_STAGE not set"
-assert veto("join", 4, 100.0, 0.8) is False and veto("join", 4, 100.0, 0.3) is True
-print("preflight ok: controller enabled, veto loads, band caps present")
+assert veto("join", 4, 100.0, 0.3) is True and veto("filter", 4, 40.0) is False
+print("preflight ok: controller enabled, veto loads")
 """
 
 
