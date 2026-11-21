@@ -280,3 +280,41 @@ The static phases had 0 decisions.
 - **Quality:** it held. Drift F1 went from 0.501 to 0.627, as before.
   rpipe_s05's adaptive F1 and request counts varied between repeats
   (0.400-0.606, 164-196 requests).
+
+## Band-cap resample check (P2-bandcap-resample, 2026-11-21)
+
+Modal job `fc-01M7Y73769KHWWS7P01VWXEQC4` at `2eebf56`, L40S,
+04:51-05:09 UTC. Measurement only: no cap or code change. The run covers
+movie_fanout75/90 (the original draws) and 4 disjoint resamples of each
+(`research/phase2/workloads.py`, none sharing a review with the original
+or each other). Each runs at per-tuple, block:4 and block:6, with the
+controller off and greedy decoding. 1 warmup, 2 repeats; the repeats agree
+to 3 decimals. Raw output and `bandcap_summary.json` are in
+`research/phase2/results/P2-bandcap-resample/`.
+
+ΔF1 vs per-tuple (fail threshold -0.02):
+
+| sample | per-tuple F1 | ΔF1 k=4 | ΔF1 k=6 |
+|---|---|---|---|
+| fanout75 original | 0.806 | +0.109 | +0.087 |
+| fanout75 r1 | 0.809 | +0.014 | -0.036 (fail) |
+| fanout75 r2 | 0.941 | -0.015 | -0.139 (fail) |
+| fanout75 r3 | 0.890 | -0.063 (fail) | -0.139 (fail) |
+| fanout75 r4 | 0.879 | -0.085 (fail) | -0.128 (fail) |
+| fanout90 original | 0.819 | +0.125 | +0.071 |
+| fanout90 r1 | 0.879 | -0.066 (fail) | -0.096 (fail) |
+| fanout90 r2 | 0.938 | -0.072 (fail) | -0.131 (fail) |
+| fanout90 r3 | 0.848 | +0.036 | -0.027 (fail) |
+| fanout90 r4 | 0.863 | +0.041 | -0.010 |
+
+- **The originals reproduce:** within 0.008 for fanout75 and exactly for
+  fanout90, against the 2026-10-31 run.
+- **The original draws were favourable outliers.** Across the 8 resamples,
+  k=6 fails on 7 and k=4 on 4. The resample mean ΔF1 is -0.037 (fanout75)
+  and -0.015 (fanout90) at k=4, and -0.111 and -0.066 at k=6.
+- **Pattern:** both originals had the lowest per-tuple F1 of their family,
+  so blocking had the most room to help there. Where per-tuple is already
+  about 0.88-0.94, blocking costs F1.
+- **The cap of 6 for short joins at selectivity >= 0.6 is not supported.**
+  The recommendation is to pull it back to 1, the same as the pooled cap.
+  Not applied; waiting for confirmation.

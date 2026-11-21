@@ -1,0 +1,19 @@
+{
+  "id": "P2-bandcap-resample",
+  "git_sha": "2eebf562a3488ca398613feee97a73de0d6daaea",
+  "git_dirty": false,
+  "started": "2026-11-21T04:51:12+0000",
+  "parts": {
+    "movie_fanout75": "done",
+    "movie_fanout75_r1": "done",
+    "movie_fanout75_r2": "done",
+    "movie_fanout75_r3": "done",
+    "movie_fanout75_r4": "done",
+    "movie_fanout90": "done",
+    "movie_fanout90_r1": "done",
+    "movie_fanout90_r2": "done",
+    "movie_fanout90_r3": "done",
+    "movie_fanout90_r4": "done"
+  },
+  "finished": "2026-11-21T05:09:01+0000"
+}

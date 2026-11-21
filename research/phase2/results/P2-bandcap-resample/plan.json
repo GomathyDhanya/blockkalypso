@@ -1,0 +1,62 @@
+{
+  "id": "P2-bandcap-resample",
+  "parts": [
+    {
+      "name": "movie_fanout75",
+      "workload": "movie_fanout75",
+      "n": 0
+    },
+    {
+      "name": "movie_fanout75_r1",
+      "workload": "movie_fanout75_r1",
+      "n": 0
+    },
+    {
+      "name": "movie_fanout75_r2",
+      "workload": "movie_fanout75_r2",
+      "n": 0
+    },
+    {
+      "name": "movie_fanout75_r3",
+      "workload": "movie_fanout75_r3",
+      "n": 0
+    },
+    {
+      "name": "movie_fanout75_r4",
+      "workload": "movie_fanout75_r4",
+      "n": 0
+    },
+    {
+      "name": "movie_fanout90",
+      "workload": "movie_fanout90",
+      "n": 0
+    },
+    {
+      "name": "movie_fanout90_r1",
+      "workload": "movie_fanout90_r1",
+      "n": 0
+    },
+    {
+      "name": "movie_fanout90_r2",
+      "workload": "movie_fanout90_r2",
+      "n": 0
+    },
+    {
+      "name": "movie_fanout90_r3",
+      "workload": "movie_fanout90_r3",
+      "n": 0
+    },
+    {
+      "name": "movie_fanout90_r4",
+      "workload": "movie_fanout90_r4",
+      "n": 0
+    }
+  ],
+  "warmup": 1,
+  "repeats": 2,
+  "arms": [
+    "kalypso_per_tuple",
+    "kalypso_block:4",
+    "kalypso_block:6"
+  ]
+}
