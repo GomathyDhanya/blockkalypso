@@ -223,3 +223,60 @@ The static phases had 0 controller decisions, as expected.
 - The drift workload is a reordered copy of rpipe_s50, built because no
   catalog workload drifts.
 - Whether adaptive helps more broadly is for the full ablation matrix.
+
+## Re-run after the cold-start fix (P2-compare-v2, 2026-11-21)
+
+Modal job `fc-01M7XSWKP3FFCD7FSAPGF31QDD` at `5d7ca4e`, which includes the
+deferral fix `50da374` and `adaptive_summary` telemetry. L40S,
+01:00-01:15 UTC. Setup as P2-compare: same 4 workloads and arms, off, on,
+off, on phases, 4 measured repeats per configuration. Raw output and
+`compare_summary.json` are in `research/phase2/results/P2-compare-v2/`.
+Numbers are mean [min-max].
+
+| workload (arm) | static latency s | adaptive latency s | static F1 | adaptive F1 | LLM requests s / a | decisions (adaptive) |
+|---|---|---|---|---|---|---|
+| rpipe_s50_drift (1,2) | 7.52 [7.48-7.55] | 6.60 [6.55-6.70] | 0.501 [0.499-0.502] | 0.627 [0.627-0.628] | 548 / 996 | 6 x static->tuple, 0 vetoes, 10 deferrals |
+| rpipe_s05 (1,2) | 1.65 [1.64-1.67] | 1.56 [1.53-1.62] | 0.378 | 0.452 [0.400-0.606] | 132 / 172 [164-196] | 6 x static->tuple, 0 deferrals |
+| rpipe_s50 (1,2) | 7.07 [7.02-7.13] | 7.15 [7.14-7.17] | 0.504 | 0.504 | 548 / 548 | none |
+| pipe_join_filter_j62_f90 (10,2) | 9.86 [9.76-10.00] | 9.94 [9.88-10.01] | 0.467 [0.457-0.480] | 0.465 [0.453-0.476] | 243 / 245 | none |
+
+The static phases had 0 decisions.
+
+**Did the join switch back up? No, and the cause is structural.**
+- **The window filled in every drift query.** The join finished 896 of its
+  own tasks, far past the 16-task threshold, and ended with a real reading
+  of 0.625-0.81, the cap-6 band. So the threshold is reachable in a query
+  this size.
+- **But it filled too late.** It filled only after the upstream filter had
+  finished all 100 of its tasks, so 0 upstream votes came afterwards.
+- **What happened instead:** the gate held the switch up 10 times across
+  the 6 queries (0-3 per query) and asked no veto (0 veto checks; P2-compare
+  had 11 pooled-cap vetoes). The join stayed per-tuple because no vote was
+  left to act on the reading, not because a cap said so.
+- **The cause:** the controller decides only on upstream `task_end` events.
+  In a filter -> join pipeline the per-tuple filter finishes (in prefill
+  order) long before the fanned-out join pairs. The decision trigger runs
+  out before the evidence the deferral waits for exists.
+- **A possible fix (not done here):** also re-check a deferred switch up
+  when the managed stage's own window fills, or on its own `task_end`
+  events.
+
+**Other workloads:**
+- **rpipe_s05:** its join window also filled (64-96 own tasks), and 7-12
+  upstream votes came afterwards. They were all low-pass-rate votes, so it
+  correctly stayed per-tuple with nothing deferred.
+- **rpipe_s50 and j62_f90:** no decisions, as in P2-compare.
+
+**Latency and quality:**
+- **Fix's effect:** behaviour is the same as P2-compare apart from the
+  vetoes becoming deferrals, so this is a repeat of the same comparison.
+- **rpipe_s50_drift:** adaptive was faster this time, 6.60 vs 7.52 s with
+  ranges that do not overlap. In P2-compare the ranges overlapped (7.47 vs
+  7.79 s).
+- **rpipe_s05:** adaptive was faster again, 1.56 vs 1.65 s.
+- **rpipe_s50:** no decisions, yet static was faster by about 1% with ranges
+  that do not overlap. With an identical plan, that suggests a phase-to-phase
+  noise floor of about 1%.
+- **Quality:** it held. Drift F1 went from 0.501 to 0.627, as before.
+  rpipe_s05's adaptive F1 and request counts varied between repeats
+  (0.400-0.606, 164-196 requests).

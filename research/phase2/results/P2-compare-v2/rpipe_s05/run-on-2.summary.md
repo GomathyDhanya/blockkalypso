@@ -1,0 +1,6 @@
+Model `Qwen/Qwen2.5-7B-Instruct` on unknown (Linux-4.19.0-gvisor-x86_64-with-glibc2.39); workload `rpipe_s05` (join), 100 x 32 = 3200 pairs, 30 positive; 2 repeats after 1 warmup; prefix cache reset per trial: yes; git `?`.
+Server: `python3 -m vllm.entrypoints.cli.main serve Qwen/Qwen2.5-7B-Instruct --revision a09a35458c702b33eeacc393d103063234e8bc28 --host 127.0.0.1 --port 8000 --enable-prefix-caching --no-async-scheduling --api-server-count 1 --max-model-len 32768 --max-num-seqs 256 --max-num-batched-tokens 2048` (started Sat Nov 21 01:11:42 2026).
+
+| Arm | Latency (s) | LLM requests | Block calls | Fallback calls | Prompt tokens | Gen tokens | Prefix hit rate | Peak KV % | Peak running | Peak waiting | Preemptions | Peak RSS (MiB) | Items/s | Truncated | Mean prefill (s) | Mean decode (s) | Accuracy | Precision | Recall | F1 | Agrees w/ kalypso_per_tuple | Self-agreement |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| `kalypso_pipe:1,2` | 1.58 [1.54-1.62] | 180 [164-196] | n/a | 80 [64-96] | 26949 [24539-29359] | 460 [428-492] | 0.33 [0.32-0.35] | 0.9 | 38 [37-38] | 46 [45-46] | 0 | 10780 | 2027.77 [1978.97-2076.57] | 0 | 0.143 [0.142-0.144] | 0.193 [0.186-0.199] | 0.99 [0.99-0.99] | 0.38 [0.33-0.43] | 0.75 [0.50-1.00] | 0.50 [0.40-0.61] | n/a | 99% |

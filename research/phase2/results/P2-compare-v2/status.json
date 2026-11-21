@@ -1,0 +1,45 @@
+{
+  "id": "P2-compare-v2",
+  "git_sha": "5d7ca4eff4bd454081035d86a7805790c90ccc97",
+  "git_dirty": false,
+  "started": "2026-11-21T01:00:23+0000",
+  "phases": {
+    "off-1": {
+      "adaptive": false,
+      "parts": {
+        "rpipe_s50_drift": "done",
+        "rpipe_s05": "done",
+        "rpipe_s50": "done",
+        "pipe_join_filter_j62_f90": "done"
+      }
+    },
+    "on-1": {
+      "adaptive": true,
+      "parts": {
+        "rpipe_s50_drift": "done",
+        "rpipe_s05": "done",
+        "rpipe_s50": "done",
+        "pipe_join_filter_j62_f90": "done"
+      }
+    },
+    "off-2": {
+      "adaptive": false,
+      "parts": {
+        "rpipe_s50_drift": "done",
+        "rpipe_s05": "done",
+        "rpipe_s50": "done",
+        "pipe_join_filter_j62_f90": "done"
+      }
+    },
+    "on-2": {
+      "adaptive": true,
+      "parts": {
+        "rpipe_s50_drift": "done",
+        "rpipe_s05": "done",
+        "rpipe_s50": "done",
+        "pipe_join_filter_j62_f90": "done"
+      }
+    }
+  },
+  "finished": "2026-11-21T01:14:53+0000"
+}
