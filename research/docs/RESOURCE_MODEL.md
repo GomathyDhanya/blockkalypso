@@ -193,8 +193,9 @@ about 80% of the query after stage 1).
   filter as they finish, so almost all filter work happens while the join is
   still running.
 - **A span-overlap discount does not fit here.** The additive ratio is
-  about 1.7, but adding the stage costs over-predicts by only about 4-5% at
-  these two arms once the cardinality is right. The server is saturated, so
+  about 1.7, but once the cardinality is right, adding the stage costs
+  lands 1-6% under the traced latency at these two arms (9.31 s against
+  9.91 s, and 9.42 s against 9.54 s). The server is saturated, so
   the filter's work slows the join instead of being hidden. Overlap and
   in-pipeline contention roughly cancel.
 - **Implication:** the `(1 − ω_up) · L_up + L_down` form proposed above for
