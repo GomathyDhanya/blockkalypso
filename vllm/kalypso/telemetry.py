@@ -26,7 +26,7 @@ Events (see research/docs/BASELINE_METHODOLOGY.md for every field):
 ``query_start``, ``plan_built``, ``kv_stage_registered``, ``task_enqueue``,
 ``task_start``, ``task_end``, ``task_retry``, ``scheduler_sample``,
 ``llm_call``, ``block_eval``, ``kv_admit_rejected``, ``query_end``,
-``adaptive_switch``.
+``adaptive_switch``, ``adaptive_summary``.
 
 In-process subscribers (``subscribe``) receive the same records as the sink.
 They are scoped to the current context (one query's executor loop), so

@@ -148,6 +148,7 @@ class AsyncPipelineExecutor:
             return await self._execute_tasks(ctxs, stages, controller)
         finally:
             telemetry.unsubscribe(token)
+            telemetry.emit("adaptive_summary", **controller.summary())
 
     async def _execute_tasks(self, ctxs, stages, controller):
         stage_stat = {}

@@ -237,20 +237,23 @@ def run_compare(exp: dict, git_sha: str, git_dirty: bool) -> dict:
 
 
 @app.local_entrypoint()
-def launch_compare(wait: bool = False):
+def launch_compare(wait: bool = False, run_id: str = ""):
+    """``--run-id`` writes to research-phase2/<run_id>/ (default P2-compare)."""
+    exp = {**COMPARE, "id": run_id or COMPARE["id"]}
     sha = mb._git("rev-parse", "HEAD")
     dirty = bool(mb._git("status", "--porcelain", "--untracked-files=no"))
-    print(f"launching {COMPARE['id']} at {sha[:9]}{' (dirty)' if dirty else ''}")
-    call = run_compare.spawn(COMPARE, sha, dirty)
-    print(COMPARE["id"], "spawned", call.object_id)
+    print(f"launching {exp['id']} at {sha[:9]}{' (dirty)' if dirty else ''}")
+    call = run_compare.spawn(exp, sha, dirty)
+    print(exp["id"], "spawned", call.object_id)
     if wait:
         print(json.dumps(call.get(), indent=2))
 
 
 @app.local_entrypoint()
-def status_compare():
+def status_compare(run_id: str = ""):
+    rid = run_id or COMPARE["id"]
     try:
-        data = b"".join(mb.results.read_file(f"{OUT_ROOT}/{COMPARE['id']}/status.json"))
+        data = b"".join(mb.results.read_file(f"{OUT_ROOT}/{rid}/status.json"))
         print(json.dumps(json.loads(data), indent=2))
     except Exception:  # noqa: BLE001
-        print(COMPARE["id"], "no status yet")
+        print(rid, "no status yet")

@@ -11,7 +11,11 @@ over the measured repeats of every phase, it reports:
 It also lists every controller decision in the adaptive phases' traces
 (switch, veto with the sizes vetoed, step-down) per query, warmups included:
 the trace does not mark which query was a warmup. It also counts decisions
-in the static phases, which must be 0. Mean and spread only, no statistics.
+in the static phases, which must be 0. Per adaptive query it also reports
+the controller's ``adaptive_summary``: deferrals, veto checks, and per
+managed stage its own finished tasks, whether its window filled (a real
+selectivity reading) and how many upstream votes came after that. Mean and
+spread only, no statistics.
 
     python -m research.phase2.compare_summary research/phase2/results/P2-compare
 """
@@ -73,13 +77,31 @@ def summarize(root: Path) -> dict:
                for cfg, v in per.items()}}
 
     decisions = defaultdict(list)
+    summaries = defaultdict(list)
     counts = {"static": Counter(), "adaptive": Counter()}
     queries = {"static": Counter(), "adaptive": Counter()}
     for trace in sorted(root.glob("trace-*.jsonl*")):
         tag = trace.name.split(".")[0].removeprefix("trace-")
         cfg = "adaptive" if adaptive_of.get(tag) else "static"
         part_of = {}
+        ends = defaultdict(list)  # query -> [(stage_id, t_mono)] of own task ends
         for r in _lines(trace):
+            if r["event"] == "task_end" and r.get("outcome") != "retry":
+                ends[r.get("query_id")].append((r.get("stage_id"), r.get("t_mono")))
+            if r["event"] == "adaptive_summary":
+                q = r.get("query_id")
+                entry = {"phase": tag, "query_id": q, "deferrals": r.get("deferrals"),
+                         "veto_checks": r.get("veto_checks"), "stages": r.get("stages")}
+                for sid, st_ in (r.get("stages") or {}).items():
+                    # Was there an upstream vote left after the window filled?
+                    own = [t for s, t in ends[q] if str(s) == sid]
+                    up = [t for s, t in ends[q] if str(s) == str(int(sid) - 1)]
+                    if len(own) >= 16:
+                        filled = sorted(own)[15]
+                        st_["upstream_votes_after_reading"] = sum(t > filled for t in up)
+                    else:
+                        st_["upstream_votes_after_reading"] = None
+                summaries[part_of.get(q, "?")].append(entry)
             if r["event"] == "query_start":
                 part_of[r["query_id"]] = data_path_to_part.get(str(r.get("data_path")), "?")
                 queries[cfg][part_of[r["query_id"]]] += 1
@@ -97,6 +119,7 @@ def summarize(root: Path) -> dict:
               for (p, a, m, s, v), n in sorted(c.items())]
         for cfg, c in counts.items()}
     out["adaptive_decisions"] = dict(decisions)
+    out["adaptive_summaries"] = dict(summaries)
     return out
 
 

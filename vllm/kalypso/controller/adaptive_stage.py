@@ -201,6 +201,7 @@ class _StageState:
     row_tokens: float | None = None
     window: deque = field(default_factory=deque)
     own_window: deque = field(default_factory=deque)  # this stage's (passed, rows_in)
+    own_tasks: int = 0  # this stage's own finished tasks seen (not capped by the window)
     vote: str | None = None
     streak: int = 0
 
@@ -259,6 +260,7 @@ class AdaptiveStageController:
             # The managed stage's own pass rate: its selectivity for the
             # quality veto (a join's match rate over the pairs it judged).
             own.own_window.append((passed, rows_in))
+            own.own_tasks += 1
         state = self._by_upstream.get(record.get("stage_id"))
         if state is None:
             return
@@ -329,13 +331,16 @@ class AdaptiveStageController:
                     return k, vetoed
                 vetoed.append(k)
             reason = "quality guard"
-        self._record(state, "veto", BLOCK, reason=reason, vetoed=vetoed)
+        self._record(state, "veto", BLOCK, reason=reason, vetoed=vetoed,
+                     selectivity=state.selectivity())
         return None, vetoed
 
     def _switch(self, state: _StageState, mode: str, rate: float, vetoed=()) -> None:
         old = state.mode
         state.mode = mode
         extra = {"vetoed": list(vetoed)} if vetoed else {}
+        if mode == BLOCK:
+            extra["selectivity"] = state.selectivity()
         self._record(state, "switch", mode, from_mode=old, pass_rate=rate, **extra)
 
     def _record(self, state, action, mode, **extra):
@@ -344,6 +349,17 @@ class AdaptiveStageController:
                  "after_formations": len(self.formations), **extra}
         self.decisions.append(entry)
         telemetry.emit("adaptive_switch", **entry)
+
+    def summary(self) -> dict:
+        """Counters for one execution: emitted once at its end as
+        ``adaptive_summary`` (deferrals are not individual events)."""
+        return {"deferrals": self.deferrals, "veto_checks": self.veto_checks,
+                "decisions": len(self.decisions), "formations": len(self.formations),
+                "stages": {str(s.stage_id): {
+                    "kind": s.kind, "mode": s.mode, "size": s.size(),
+                    "own_tasks": s.own_tasks, "own_window": len(s.own_window),
+                    "reading": len(s.own_window) >= s.own_window.maxlen,
+                    "selectivity": s.selectivity()} for s in self.states.values()}}
 
     # -- executor hook ----------------------------------------------------------
 

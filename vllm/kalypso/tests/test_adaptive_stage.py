@@ -508,3 +508,45 @@ def test_filters_are_not_deferred():
     c = _block_controller(lambda kind, k, t, sel=None: asked.append(sel) or False)
     _to_tuple_then_high(c)       # filter stage, no own data: decides at once, as before
     assert c.states[1].mode == BLOCK and asked == [None] and c.deferrals == 0
+
+
+def test_execution_emits_adaptive_summary(fake_kv_manager, monkeypatch):
+    ex = RuleExecutor()
+    source = [row(f"row{i} {'kk' if i < 10 or i >= 24 else 'xx'}", i, ex) for i in range(36)]
+    monkeypatch.setattr("vllm.kalypso.controller.plan.data._data_source",
+                        lambda *a: iter(source))
+    _pin_completion_order(monkeypatch)
+    events, orig_emit = [], telemetry.emit
+
+    def emit(event, **fields):
+        events.append((event, fields))
+        return orig_emit(event, **fields)
+    monkeypatch.setattr(telemetry, "emit", emit)
+    config = AdaptiveStageConfig(enabled=True, low_pass_rate=0.5, high_pass_rate=0.95,
+                                 quality_veto=lambda *a: False)
+    plan = SemanticPlan(ex, adaptive=config)
+    ops = [{"op": "sem_filter", "args": {"prompt": "Q_KEEP"}},
+           {"op": "sem_filter", "args": {"prompt": "Q_KEEP again", "block_size": 4}}]
+    asyncio.run(plan.execute(None, Query(copy.deepcopy(ops), "left")))
+    controller = plan.plan_executor.pipeline_executor.last_controller
+    summaries = [f for e, f in events if e == "adaptive_summary"]
+    assert summaries == [controller.summary()]
+    stage = summaries[0]["stages"]["2"]
+    assert stage["own_tasks"] == controller.states[1].own_tasks > 0
+    assert stage["own_window"] == min(stage["own_tasks"], 16)
+    assert summaries[0]["deferrals"] == 0  # a filter stage is never deferred
+
+
+def test_disabled_emits_no_adaptive_summary(fake_kv_manager, monkeypatch):
+    ex = RuleExecutor()
+    source = [row(f"row{i} kk", i, ex) for i in range(8)]
+    monkeypatch.setattr("vllm.kalypso.controller.plan.data._data_source",
+                        lambda *a: iter(source))
+    seen = []
+    orig_emit = telemetry.emit
+    monkeypatch.setattr(telemetry, "emit", lambda e, **f: (seen.append(e), orig_emit(e, **f)))
+    plan = SemanticPlan(ex, adaptive=AdaptiveStageConfig(enabled=False))
+    ops = [{"op": "sem_filter", "args": {"prompt": "Q_KEEP"}},
+           {"op": "sem_filter", "args": {"prompt": "Q_KEEP again", "block_size": 4}}]
+    asyncio.run(plan.execute(None, Query(copy.deepcopy(ops), "left")))
+    assert "adaptive_summary" not in seen
